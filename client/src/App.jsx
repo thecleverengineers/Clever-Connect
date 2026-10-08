@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useState}from'react';
-import{api,BASE}from'./api.js';
+import{api,BASE,getCached,warmWorkspace}from'./api.js';
 
 const nav=[
   ['overview','Overview','⌂'],
@@ -144,7 +144,7 @@ function Shell({session,onLogout,onSessionUpdate}){
 }
 
 function Overview({go}){
-  const[d,setD]=useState(null);
+  const[d,setD]=useState(()=>getCached('/dashboard')||null);
   const[err,setErr]=useState('');
   useEffect(()=>{api('/dashboard').then(setD).catch(e=>setErr(e.message))},[]);
   if(err)return <div className="page"><Notice type="bad">{err}</Notice></div>;
@@ -197,8 +197,8 @@ function CampaignTable({rows,go,onOpen}){
 }
 
 function SingleSend(){
-  const[contacts,setContacts]=useState([]);
-  const[templates,setTemplates]=useState([]);
+  const[contacts,setContacts]=useState(()=>getCached('/contacts')||[]);
+  const[templates,setTemplates]=useState(()=>getCached('/templates')||[]);
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
   const[busy,setBusy]=useState(false);
@@ -243,10 +243,10 @@ function SingleSend(){
 }
 
 function Campaigns(){
-  const[rows,setRows]=useState([]);
-  const[lists,setLists]=useState([]);
-  const[templates,setTemplates]=useState([]);
-  const[contacts,setContacts]=useState([]);
+  const[rows,setRows]=useState(()=>getCached('/campaigns')||[]);
+  const[lists,setLists]=useState(()=>getCached('/lists')||[]);
+  const[templates,setTemplates]=useState(()=>getCached('/templates')||[]);
+  const[contacts,setContacts]=useState(()=>getCached('/contacts')||[]);
   const[show,setShow]=useState(false);
   const[editing,setEditing]=useState(null);
   const[deliveries,setDeliveries]=useState(null);
@@ -313,8 +313,8 @@ function Campaigns(){
 }
 
 function Contacts(){
-  const[rows,setRows]=useState([]);
-  const[lists,setLists]=useState([]);
+  const[rows,setRows]=useState(()=>getCached('/contacts')||[]);
+  const[lists,setLists]=useState(()=>getCached('/lists')||[]);
   const[show,setShow]=useState(false);
   const[editing,setEditing]=useState(null);
   const[msg,setMsg]=useState('');
@@ -412,7 +412,7 @@ function Contacts(){
 }
 
 function Schedule(){
-  const[rows,setRows]=useState([]);
+  const[rows,setRows]=useState(()=>getCached('/campaigns?status=scheduled')||[]);
   const[times,setTimes]=useState({});
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
@@ -438,8 +438,8 @@ function Schedule(){
 }
 
 function Templates(){
-  const[rows,setRows]=useState([]);
-  const[connections,setConnections]=useState([]);
+  const[rows,setRows]=useState(()=>getCached('/templates')||[]);
+  const[connections,setConnections]=useState(()=>getCached('/integrations/whatsapp-connections')?.connections||[]);
   const[show,setShow]=useState(false);
   const[editing,setEditing]=useState(null);
   const[mode,setMode]=useState('local');
@@ -572,8 +572,8 @@ function DeliveryTable({rows}){
 }
 
 function Reports(){
-  const[d,setD]=useState(null);
-  const[rows,setRows]=useState([]);
+  const[d,setD]=useState(()=>getCached('/dashboard')||null);
+  const[rows,setRows]=useState(()=>getCached('/campaigns/deliveries?limit=250')||[]);
   const[filter,setFilter]=useState('all');
   const[err,setErr]=useState('');
   useEffect(()=>{Promise.all([api('/dashboard'),api('/campaigns/deliveries?limit=250')]).then(([a,b])=>{setD(a);setRows(b)}).catch(e=>setErr(e.message))},[]);
@@ -590,7 +590,7 @@ function Reports(){
 }
 
 function Settings({go}){
-  const[connections,setConnections]=useState(null);
+  const[connections,setConnections]=useState(()=>getCached('/integrations/whatsapp-connections')||null);
   const[err,setErr]=useState('');
   useEffect(()=>{api('/integrations/whatsapp-connections').then(setConnections).catch(e=>setErr(e.message))},[]);
   const current=connections?.connections?.find(x=>x.isDefault)||connections?.connections?.[0];
@@ -625,8 +625,8 @@ function Settings({go}){
 }
 
 function EditProfile({go,onSessionUpdate}){
-  const[data,setData]=useState(null);
-  const[avatar,setAvatar]=useState('');
+  const[data,setData]=useState(()=>getCached('/account/profile')||null);
+  const[avatar,setAvatar]=useState(()=>getCached('/account/profile')?.user?.avatarData||'');
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
   useEffect(()=>{api('/account/profile').then(x=>{setData(x);setAvatar(x.user.avatarData||'')}).catch(e=>setErr(e.message))},[]);
@@ -678,10 +678,10 @@ function EditProfile({go,onSessionUpdate}){
 }
 
 function Profile({session,go,onSessionUpdate}){
-  const[data,setData]=useState(null);
-  const[connections,setConnections]=useState([]);
-  const[connSub,setConnSub]=useState(null);
-  const[team,setTeam]=useState([]);
+  const[data,setData]=useState(()=>getCached('/account/profile')||null);
+  const[connections,setConnections]=useState(()=>getCached('/integrations/whatsapp-connections')?.connections||[]);
+  const[connSub,setConnSub]=useState(()=>getCached('/integrations/whatsapp-connections')?.subscription||null);
+  const[team,setTeam]=useState(()=>getCached('/account/team')?.members||[]);
   const[showMember,setShowMember]=useState(false);
   const[otpSent,setOtpSent]=useState(false);
   const[msg,setMsg]=useState('');
@@ -855,9 +855,9 @@ function loadFacebookSdk(appId,version='v23.0'){
 }
 
 function WhatsAppApi({go}){
-  const[connections,setConnections]=useState([]);
-  const[subscription,setSubscription]=useState(null);
-  const[embedded,setEmbedded]=useState(null);
+  const[connections,setConnections]=useState(()=>getCached('/integrations/whatsapp-connections')?.connections||[]);
+  const[subscription,setSubscription]=useState(()=>getCached('/integrations/whatsapp-connections')?.subscription||null);
+  const[embedded,setEmbedded]=useState(()=>getCached('/integrations/embedded-signup/config')||null);
   const[showForm,setShowForm]=useState(false);
   const[editing,setEditing]=useState(null);
   const[fbBusy,setFbBusy]=useState(false);
@@ -1116,7 +1116,7 @@ function WhatsAppApi({go}){
 }
 
 function Subscription({onSessionUpdate}){
-  const[data,setData]=useState(null);
+  const[data,setData]=useState(()=>getCached('/subscription')||null);
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
   async function load(){
@@ -1180,8 +1180,8 @@ function Subscription({onSessionUpdate}){
 }
 
 function SuperAdmin(){
-  const[data,setData]=useState(null);
-  const[metaSettings,setMetaSettings]=useState(null);
+  const[data,setData]=useState(()=>getCached('/admin/overview')||null);
+  const[metaSettings,setMetaSettings]=useState(()=>getCached('/admin/meta-settings')||null);
   const[editing,setEditing]=useState(null);
   const[showPlan,setShowPlan]=useState(false);
   const[msg,setMsg]=useState('');
@@ -1384,9 +1384,9 @@ function Page({id,go,session,onSessionUpdate}){
 }
 
 export default function App(){
-  const[session,setSession]=useState(undefined);
+  const[session,setSession]=useState(()=>getCached('/auth/me')??undefined);
   useEffect(()=>{
-    api('/auth/me').then(setSession).catch(()=>setSession(null));
+    api('/auth/me',{fresh:true}).then(x=>{setSession(x);warmWorkspace(!!x.user?.isSuperAdmin)}).catch(()=>setSession(null));
     const unauth=()=>setSession(null);
     window.addEventListener('wa:unauthorized',unauth);
     return()=>window.removeEventListener('wa:unauthorized',unauth);
@@ -1396,5 +1396,5 @@ export default function App(){
     setSession(null);
   }
   if(session===undefined)return <Loading/>;
-  return session?<Shell session={session} onLogout={logout} onSessionUpdate={setSession}/>:<Auth onAuth={setSession}/>;
+  return session?<Shell session={session} onLogout={logout} onSessionUpdate={setSession}/>:<Auth onAuth={x=>{setSession(x);warmWorkspace(!!x.user?.isSuperAdmin)}}/>;
 }
