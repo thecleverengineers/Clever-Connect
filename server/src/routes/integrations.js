@@ -5,6 +5,7 @@ import {Integration,Workspace,User} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
 import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
 import {planLimitsForWorkspace,refreshWorkspaceAccess} from '../plan.js';
+import {getMetaConfig,getMetaConfigPublic} from '../metaConfig.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -57,21 +58,6 @@ async function requireMessagingAccess(workspaceId,res){
 }
 
 
-function embeddedConfig(){
-  const appId=String(process.env.META_APP_ID||'').trim();
-  const configId=String(process.env.META_EMBEDDED_SIGNUP_CONFIG_ID||'').trim();
-  const appSecret=String(process.env.META_APP_SECRET||'').trim();
-  const graphVersion=String(process.env.META_GRAPH_VERSION||'v23.0').trim();
-  return {
-    enabled:!!(appId&&configId&&appSecret),
-    appId,configId,graphVersion,
-    missing:[
-      !appId?'META_APP_ID':'',
-      !configId?'META_EMBEDDED_SIGNUP_CONFIG_ID':'',
-      !appSecret?'META_APP_SECRET':''
-    ].filter(Boolean)
-  };
-}
 async function metaRequest(version,path,token,{method='GET',body}={}){
   const response=await fetch('https://graph.facebook.com/'+version+'/'+path,{
     method,
@@ -84,8 +70,8 @@ async function metaRequest(version,path,token,{method='GET',body}={}){
   return data;
 }
 async function exchangeEmbeddedCode(code){
-  const cfg=embeddedConfig();
-  if(!cfg.enabled)throw new Error('Facebook Embedded Signup is not configured on the server');
+  const cfg=await getMetaConfig();
+  if(!cfg.enabled)throw new Error('Facebook Embedded Signup is not configured by Super Admin');
   const params=new URLSearchParams({
     client_id:cfg.appId,
     client_secret:process.env.META_APP_SECRET,
@@ -115,16 +101,8 @@ async function testConnection(x){
 
 
 r.get('/embedded-signup/config',async(req,res)=>{
-  const cfg=embeddedConfig();
-  const usage=await limits(req.workspaceId);
-  res.json({
-    enabled:cfg.enabled,
-    appId:cfg.appId,
-    configId:cfg.configId,
-    graphVersion:cfg.graphVersion,
-    missing:cfg.missing,
-    subscription:usage
-  });
+  const [cfg,usage]=await Promise.all([getMetaConfigPublic(),limits(req.workspaceId)]);
+  res.json({...cfg,subscription:usage});
 });
 
 r.post('/embedded-signup/complete',async(req,res)=>{
