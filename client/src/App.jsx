@@ -1241,6 +1241,7 @@ function Subscription({onSessionUpdate}){
 function SuperAdmin(){
   const[data,setData]=useState(()=>getCached('/admin/overview')||null);
   const[metaSettings,setMetaSettings]=useState(()=>getCached('/admin/meta-settings')||null);
+  const[openaiSettings,setOpenaiSettings]=useState(()=>getCached('/admin/openai-settings')||null);
   const[editing,setEditing]=useState(null);
   const[showPlan,setShowPlan]=useState(false);
   const[msg,setMsg]=useState('');
@@ -1249,8 +1250,8 @@ function SuperAdmin(){
   async function load(){
     setErr('');
     try{
-      const [overview,meta]=await Promise.all([api('/admin/overview'),api('/admin/meta-settings')]);
-      setData(overview);setMetaSettings(meta);
+      const [overview,meta,openai]=await Promise.all([api('/admin/overview'),api('/admin/meta-settings'),api('/admin/openai-settings')]);
+      setData(overview);setMetaSettings(meta);setOpenaiSettings(openai);
     }catch(e){setErr(e.message)}
   }
   useEffect(()=>{load()},[]);
@@ -1276,6 +1277,33 @@ function SuperAdmin(){
     try{
       const x=await api('/admin/meta-settings/clear-secret',{method:'POST'});
       setMetaSettings(x);setMsg('Saved Meta App Secret cleared.');
+    }catch(e){setErr(e.message)}
+  }
+
+  async function saveOpenAISettings(e){
+    e.preventDefault();setErr('');setMsg('');
+    const fd=new FormData(e.currentTarget);
+    const o=Object.fromEntries(fd);
+    o.enabled=fd.get('enabled')==='on';
+    try{
+      const x=await api('/admin/openai-settings',{method:'PUT',body:JSON.stringify(o)});
+      setOpenaiSettings(x);
+      if(e.currentTarget.elements.apiKey)e.currentTarget.elements.apiKey.value='';
+      setMsg('OpenAI settings saved securely.');
+    }catch(e){setErr(e.message)}
+  }
+  async function testOpenAISettings(){
+    setErr('');setMsg('');
+    try{
+      const x=await api('/admin/openai-settings/test',{method:'POST'});
+      setMsg(x.message||'OpenAI connection is valid.');
+    }catch(e){setErr(e.message)}
+  }
+  async function clearOpenAIKey(){
+    if(!confirm('Clear the saved OpenAI API key? WA SANTA AI will stop working until a new key is saved.'))return;
+    try{
+      const x=await api('/admin/openai-settings/clear-key',{method:'POST'});
+      setOpenaiSettings(x);setMsg('Saved OpenAI API key cleared.');
     }catch(e){setErr(e.message)}
   }
 
@@ -1361,6 +1389,37 @@ function SuperAdmin(){
       <div className="adminMetaHelp">
         <span><b>Where to get these values</b><small>Meta for Developers → your app → App settings / Facebook Login for Business → Embedded Signup configuration.</small></span>
         <span><b>Security</b><small>The App Secret is encrypted before being stored and is never returned to the browser after save.</small></span>
+      </div>
+    </section>
+
+    <section className="adminOpenAISettings">
+      <div className="sectionHead">
+        <div>
+          <small>OPENAI</small>
+          <h2>WA SANTA AI Settings</h2>
+          <p>Configure the OpenAI Responses API used for recommendations, campaigns, message generation, Meta templates and performance analysis.</p>
+        </div>
+        <em className={'status '+(openaiSettings?.enabled?'completed':'failed')}>{openaiSettings?.enabled?'AI ready':'Setup required'}</em>
+      </div>
+      <form className="formGrid" onSubmit={saveOpenAISettings}>
+        <label>Fast model<input name="fastModel" defaultValue={openaiSettings?.fastModel||'gpt-6-luna'} required/></label>
+        <label>Strategy model<input name="strategyModel" defaultValue={openaiSettings?.strategyModel||'gpt-6-sol'} required/></label>
+        <label className="full">OpenAI API key<input type="password" name="apiKey" placeholder={openaiSettings?.hasApiKey?'Saved securely — leave blank to keep current key':'Paste OpenAI API key'} required={!openaiSettings?.hasApiKey}/></label>
+        <label className="check full"><input type="checkbox" name="enabled" defaultChecked={openaiSettings?.enabled??true}/> Enable WA SANTA AI for eligible workspaces</label>
+        <div className="metaSecretState full">
+          <span><b>API key</b><small>{openaiSettings?.hasApiKey?'Encrypted and stored securely':'Not configured'}</small></span>
+          <span><b>Fast generation</b><small>{openaiSettings?.fastModel||'gpt-6-luna'}</small></span>
+          <span><b>Strategy / analysis</b><small>{openaiSettings?.strategyModel||'gpt-6-sol'}</small></span>
+        </div>
+        <div className="actions full">
+          {openaiSettings?.hasApiKey&&<button type="button" className="danger" onClick={clearOpenAIKey}>Clear API key</button>}
+          <button type="button" onClick={testOpenAISettings}>Test OpenAI</button>
+          <button className="primary">Save AI settings</button>
+        </div>
+      </form>
+      <div className="adminMetaHelp">
+        <span><b>Privacy</b><small>AI recommendations use the business profile and aggregate workspace metrics. Contact names, phone numbers and email addresses are excluded from AI context.</small></span>
+        <span><b>Control</b><small>AI creates recommendations and drafts only. Users must explicitly review and send or schedule campaigns.</small></span>
       </div>
     </section>
 
