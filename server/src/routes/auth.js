@@ -5,6 +5,7 @@ import { User, Workspace, Integration } from '../models.js';
 import { requireAuth,isSuperAdmin } from '../middleware/auth.js';
 import {createOtp,hashOtp,sendMetaOtp} from '../otp.js';
 import {refreshWorkspaceAccess,planLimitsForWorkspace} from '../plan.js';
+import {cleanBusinessProfile} from '../business.js';
 
 const router=express.Router();
 const sessionSecret=()=>process.env.AUTH_KEY||process.env.JWT_SECRET;
@@ -33,6 +34,14 @@ const sessionResponse=async user=>{
       trialEndsAt:workspace.trialEndsAt||null,
       currentPeriodStart:workspace.currentPeriodStart||null,
       currentPeriodEnd:workspace.currentPeriodEnd||null,
+      businessType:workspace.businessType||'',
+      businessSubtype:workspace.businessSubtype||'',
+      primaryGoal:workspace.primaryGoal||'',
+      productsServices:workspace.productsServices||'',
+      targetCustomers:workspace.targetCustomers||'',
+      country:workspace.country||'India',
+      preferredLanguage:workspace.preferredLanguage||'English',
+      brandTone:workspace.brandTone||'Professional',
       access:state.access,
       limits:await planLimitsForWorkspace(workspace)
     }
@@ -55,6 +64,7 @@ router.post('/register',async(req,res)=>{
     const email=String(req.body.email||'').trim().toLowerCase();
     const password=String(req.body.password||'');
     const workspaceName=String(req.body.workspaceName||'').trim();
+    const business=cleanBusinessProfile(req.body);
     if(!name||!email||password.length<8) return res.status(400).json({message:'Name, email and password (8+ characters) are required'});
     if(await User.exists({email})) return res.status(409).json({message:'Email already registered'});
     const now=new Date();
@@ -63,7 +73,9 @@ router.post('/register',async(req,res)=>{
       plan:'trial',
       subscriptionStatus:'trialing',
       trialStartedAt:now,
-      trialEndsAt:new Date(now.getTime()+7*24*60*60*1000)
+      trialEndsAt:new Date(now.getTime()+7*24*60*60*1000),
+      ...business,
+      aiProfileUpdatedAt:now
     });
     try{
       const user=await User.create({
@@ -81,6 +93,7 @@ router.post('/register',async(req,res)=>{
     }
   }catch(e){
     console.error(e);
+    if(e.message?.startsWith('Choose a valid'))return res.status(400).json({message:e.message});
     res.status(500).json({message:'Unable to create account'});
   }
 });
