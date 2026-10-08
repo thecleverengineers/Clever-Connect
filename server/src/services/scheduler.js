@@ -80,12 +80,19 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
 
     try{
       const rendered=renderMessage(c.message||template?.body||'',contact);
+      const isCarousel=c.contentType==='carousel';
+      const cards=isCarousel?(c.carouselCards||[]).map(card=>({
+        imageUrl:card.imageUrl,
+        caption:renderMessage(card.caption,contact),
+        buttonText:card.buttonText,buttonUrl:card.buttonUrl
+      })):null;
       const result=await sendWhatsApp({
         workspaceId:c.workspaceId,
         phone:contact.phone,
         text:rendered,
         template,
-        integrationId:template?.integrationId||null
+        carousel:cards,
+        integrationId:template?.integrationId||c.integrationId||null
       });
       delivery.message=rendered;
       delivery.provider=result.provider;
