@@ -3,10 +3,13 @@ import { decrypt } from '../utils/crypto.js';
 
 const normalizePhone=(phone='')=>String(phone).replace(/[^0-9]/g,'');
 
-export async function sendWhatsApp({workspaceId,phone,text,template}){
-  const integration=await Integration.findOne({workspaceId}).lean();
+export async function sendWhatsApp({workspaceId,phone,text,template,integrationId=null}){
+  let integration=null;
+  if(integrationId) integration=await Integration.findOne({_id:integrationId,workspaceId,enabled:true}).lean();
+  if(!integration) integration=await Integration.findOne({workspaceId,isDefault:true,enabled:true}).lean();
+  if(!integration) integration=await Integration.findOne({workspaceId,enabled:true}).sort({provider:-1,createdAt:1}).lean();
 
-  if(!integration||!integration.enabled||integration.provider==='demo'){
+  if(!integration||integration.provider==='demo'){
     return {
       provider:'demo',
       id:'demo-'+Date.now()+'-'+Math.random().toString(36).slice(2,9),
