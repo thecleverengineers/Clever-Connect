@@ -1,4 +1,5 @@
-import { Campaign, Contact, Delivery, Template, Workspace } from '../models.js';
+import { Campaign, Contact, Delivery, Template, Workspace, Integration } from '../models.js';
+import {recordOutbound} from './liveChat.js';
 import {accessForWorkspace} from '../plan.js';
 import { sendWhatsApp } from './whatsapp.js';
 
@@ -78,6 +79,7 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
       status:'queued'
     });
 
+    let actualIntegrationId=null;
     try{
       const rendered=renderMessage(c.message||template?.body||'',contact);
       const isCarousel=c.contentType==='carousel';
@@ -94,6 +96,7 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
         carousel:cards,
         integrationId:template?.integrationId||c.integrationId||null
       });
+      actualIntegrationId=result.integrationId||null;
       delivery.message=rendered;
       delivery.provider=result.provider;
       delivery.providerMessageId=result.id;
@@ -106,6 +109,15 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
       delivery.error=String(err.message||'Delivery failed').slice(0,500);
     }
     await delivery.save();
+    if(delivery.status==='submitted'&&delivery.provider==='meta'&&delivery.providerMessageId){
+      try{
+        const profile=await Integration.findOne({_id:actualIntegrationId||template?.integrationId||c.integrationId,workspaceId:c.workspaceId}).lean()
+          ||await Integration.findOne({workspaceId:c.workspaceId,isDefault:true,provider:'meta'}).lean();
+        if(profile)await recordOutbound({integration:profile,phone:contact.phone,text:delivery.message,
+          providerMessageId:delivery.providerMessageId,status:delivery.status,source:'campaign',
+          campaignId:c._id,deliveryId:delivery._id});
+      }catch(e){console.error('Campaign chat mirror failed',e)}
+    }
   }
 
   const totals=await refreshCampaignTotals(c._id);
