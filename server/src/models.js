@@ -112,6 +112,8 @@ const campaignSchema = new Schema({
   name: { type: String, required: true, trim: true },
   message: { type: String, default: '' },
   contentType:{type:String,enum:['text','carousel'],default:'text'},
+  sendMode:{type:String,enum:['freeform','template'],default:'freeform'},
+  templateParams:[{type:String,trim:true,maxlength:1024}],
   integrationId:{type:Schema.Types.ObjectId,ref:'Integration',default:null},
   carouselCards:[{
     _id:false,imageUrl:{type:String,trim:true},caption:{type:String,default:''},
