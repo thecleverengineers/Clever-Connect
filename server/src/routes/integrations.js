@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import {Integration,Workspace,User} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
 import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
-import {planLimits} from '../plan.js';
+import {planLimitsForWorkspace} from '../plan.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -26,9 +26,9 @@ const view=x=>({
 
 async function limits(workspaceId){
   const w=await Workspace.findById(workspaceId).lean();
-  const max=planLimits(w?.plan).metaConnections;
+  const max=(await planLimitsForWorkspace(w)).metaConnections;
   const used=await Integration.countDocuments({workspaceId,provider:'meta'});
-  return {plan:w?.plan||'starter',max,used};
+  return {plan:w?.plan||'trial',max,used};
 }
 
 async function testConnection(x){
