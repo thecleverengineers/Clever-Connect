@@ -70,7 +70,7 @@ function Auth({onAuth}){
     </form>:<form className="authCard" onSubmit={submit}>
       <div className="logo">WA <b>SANTA</b><small>WHATSAPP WORKSPACE</small></div>
       <h2>{mode==='login'?'Welcome back':'Create your workspace'}</h2>
-      <p>{mode==='login'?'Sign in to continue to WA SANTA.':'Start in demo mode, then connect Meta WhatsApp when ready.'}</p>
+      <p>{mode==='login'?'Sign in to continue to WA SANTA.':'Start with 7 days of trial access. After the trial, choose a subscription plan approved by Super Admin.'}</p>
       {mode==='register'&&<>
         <label>Full name<input name="name" required autoComplete="name"/></label>
         <label>Workspace name<input name="workspaceName" placeholder="Acme Studio"/></label>
@@ -724,8 +724,8 @@ function Profile({session,go,onSessionUpdate}){
     </div>
 
     <section>
-      <div className="sectionHead"><div><h2>Connect Meta WhatsApp</h2><p>Connect multiple WhatsApp Cloud API numbers according to your subscription plan.</p></div>{connSub&&connSub.used<connSub.max&&<button className="primary" onClick={()=>{setEditingConnection(null);setShowConnection(true)}}>+ Add connection</button>}</div>
-      <div className="planHint">{connSub?.plan} plan · {connSub?.used||0} of {connSub?.max||1} Meta connections used</div>
+      <div className="sectionHead"><div><h2>Connect Meta WhatsApp</h2><p>Connect multiple WhatsApp Cloud API numbers according to your subscription plan.</p></div>{data.workspace.access?.allowed&&connSub&&connSub.used<connSub.max&&<button className="primary" onClick={()=>{setEditingConnection(null);setShowConnection(true)}}>+ Add connection</button>}</div>
+      <div className="planHint">{connSub?.plan} plan · {connSub?.used||0} of {connSub?.max||1} Meta connections used</div>{!data.workspace.access?.allowed&&<Notice type="bad">Meta WhatsApp connections are locked until a WA SANTA subscription is activated.</Notice>}
       {showConnection&&<div className="panel nestedPanel"><form key={editingConnection?.id||'new-meta'} className="formGrid" onSubmit={saveConnection}>
         <label>Connection name<input name="name" defaultValue={editingConnection?.name||''} placeholder="Sales WhatsApp" required/></label>
         <label>Graph version<input name="graphVersion" defaultValue={editingConnection?.graphVersion||'v23.0'}/></label>
