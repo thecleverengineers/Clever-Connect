@@ -25,6 +25,13 @@ export async function refreshCampaignTotals(campaignId){
   return {submitted,delivered,read:counts.read||0,failed:counts.failed||0};
 }
 
+function renderMessage(text,contact){
+  return String(text||'')
+    .replace(/{{\s*name\s*}}/gi,contact.name||'')
+    .replace(/{{\s*phone\s*}}/gi,contact.phone||'')
+    .replace(/{{\s*email\s*}}/gi,contact.email||'');
+}
+
 export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
   const c=await Campaign.findOneAndUpdate(
     {_id:campaignId,status:{$in:['draft','scheduled','failed','partial','completed']}},
@@ -63,12 +70,14 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
     });
 
     try{
+      const rendered=renderMessage(c.message||template?.body||'',contact);
       const result=await sendWhatsApp({
         workspaceId:c.workspaceId,
         phone:contact.phone,
-        text:c.message,
+        text:rendered,
         template
       });
+      delivery.message=rendered;
       delivery.provider=result.provider;
       delivery.providerMessageId=result.id;
       delivery.status=result.status;
