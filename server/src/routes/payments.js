@@ -113,10 +113,16 @@ router.post('/orders/send',async(req,res)=>{
     const messageId=await sendOrderDetails(integration,order);
     order.status='submitted';order.messageId=messageId;order.submittedAt=new Date();
     await order.save();
-    await Delivery.create({
-      workspaceId:req.workspaceId,contactId:contact._id,phone:contact.phone,
-      message:'Razorpay checkout: '+title,provider:'meta',providerMessageId:messageId,status:'submitted',sentAt:new Date()
-    });
+    try{
+      await Delivery.create({
+        workspaceId:req.workspaceId,contactId:contact._id,phone:contact.phone,
+        message:'Razorpay checkout: '+title,provider:'meta',providerMessageId:messageId,status:'submitted',sentAt:new Date()
+      });
+    }catch(logError){
+      // Provider has already accepted the order. A tracking DB error must not
+      // mark the checkout as unsent and risk a duplicate payment request.
+      console.error('Payment checkout delivery tracking failed',order.referenceId,logError);
+    }
     return res.status(201).json({order});
   }catch(e){
     // A timeout can mean Meta accepted the message. Never automatically resend.
