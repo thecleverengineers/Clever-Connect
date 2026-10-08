@@ -102,6 +102,12 @@ const campaignSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
   name: { type: String, required: true, trim: true },
   message: { type: String, default: '' },
+  contentType:{type:String,enum:['text','carousel'],default:'text'},
+  integrationId:{type:Schema.Types.ObjectId,ref:'Integration',default:null},
+  carouselCards:[{
+    _id:false,imageUrl:{type:String,trim:true},caption:{type:String,default:''},
+    buttonText:{type:String,trim:true},buttonUrl:{type:String,trim:true}
+  }],
   templateId: { type: Schema.Types.ObjectId, ref: 'Template', default: null },
   audienceType: { type: String, enum: ['all','list','contacts'], default: 'all' },
   listId: { type: Schema.Types.ObjectId, ref: 'ContactList', default: null },
