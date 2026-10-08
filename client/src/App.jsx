@@ -439,37 +439,123 @@ function Schedule(){
 
 function Templates(){
   const[rows,setRows]=useState([]);
+  const[connections,setConnections]=useState([]);
   const[show,setShow]=useState(false);
   const[editing,setEditing]=useState(null);
+  const[mode,setMode]=useState('local');
+  const[selectedProfile,setSelectedProfile]=useState(()=>localStorage.getItem('wa:template-profile')||'');
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
-  const load=()=>api('/templates').then(setRows);
-  useEffect(()=>{load().catch(e=>setErr(e.message))},[]);
-  async function save(e){
-    e.preventDefault();setErr('');
-    const o=Object.fromEntries(new FormData(e.currentTarget));
+
+  async function load(){
     try{
-      if(editing)await api('/templates/'+editing._id,{method:'PUT',body:JSON.stringify(o)});
-      else await api('/templates',{method:'POST',body:JSON.stringify(o)});
-      setShow(false);setEditing(null);setMsg(editing?'Template updated.':'Template created.');await load();
+      const [templates,conn]=await Promise.all([api('/templates'),api('/integrations/whatsapp-connections')]);
+      setRows(templates);
+      const meta=(conn.connections||[]).filter(x=>x.provider==='meta');
+      setConnections(meta);
+      if(selectedProfile&&!meta.some(x=>x.id===selectedProfile))setSelectedProfile('');
     }catch(e){setErr(e.message)}
   }
+  useEffect(()=>{load()},[]);
+
+  async function save(e){
+    e.preventDefault();setErr('');setMsg('');
+    const fd=new FormData(e.currentTarget);
+    const o=Object.fromEntries(fd);
+    try{
+      if(mode==='meta'){
+        if(!selectedProfile)return setErr('Choose a connected Meta WhatsApp profile');
+        o.metaTemplateName=o.metaTemplateName||o.name;
+        o.bodyExamples=String(o.bodyExamples||'').split(',').map(x=>x.trim()).filter(Boolean);
+        await api('/templates/meta/'+selectedProfile,{method:'POST',body:JSON.stringify(o)});
+        setMsg('Template submitted to Meta for review.');
+      }else if(editing){
+        await api('/templates/'+editing._id,{method:'PUT',body:JSON.stringify(o)});
+        setMsg('Local template updated.');
+      }else{
+        await api('/templates',{method:'POST',body:JSON.stringify(o)});
+        setMsg('Local template created.');
+      }
+      setShow(false);setEditing(null);await load();
+    }catch(e){setErr(e.message)}
+  }
+
+  async function syncProfile(id){
+    setErr('');setMsg('');
+    try{
+      const x=await api('/templates/meta/'+id+'/sync',{method:'POST'});
+      setMsg('Synced '+x.synced+' template(s) from Meta.');
+      await load();
+    }catch(e){setErr(e.message)}
+  }
+
   async function remove(x){
+    if(x.metaTemplateId){
+      if(!confirm('Delete "'+x.metaTemplateName+'" from Meta and WA SANTA?'))return;
+      try{await api('/templates/meta/'+x._id,{method:'DELETE'});setMsg('Meta template deleted.');await load()}catch(e){setErr(e.message)}
+      return;
+    }
     if(!confirm('Delete template "'+x.name+'"?'))return;
     try{await api('/templates/'+x._id,{method:'DELETE'});setMsg('Template deleted.');await load()}catch(e){setErr(e.message)}
   }
+
+  function openNew(kind,profileId=''){
+    setEditing(null);setMode(kind);
+    if(profileId){setSelectedProfile(profileId);localStorage.setItem('wa:template-profile',profileId)}
+    setShow(true);
+  }
+
+  const selected=connections.find(x=>x.id===selectedProfile);
+  const filtered=selectedProfile?rows.filter(x=>(x.integrationId?._id||x.integrationId)===selectedProfile):rows;
+
   return <div className="page">
-    <Title title="Templates" sub="Reusable freeform copy and Meta-approved WhatsApp templates." action="New template" onAction={()=>{setEditing(null);setShow(true)}}/>
+    <div className="title">
+      <div><span>WA SANTA</span><h1>Templates</h1><p>Create local reusable copy or submit templates directly to a connected Meta WhatsApp profile.</p></div>
+      <div className="rowActions"><button onClick={()=>openNew('local')}>+ Local template</button><button className="primary" disabled={!connections.length} onClick={()=>openNew('meta',selectedProfile||connections[0]?.id)}>+ Meta template</button></div>
+    </div>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
-    {show&&<div className="panel"><form key={editing?editing._id:'new'} className="formGrid" onSubmit={save}>
-      <label>Name<input name="name" required defaultValue={editing?.name||''}/></label>
-      <label>Meta template name<input name="metaTemplateName" placeholder="Optional approved name" defaultValue={editing?.metaTemplateName||''}/></label>
-      <label>Language<input name="language" defaultValue={editing?.language||'en_US'}/></label>
-      <label>Category<select name="category" defaultValue={editing?.category||'MARKETING'}><option>MARKETING</option><option>UTILITY</option><option>AUTHENTICATION</option></select></label>
-      <label className="full">Message body<textarea rows="5" name="body" required defaultValue={editing?.body||''}/></label>
-      <div className="actions full"><button type="button" onClick={()=>{setShow(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Update template':'Save template'}</button></div>
-    </form></div>}
-    <div className="cards">{rows.map(x=><article key={x._id}><small>{x.category} · {x.language}</small><h3>{x.name}</h3><p>{x.body}</p><footer><span>{x.metaTemplateName?'Meta: '+x.metaTemplateName:'Freeform message'}</span><div className="rowActions"><button onClick={()=>{setEditing(x);setShow(true)}}>Edit</button><button className="danger" onClick={()=>remove(x)}>Delete</button></div></footer></article>)}{!rows.length&&<Empty text="No templates yet."/>}</div>
+
+    <section className="templateProfileBar">
+      <div>
+        <small>META PROFILE</small>
+        <select value={selectedProfile} onChange={e=>{setSelectedProfile(e.target.value);if(e.target.value)localStorage.setItem('wa:template-profile',e.target.value);else localStorage.removeItem('wa:template-profile')}}>
+          <option value="">All templates / profiles</option>
+          {connections.map(x=><option value={x.id} key={x.id}>{x.name}{x.displayPhoneNumber?' · '+x.displayPhoneNumber:''}</option>)}
+        </select>
+      </div>
+      {selectedProfile&&<div className="rowActions"><button onClick={()=>syncProfile(selectedProfile)}>↻ Sync from Meta</button><button className="primary" onClick={()=>openNew('meta',selectedProfile)}>+ Create for {selected?.name||'profile'}</button></div>}
+    </section>
+
+    {!connections.length&&<Notice type="bad">Connect a Meta WhatsApp API profile first to create Meta-approved templates.</Notice>}
+
+    {show&&<div className="panel">
+      <div className="sectionHead"><div><h2>{mode==='meta'?'Create Meta template':editing?'Edit local template':'Create local template'}</h2><p>{mode==='meta'?'The template will be submitted to Meta and usually starts as PENDING.':'Reusable copy stored only inside WA SANTA.'}</p></div></div>
+      <form key={(editing?editing._id:'new')+'-'+mode} className="formGrid" onSubmit={save}>
+        {mode==='meta'&&<label className="full">Connected Meta profile<select value={selectedProfile} onChange={e=>setSelectedProfile(e.target.value)} required><option value="">Choose Meta profile</option>{connections.map(x=><option value={x.id} key={x.id}>{x.name}{x.displayPhoneNumber?' · '+x.displayPhoneNumber:''}</option>)}</select></label>}
+        <label>Display name<input name="name" required defaultValue={editing?.name||''} placeholder="Order confirmation"/></label>
+        {mode==='meta'&&<label>Meta template name<input name="metaTemplateName" required placeholder="order_confirmation"/></label>}
+        <label>Language<input name="language" defaultValue={editing?.language||'en_US'}/></label>
+        <label>Category<select name="category" defaultValue={editing?.category||'MARKETING'}><option>MARKETING</option><option>UTILITY</option><option>AUTHENTICATION</option></select></label>
+        <label className="full">Message body<textarea rows="5" name="body" required={mode!=='meta'} defaultValue={editing?.body||''} placeholder={mode==='meta'?'For MARKETING/UTILITY use Meta variables like {{1}}, {{2}}. Authentication templates use Meta OTP format automatically.':'Write reusable message text…'}/></label>
+        {mode==='meta'&&<label className="full">Variable examples<input name="bodyExamples" placeholder="Example for {{1}}, Example for {{2}}"/><small>Required when the body contains positional Meta variables.</small></label>}
+        <div className="actions full"><button type="button" onClick={()=>{setShow(false);setEditing(null)}}>Cancel</button><button className="primary">{mode==='meta'?'Submit to Meta':'Save template'}</button></div>
+      </form>
+    </div>}
+
+    <div className="cards templateCards">{filtered.map(x=><article key={x._id}>
+      <div className="cardTop"><div><small>{x.category} · {x.language}</small><h3>{x.name}</h3></div><em className={'status '+(x.metaStatus==='APPROVED'?'completed':x.metaStatus==='REJECTED'?'failed':x.metaStatus==='PENDING'?'scheduled':'cancelled')}>{x.metaStatus||'LOCAL'}</em></div>
+      <p>{x.body}</p>
+      <div className="templateMetaInfo">
+        <span><small>Profile</small><b>{x.integrationId?.name||'Local only'}</b></span>
+        <span><small>Meta name</small><b>{x.metaTemplateName||'—'}</b></span>
+        <span><small>Meta ID</small><b>{x.metaTemplateId||'—'}</b></span>
+      </div>
+      {x.metaRejectedReason&&<Notice type="bad">{x.metaRejectedReason}</Notice>}
+      <footer><span>{x.metaLastSyncedAt?'Synced '+fmt(x.metaLastSyncedAt):'Local template'}</span><div className="rowActions">
+        {!x.metaTemplateId&&<button onClick={()=>{setEditing(x);setMode('local');setShow(true)}}>Edit</button>}
+        <button className="danger" onClick={()=>remove(x)}>{x.metaTemplateId?'Delete from Meta':'Delete'}</button>
+      </div></footer>
+    </article>)}{!filtered.length&&<Empty text="No templates for this selection."/>}</div>
   </div>
 }
 
@@ -844,6 +930,7 @@ function WhatsAppApi({go}){
           </div>
           <footer><span>{x.otpTemplateName?'Ready for WhatsApp OTP 2FA':'Messaging connection'}</span><div className="rowActions">
             <button onClick={()=>act(x,'test')}>Test connection</button>
+            <button onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
             <button onClick={()=>{setEditing(x);setShowForm(true)}}>Edit</button>
             {!x.isDefault&&<button onClick={()=>act(x,'default')}>Make default</button>}
             <button className="danger" onClick={()=>act(x,'delete')}>Remove</button>
