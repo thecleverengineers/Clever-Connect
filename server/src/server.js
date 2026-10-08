@@ -14,6 +14,7 @@ import campaigns from './routes/campaigns.js';
 import dashboard from './routes/dashboard.js';
 import integrations from './routes/integrations.js';
 import webhook from './routes/webhook.js';
+import account from './routes/account.js';
 import {runDueCampaigns} from './services/scheduler.js';
 import {mongoUri} from './db.js';
 
@@ -43,6 +44,7 @@ app.use('/api/templates',apiLimiter,templates);
 app.use('/api/campaigns',apiLimiter,campaigns);
 app.use('/api/dashboard',apiLimiter,dashboard);
 app.use('/api/integrations',apiLimiter,integrations);
+app.use('/api/account',apiLimiter,account);
 app.use('/api/webhooks/meta',webhook);
 
 app.get('/api/health',(req,res)=>res.json({
