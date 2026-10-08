@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import {Integration,Workspace,User} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
@@ -17,6 +18,8 @@ const view=x=>({
   phoneNumberId:x.phoneNumberId||'',
   displayPhoneNumber:x.displayPhoneNumber||'',
   businessAccountId:x.businessAccountId||'',
+  businessPortfolioId:x.businessPortfolioId||'',
+  connectMethod:x.connectMethod||'manual',
   graphVersion:x.graphVersion||'v23.0',
   otpTemplateName:x.otpTemplateName||'',
   otpTemplateLanguage:x.otpTemplateLanguage||'en_US',
@@ -53,6 +56,49 @@ async function requireMessagingAccess(workspaceId,res){
   return usage;
 }
 
+
+function embeddedConfig(){
+  const appId=String(process.env.META_APP_ID||'').trim();
+  const configId=String(process.env.META_EMBEDDED_SIGNUP_CONFIG_ID||'').trim();
+  const appSecret=String(process.env.META_APP_SECRET||'').trim();
+  const graphVersion=String(process.env.META_GRAPH_VERSION||'v23.0').trim();
+  return {
+    enabled:!!(appId&&configId&&appSecret),
+    appId,configId,graphVersion,
+    missing:[
+      !appId?'META_APP_ID':'',
+      !configId?'META_EMBEDDED_SIGNUP_CONFIG_ID':'',
+      !appSecret?'META_APP_SECRET':''
+    ].filter(Boolean)
+  };
+}
+async function metaRequest(version,path,token,{method='GET',body}={}){
+  const response=await fetch('https://graph.facebook.com/'+version+'/'+path,{
+    method,
+    headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},
+    body:body?JSON.stringify(body):undefined,
+    signal:AbortSignal.timeout(15000)
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(data?.error?.message||'Meta request failed');
+  return data;
+}
+async function exchangeEmbeddedCode(code){
+  const cfg=embeddedConfig();
+  if(!cfg.enabled)throw new Error('Facebook Embedded Signup is not configured on the server');
+  const params=new URLSearchParams({
+    client_id:cfg.appId,
+    client_secret:process.env.META_APP_SECRET,
+    code:String(code||'')
+  });
+  const response=await fetch('https://graph.facebook.com/'+cfg.graphVersion+'/oauth/access_token?'+params.toString(),{
+    signal:AbortSignal.timeout(15000)
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.access_token)throw new Error(data?.error?.message||'Unable to exchange Facebook authorization code');
+  return {token:data.access_token,graphVersion:cfg.graphVersion};
+}
+
 async function testConnection(x){
   if(!x||!x.enabled||x.provider==='demo') return {ok:true,provider:'demo',message:'Demo provider is ready'};
   if(!x.phoneNumberId||!x.accessTokenEncrypted) throw new Error('Meta integration is incomplete');
@@ -66,6 +112,91 @@ async function testConnection(x){
   if(!response.ok) throw new Error(data?.error?.message||'Meta connection test failed');
   return {ok:true,provider:'meta',displayPhoneNumber:data.display_phone_number||'',verifiedName:data.verified_name||''};
 }
+
+
+r.get('/embedded-signup/config',async(req,res)=>{
+  const cfg=embeddedConfig();
+  const usage=await limits(req.workspaceId);
+  res.json({
+    enabled:cfg.enabled,
+    appId:cfg.appId,
+    configId:cfg.configId,
+    graphVersion:cfg.graphVersion,
+    missing:cfg.missing,
+    subscription:usage
+  });
+});
+
+r.post('/embedded-signup/complete',async(req,res)=>{
+  let row=null;
+  try{
+    const usage=await requireMessagingAccess(req.workspaceId,res);
+    if(!usage)return;
+    if(usage.used>=usage.max)return res.status(409).json({message:'Your '+usage.plan+' plan allows '+usage.max+' Meta WhatsApp connection(s)'});
+
+    const code=String(req.body.code||'').trim();
+    const wabaId=String(req.body.wabaId||'').trim();
+    const phoneNumberId=String(req.body.phoneNumberId||'').trim();
+    const businessPortfolioId=String(req.body.businessPortfolioId||'').trim();
+    if(!code||!wabaId||!phoneNumberId)return res.status(400).json({message:'Facebook signup did not return the required WABA and phone details'});
+
+    if(await Integration.exists({workspaceId:req.workspaceId,phoneNumberId})){
+      return res.status(409).json({message:'This WhatsApp phone number is already connected'});
+    }
+
+    const {token,graphVersion}=await exchangeEmbeddedCode(code);
+    const phone=await metaRequest(graphVersion,phoneNumberId,token,{method:'GET'});
+    await metaRequest(graphVersion,wabaId+'/subscribed_apps',token,{method:'POST'});
+
+    const pin=String(crypto.randomInt(100000,1000000));
+    let registrationStatus='registered';
+    let registrationWarning='';
+    try{
+      await metaRequest(graphVersion,phoneNumberId+'/register',token,{
+        method:'POST',
+        body:{messaging_product:'whatsapp',pin}
+      });
+    }catch(e){
+      registrationStatus='needs_attention';
+      registrationWarning=e.message;
+    }
+
+    const count=await Integration.countDocuments({workspaceId:req.workspaceId,provider:'meta'});
+    row=await Integration.create({
+      workspaceId:req.workspaceId,
+      name:String(req.body.name||phone.verified_name||phone.display_phone_number||'Meta WhatsApp').trim(),
+      provider:'meta',
+      enabled:true,
+      isDefault:count===0,
+      phoneNumberId,
+      displayPhoneNumber:phone.display_phone_number||'',
+      businessAccountId:wabaId,
+      businessPortfolioId,
+      accessTokenEncrypted:encrypt(token),
+      registrationPinEncrypted:encrypt(pin),
+      connectMethod:'embedded',
+      graphVersion,
+      connectionStatus:registrationStatus==='registered'?'connected':'error',
+      connectedAt:new Date(),
+      lastCheckedAt:new Date(),
+      lastError:registrationWarning
+    });
+
+    res.status(201).json({
+      connection:view(row),
+      registrationStatus,
+      warning:registrationWarning||'',
+      message:registrationStatus==='registered'
+        ? 'Facebook signup completed and WhatsApp phone registered.'
+        : 'Facebook signup completed and saved. Phone registration needs attention.'
+    });
+  }catch(e){
+    if(row?._id)await Integration.deleteOne({_id:row._id}).catch(()=>{});
+    if(e?.code===11000)return res.status(409).json({message:'This Meta WhatsApp profile is already connected'});
+    console.error('Embedded Signup completion error',e);
+    res.status(502).json({message:e.message||'Unable to complete Facebook Embedded Signup'});
+  }
+});
 
 r.get('/whatsapp-connections',async(req,res)=>{
   const [rows,usage]=await Promise.all([
