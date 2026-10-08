@@ -160,6 +160,25 @@ function Shell({session,onLogout,onSessionUpdate}){
   </div>
 }
 
+function AIOverview({go}){
+  const[data,setData]=useState(null);
+  useEffect(()=>{
+    let active=true;
+    api('/ai/status').then(s=>{
+      if(!active||!s.enabled||!s.profileComplete)return;
+      return api('/ai/recommendations').then(x=>{if(active)setData(x.recommendations)});
+    }).catch(()=>{});
+    return()=>{active=false};
+  },[]);
+  if(!data?.recommendations?.length)return <section className="aiDashboardTeaser">
+    <div className="sectionHead"><div><span className="eyebrow">WA SANTA AI</span><h2>AI recommendations</h2><p>Complete your AI business profile to unlock automatic campaign, message and template suggestions.</p></div><button onClick={()=>go('ai')}>Open AI Copilot</button></div>
+  </section>;
+  return <section className="aiDashboardTeaser">
+    <div className="sectionHead"><div><span className="eyebrow">WA SANTA AI</span><h2>{data.headline||'Recommended for your business'}</h2><p>{data.summary}</p></div><button className="primary" onClick={()=>go('ai')}>Open AI Copilot</button></div>
+    <div className="aiDashboardCards">{data.recommendations.slice(0,3).map((x,i)=><button key={i} onClick={()=>go('ai')}><span>{x.type}</span><b>{x.title}</b><small>{x.reason}</small></button>)}</div>
+  </section>
+}
+
 function Overview({go}){
   const[d,setD]=useState(()=>getCached('/dashboard')||null);
   const[err,setErr]=useState('');
@@ -180,6 +199,7 @@ function Overview({go}){
       <Metric label="Scheduled campaigns" value={String(d.metrics.scheduled).padStart(2,'0')} sub="Automatic delivery queue"/>
       <Metric label="Failed messages" value={d.metrics.failed} sub="Last 14 days"/>
     </div>
+    <AIOverview go={go}/>
     <section>
       <div className="sectionHead"><div><h2>Message activity</h2><p>Submitted, delivered and failed messages over the last 14 days.</p></div><button onClick={()=>go('reports')}>View report</button></div>
       <div className="chart">{d.activity.map((x,i)=><div className="barWrap" key={x.date}><div className="bars"><i style={{height:Math.max(4,x.submitted/max*100)+'%'}}></i><b style={{height:Math.max(4,x.delivered/max*100)+'%'}}></b><em style={{height:Math.max(0,(x.failed||0)/max*100)+'%'}}></em></div><small>{i%3===0?new Date(x.date).toLocaleDateString([],{month:'short',day:'numeric'}):''}</small></div>)}</div>
