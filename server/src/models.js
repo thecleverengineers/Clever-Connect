@@ -137,7 +137,8 @@ const deliverySchema = new Schema({
   error: { type: String, default: '' },
   sentAt: Date,
   deliveredAt: Date,
-  readAt: Date
+  readAt: Date,
+  repliedAt: Date
 }, opts);
 
 const systemSettingSchema = new Schema({
