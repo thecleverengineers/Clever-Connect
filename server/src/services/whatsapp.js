@@ -1,5 +1,6 @@
 import { Integration,Workspace,Delivery } from '../models.js';
 import {InboundWindow} from '../paymentModels.js';
+import {buildCarouselPayload} from './carousel.js';
 import { decrypt } from '../utils/crypto.js';
 import {accessForWorkspace,planLimitsForWorkspace} from '../plan.js';
 
@@ -19,14 +20,20 @@ async function enforceMessageAllowance(workspaceId){
   if(used>=max)throw new Error('Monthly message limit reached for your WA SANTA plan');
 }
 
-export async function sendWhatsApp({workspaceId,phone,text,template,integrationId=null}){
+export async function sendWhatsApp({workspaceId,phone,text,template,integrationId=null,carousel=null}){
   await enforceMessageAllowance(workspaceId);
 
   let integration=null;
-  if(integrationId) integration=await Integration.findOne({_id:integrationId,workspaceId,enabled:true}).lean();
+  if(integrationId){
+    integration=await Integration.findOne({_id:integrationId,workspaceId,enabled:true}).lean();
+    if(!integration)throw new Error('Selected WhatsApp profile is no longer connected');
+  }
   if(!integration) integration=await Integration.findOne({workspaceId,isDefault:true,enabled:true}).lean();
   if(!integration) integration=await Integration.findOne({workspaceId,enabled:true}).sort({provider:-1,createdAt:1}).lean();
 
+  if(carousel&&(!integration||integration.provider!=='meta')){
+    throw new Error('Image carousel messages require an active Meta WhatsApp Cloud API profile');
+  }
   if(!integration||integration.provider==='demo'){
     return {
       provider:'demo',
@@ -44,7 +51,10 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
     throw new Error('Meta template is not approved yet. Current status: '+template.metaStatus);
   }
 
-  const body=template?.metaTemplateName
+  if(carousel&&template)throw new Error('A template cannot be combined with a free-form carousel');
+  const body=carousel
+    ? buildCarouselPayload({to,text,cards:carousel})
+    : template?.metaTemplateName
     ? {
         messaging_product:'whatsapp',
         to,
@@ -59,8 +69,8 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
         text:{preview_url:false,body:String(text||'').trim()}
       };
 
-  if(body.type==='text'){
-    if(!body.text.body)throw new Error('Message text is required');
+  if(body.type!=='template'){
+    if(body.type==='text'&&(!body.text.body||body.text.body.length>4096))throw new Error('Free-form text must contain 1–4096 characters');
     // A consented contact is not automatically eligible for free-form Meta messages.
     // Templates are mandatory outside the 24-hour inbound customer-service window.
     const window=await InboundWindow.findOne({workspaceId,integrationId:integration._id,phone:to}).lean();
