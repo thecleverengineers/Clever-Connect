@@ -66,7 +66,7 @@ export async function buildWorkspaceAIContext(workspaceId){
     Integration.countDocuments({workspaceId,provider:'meta'}),
     Campaign.find({workspaceId}).sort({createdAt:-1}).limit(10).select('name status audienceType scheduledAt completedAt totals createdAt').lean(),
     Delivery.aggregate([
-      {$match:{workspaceId:workspace._id,createdAt:{$gte:since}}},
+      {$match:{workspaceId,createdAt:{$gte:since}}},
       {$group:{_id:'$status',count:{$sum:1}}}
     ])
   ]);
