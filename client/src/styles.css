@@ -137,3 +137,16 @@
 .adminMetaHelp b{font-size:10px;color:#32443a}
 .adminMetaHelp small{font-size:9px;color:#87938c;line-height:1.5}
 @media(max-width:760px){.metaSecretState,.adminMetaHelp{grid-template-columns:1fr}}
+
+/* Instant navigation / anti-jank */
+html{scrollbar-gutter:stable}
+body{overflow-y:scroll}
+.shell main{overflow-x:hidden}
+.page{min-height:calc(100vh - 70px)}
+.loading{min-height:calc(100vh - 70px)}
+.profileTrigger:hover .miniAvatar{transform:none}
+button,input,select,textarea{transition:none}
+.page img{display:block}
+@media(max-width:760px){
+  .page{min-height:calc(100vh - 70px)}
+}
