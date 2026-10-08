@@ -833,12 +833,12 @@ function Profile({session,go,onSessionUpdate}){
 function loadFacebookSdk(appId,version='v23.0'){
   return new Promise((resolve,reject)=>{
     if(window.FB){
-      try{window.FB.init({appId,cookie:true,xfbml:false,version});resolve(window.FB)}catch(e){reject(e)}
+      try{window.FB.init({appId,cookie:true,xfbml:true,version});resolve(window.FB)}catch(e){reject(e)}
       return;
     }
     const existing=document.getElementById('facebook-jssdk');
     const finish=()=>{
-      try{window.FB.init({appId,cookie:true,xfbml:false,version});resolve(window.FB)}
+      try{window.FB.init({appId,cookie:true,xfbml:true,version});resolve(window.FB)}
       catch(e){reject(e)}
     };
     window.fbAsyncInit=finish;
@@ -861,6 +861,7 @@ function WhatsAppApi({go}){
   const[showForm,setShowForm]=useState(false);
   const[editing,setEditing]=useState(null);
   const[fbBusy,setFbBusy]=useState(false);
+  const[coexistence,setCoexistence]=useState(false);
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
 
@@ -948,22 +949,34 @@ function WhatsAppApi({go}){
 
     try{
       const FB=await loadFacebookSdk(embedded.appId,embedded.graphVersion||'v23.0');
+      const extras={setup:{}};
+      if(coexistence)extras.featureType='whatsapp_business_app_onboarding';
       FB.login(response=>{
         if(response?.authResponse?.code){
           authCode=response.authResponse.code;
           complete();
-        }else if(!finished){
-          cleanup();setFbBusy(false);setErr('Facebook login was cancelled or authorization was not completed.');
+          return;
+        }
+        if(response?.authResponse?.accessToken&&!response?.authResponse?.code){
+          cleanup();setFbBusy(false);
+          setErr('Meta returned an access token instead of an authorization code. Check that this Facebook Login for Business configuration uses WhatsApp Embedded Signup with response type Code.');
+          return;
+        }
+        if(!finished){
+          setTimeout(()=>{
+            if(!finished&&!session){
+              cleanup();setFbBusy(false);
+              const status=response?.status?(' Meta status: '+response.status+'.'):'';
+              setErr('Facebook authorization was not completed.'+status+' Check the Meta app configuration, allowed domain, and Embedded Signup Configuration ID, then try again.');
+            }
+          },2500);
         }
       },{
         config_id:embedded.configId,
+        auth_type:'rerequest',
         response_type:'code',
         override_default_response_type:true,
-        extras:{
-          setup:{},
-          featureType:'whatsapp_business_app_onboarding',
-          sessionInfoVersion:'3'
-        }
+        extras
       });
     }catch(e){
       cleanup();setFbBusy(false);setErr(e.message||'Unable to open Facebook signup.');
@@ -1015,6 +1028,7 @@ function WhatsAppApi({go}){
         <div><small>RECOMMENDED</small><h2>Connect with Facebook</h2><p>Sign in to Meta, choose your Business Portfolio, WhatsApp Business Account and phone number. WA SANTA securely completes the API connection for you.</p></div>
       </div>
       <div className="facebookConnectAction">
+        <label className="coexistenceChoice"><input type="checkbox" checked={coexistence} onChange={e=>setCoexistence(e.target.checked)}/><span><b>Use existing WhatsApp Business App number</b><small>Enable only for Coexistence onboarding. Leave off for normal Cloud API signup.</small></span></label>
         <button className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled} onClick={connectWithFacebook}>{fbBusy?'Connecting with Meta…':'Continue with Facebook'}</button>
         {!embedded?.enabled&&embedded&&<small>Admin setup required: {embedded.missing?.join(', ')||'Meta Embedded Signup configuration'}</small>}
         {embedded?.enabled&&<small>Meta-hosted login · WA SANTA never sees your Facebook password</small>}
