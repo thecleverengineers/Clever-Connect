@@ -23,6 +23,14 @@ services:
         generateValue: true
       - key: META_WEBHOOK_VERIFY_TOKEN
         generateValue: true
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_EMBEDDED_SIGNUP_CONFIG_ID
+        sync: false
+      - key: META_GRAPH_VERSION
+        value: v23.0
       - key: CLIENT_URL
         sync: false
 
