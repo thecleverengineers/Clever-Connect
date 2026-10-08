@@ -2,6 +2,8 @@ import express from 'express';
 import mongoose from 'mongoose';
 import {Campaign,Delivery,Template,Contact,ContactList,Integration} from '../models.js';
 import {validateCarousel} from '../services/carousel.js';
+import {CampaignMedia} from '../mediaModel.js';
+import {parsePublicMediaUrl,digestToken} from './media.js';
 import {InboundWindow} from '../paymentModels.js';
 import {requireAuth} from '../middleware/auth.js';
 import {processCampaign} from '../services/scheduler.js';
@@ -15,6 +17,14 @@ async function normalizeCampaign(req, existing=null){
   const data={};
   if(body.name!==undefined) data.name=String(body.name||'').trim();
   if(body.message!==undefined) data.message=String(body.message||'').trim();
+  if(body.sendMode!==undefined){
+    if(!['freeform','template'].includes(body.sendMode))throw new Error('Choose free-form or approved template sending');
+    data.sendMode=body.sendMode;
+  }
+  if(body.templateParams!==undefined){
+    if(!Array.isArray(body.templateParams)||body.templateParams.length>20)throw new Error('Maximum 20 template body variables');
+    data.templateParams=body.templateParams.map(v=>String(v||'').trim().slice(0,1024));
+  }
   if(body.contentType!==undefined){
     if(!['text','carousel'].includes(body.contentType))throw new Error('Unsupported campaign content type');
     data.contentType=body.contentType;
@@ -29,28 +39,63 @@ async function normalizeCampaign(req, existing=null){
 
   const merged={...(existing?.toObject?.()||existing||{}),...data};
   if(!merged.name) throw new Error('Campaign name is required');
-  if((merged.contentType||'text')==='carousel'){
-    if(merged.templateId)throw new Error('Free-form image carousels cannot use Meta template messages');
-    if(!merged.integrationId||!mongoose.isValidObjectId(merged.integrationId))throw new Error('Choose the connected Meta WhatsApp profile for this carousel');
-    const connection=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).select('_id').lean();
-    if(!connection)throw new Error('Selected Meta WhatsApp profile is unavailable');
-    const validated=validateCarousel({text:merged.message,cards:merged.carouselCards});
-    data.message=validated.text;
-    data.carouselCards=validated.cards;
+  const mode=merged.sendMode||(merged.templateId?'template':'freeform');
+  if(mode==='template'){
+    if(!merged.templateId||!mongoose.isValidObjectId(merged.templateId))
+      throw new Error('Choose an approved Meta template');
+    const template=await Template.findOne({_id:merged.templateId,workspaceId:req.workspaceId}).lean();
+    if(!template||template.metaStatus!=='APPROVED'||!template.metaTemplateName||!template.integrationId)
+      throw new Error('Only approved, Meta-connected templates can be used for template campaigns');
+    if(template.category==='AUTHENTICATION')throw new Error('OTP/authentication templates need a dedicated verification flow');
+    const profile=await Integration.findOne({_id:template.integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).lean();
+    if(!profile)throw new Error('The selected template Meta WhatsApp connection is unavailable');
+    const nums=[...String(template.body||'').matchAll(/{{\s*(\d+)\s*}}/g)].map(m=>Number(m[1]));
+    const required=nums.length?Math.max(...nums):0;
+    if(required>20)throw new Error('Too many template variables for this campaign');
+    const values=merged.templateParams||[];
+    if(values.length!==required||values.some(v=>!String(v||'').trim()))
+      throw new Error('This Meta template needs '+required+' body variable value(s)');
+    data.templateId=template._id;
+    data.integrationId=profile._id;
+    data.contentType='text';
+    data.message='';
+    data.carouselCards=[];
+    data.templateParams=values;
   }else{
-    if(!merged.message&&!merged.templateId)throw new Error('Add a message or choose a template');
-    if(String(merged.message||'').length>4096)throw new Error('Message must contain at most 4096 characters');
+    data.templateId=null;
+    data.templateParams=[];
+    if((merged.contentType||'text')==='carousel'){
+      if(!merged.integrationId||!mongoose.isValidObjectId(merged.integrationId))throw new Error('Choose a Meta WhatsApp profile for the image carousel');
+      const profile=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).lean();
+      if(!profile)throw new Error('The selected Meta WhatsApp profile is unavailable');
+      const validated=validateCarousel({text:merged.message,cards:merged.carouselCards});
+      for(let i=0;i<validated.cards.length;i++){
+        const imageUrl=validated.cards[i].imageUrl;
+        const meta=parsePublicMediaUrl(imageUrl);
+        const previous=(existing?.carouselCards||[])[i]?.imageUrl;
+        if(!meta){
+          if(imageUrl===previous)continue; // pre-existing externally hosted legacy card only
+          throw new Error('Card '+(i+1)+': upload an image instead of entering a URL');
+        }
+        const file=await CampaignMedia.exists({
+          _id:meta.id,workspaceId:req.workspaceId,status:'active',tokenDigest:digestToken(meta.token)
+        });
+        if(!file)throw new Error('Card '+(i+1)+': uploaded image is missing or belongs to another workspace');
+      }
+      data.message=validated.text;
+      data.carouselCards=validated.cards;
+    }else{
+      if(!String(merged.message||'').trim())throw new Error('Enter a free-form message');
+      if(String(merged.message).length>4096)throw new Error('Message must contain at most 4096 characters');
+      data.carouselCards=[];
+    }
     if(merged.integrationId){
       if(!mongoose.isValidObjectId(merged.integrationId))throw new Error('Invalid WhatsApp profile');
       const connection=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,enabled:true}).select('_id').lean();
       if(!connection)throw new Error('Selected WhatsApp profile is unavailable');
     }
-    data.carouselCards=[];
   }
-  if(merged.templateId){
-    const template=await Template.findOne({_id:merged.templateId,workspaceId:req.workspaceId}).select('_id').lean();
-    if(!template) throw new Error('Selected template was not found');
-  }
+  data.sendMode=mode;
   if(merged.audienceType==='list'){
     if(!merged.listId) throw new Error('Choose a contact list');
     const list=await ContactList.findOne({_id:merged.listId,workspaceId:req.workspaceId}).select('_id').lean();
