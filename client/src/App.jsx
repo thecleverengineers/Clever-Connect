@@ -489,52 +489,40 @@ function Reports(){
   </div>
 }
 
-function Settings({session}){
-  const[x,setX]=useState(null);
-  const[msg,setMsg]=useState('');
+function Settings({go}){
+  const[connections,setConnections]=useState(null);
   const[err,setErr]=useState('');
-  const[test,setTest]=useState('');
-  useEffect(()=>{api('/integrations/whatsapp').then(setX).catch(e=>setErr(e.message))},[]);
-  if(!x)return <div className="page">{err?<Notice type="bad">{err}</Notice>:<Loading/>}</div>;
-  async function save(e){
-    e.preventDefault();setErr('');setMsg('');
-    const o=Object.fromEntries(new FormData(e.currentTarget));o.enabled=true;
-    try{const y=await api('/integrations/whatsapp',{method:'PUT',body:JSON.stringify(o)});setX(y);setMsg('WhatsApp integration settings saved.')}catch(e){setErr(e.message)}
-  }
-  async function testConnection(){
-    setTest('Testing…');setErr('');
-    try{const y=await api('/integrations/whatsapp/test',{method:'POST'});setTest(y.provider==='demo'?y.message:'Connected: '+(y.verifiedName||y.displayPhoneNumber||'Meta WhatsApp'))}catch(e){setTest('');setErr(e.message)}
-  }
-  async function password(e){
-    e.preventDefault();setErr('');setMsg('');
-    const o=Object.fromEntries(new FormData(e.currentTarget));
-    if(o.newPassword!==o.confirmPassword)return setErr('New passwords do not match');
-    delete o.confirmPassword;
-    try{await api('/auth/password',{method:'POST',body:JSON.stringify(o)});e.currentTarget.reset();setMsg('Password changed successfully.')}catch(e){setErr(e.message)}
-  }
-  const webhook=BASE.replace(/\/api$/,'')+'/api/webhooks/meta';
+  useEffect(()=>{api('/integrations/whatsapp-connections').then(setConnections).catch(e=>setErr(e.message))},[]);
+  const current=connections?.connections?.find(x=>x.isDefault)||connections?.connections?.[0];
   return <div className="page">
-    <Title title="Settings" sub="Connect Meta WhatsApp, verify webhooks and secure your account."/>
-    <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
+    <Title title="Settings" sub="Application status and messaging defaults."/>
+    <Notice type="bad">{err}</Notice>
     <div className="settingsGrid">
-      <section><h2>WhatsApp provider</h2><p>Use Demo mode to test all workflows without real delivery. Switch to Meta Cloud API for production.</p>
-        <form className="formGrid" onSubmit={save}>
-          <label>Provider<select name="provider" defaultValue={x.provider}><option value="demo">Demo provider</option><option value="meta">Meta WhatsApp Cloud API</option></select></label>
-          <label>Graph API version<input name="graphVersion" defaultValue={x.graphVersion||'v23.0'} placeholder="v23.0"/></label>
-          <label>Phone number ID<input name="phoneNumberId" defaultValue={x.phoneNumberId}/></label>
-          <label>Business account ID<input name="businessAccountId" defaultValue={x.businessAccountId}/></label>
-          <label className="full">Access token<input type="password" name="accessToken" placeholder={x.hasAccessToken?'Saved securely — leave blank to keep':'Paste Meta system-user token'}/></label>
-          <div className="actions full"><button type="button" onClick={testConnection}>Test connection</button><button className="primary">Save integration</button></div>
-          {test&&<Notice>{test}</Notice>}
-        </form>
+      <section>
+        <h2>Messaging default</h2>
+        <p>{current?('Current sender: '+current.name):'No messaging provider configured.'}</p>
+        {current&&<div className="profileDetails"><div><span>Provider</span><b>{current.provider}</b></div><div><span>Status</span><b>{current.enabled?'Enabled':'Disabled'}</b></div></div>}
+        <button className="primary" onClick={()=>go('profile')}>Manage WhatsApp connections</button>
       </section>
-      <section><h2>Meta webhook</h2><p>Use this callback URL and verification token in Meta Developer settings.</p><label className="copyLabel">Callback URL<code>{webhook}</code></label><label className="copyLabel">Verification token<code>{x.webhookVerifyToken}</code></label><button onClick={()=>navigator.clipboard?.writeText(webhook)}>Copy callback URL</button><button onClick={()=>navigator.clipboard?.writeText(x.webhookVerifyToken)}>Copy verification token</button><p className="muted">Delivery, read and failed events automatically update campaign reports.</p></section>
-      <section><h2>Account security</h2><p>{session.user.email}</p><form className="formGrid" onSubmit={password}><label className="full">Current password<input type="password" name="currentPassword" required/></label><label>New password<input type="password" name="newPassword" minLength="8" required/></label><label>Confirm new password<input type="password" name="confirmPassword" minLength="8" required/></label><div className="actions full"><button className="primary">Change password</button></div></form></section>
-      <section><h2>Deployment status</h2><p>API endpoint</p><code>{BASE}</code><p className="muted">Scheduled campaigns are checked every 60 seconds while the API service is awake. Free Render services can sleep when idle.</p></section>
+      <section>
+        <h2>Account & security</h2>
+        <p>Profile image, password, WhatsApp 2FA, workspace, subscription and team controls now live in your Profile account center.</p>
+        <button onClick={()=>go('profile')}>Open Profile</button>
+      </section>
+      <section>
+        <h2>Deployment status</h2>
+        <p>API endpoint</p><code>{BASE}</code>
+        <p className="muted">Scheduled campaigns are checked every 60 seconds while the API service is awake. Free Render services can sleep when idle.</p>
+      </section>
+      <section>
+        <h2>Webhook endpoint</h2>
+        <p>Meta delivery webhooks are received by the Clever Connect API.</p>
+        <code>{BASE.replace(/\/api$/,'')+'/api/webhooks/meta'}</code>
+        <p className="muted">The verification token is available inside Profile → Meta WhatsApp connection settings.</p>
+      </section>
     </div>
   </div>
 }
-
 
 function EditProfile({go,onSessionUpdate}){
   const[data,setData]=useState(null);
@@ -770,7 +758,7 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='reports')return <Reports/>;
   if(id==='profile')return <Profile session={session} go={go} onSessionUpdate={onSessionUpdate}/>;
   if(id==='edit-profile')return <EditProfile go={go} onSessionUpdate={onSessionUpdate}/>;
-  return <Settings session={session}/>;
+  return <Settings go={go}/>;
 }
 
 export default function App(){
