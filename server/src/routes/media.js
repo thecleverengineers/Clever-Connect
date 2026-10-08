@@ -61,12 +61,12 @@ router.post('/upload',(req,res)=>{
 publicMedia.get('/:id/:token',async(req,res)=>{
   if(!mongoose.isValidObjectId(req.params.id)||!/^[a-f0-9]{64}$/.test(req.params.token))return res.sendStatus(404);
   const row=await CampaignMedia.findOne({_id:req.params.id,status:'active',tokenDigest:digestToken(req.params.token)})
-    .select('bytes contentType length').lean();
+    .select('bytes contentType length');
   if(!row)return res.sendStatus(404);
   res.set('Content-Type',row.contentType);
   res.set('Content-Length',String(row.length));
   res.set('X-Content-Type-Options','nosniff');
   res.set('Cache-Control','public, max-age=86400');
-  res.send(row.bytes);
+  res.send(Buffer.from(row.bytes));
 });
 export default router;
