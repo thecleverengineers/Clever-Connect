@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import {CampaignMedia} from '../mediaModel.js';
 
 const router=express.Router();
+export const publicMedia=express.Router();
 const MAX=5*1024*1024;
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:MAX,files:1}});
 const origin=()=>{
@@ -57,7 +58,7 @@ router.post('/upload',(req,res)=>{
 });
 // This route is intentionally public so Meta can download the image. The
 // unguessable token is a bearer capability; never list it in workspace APIs.
-router.get('/public/:id/:token',async(req,res)=>{
+publicMedia.get('/:id/:token',async(req,res)=>{
   if(!mongoose.isValidObjectId(req.params.id)||!/^[a-f0-9]{64}$/.test(req.params.token))return res.sendStatus(404);
   const row=await CampaignMedia.findOne({_id:req.params.id,status:'active',tokenDigest:digestToken(req.params.token)})
     .select('bytes contentType length').lean();
