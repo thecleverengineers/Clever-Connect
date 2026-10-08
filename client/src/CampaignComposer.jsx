@@ -1,13 +1,18 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {api} from './api.js';
+import MediaDropzone from './MediaDropzone.jsx';
 import './campaignComposer.css';
 
 export const blankCard=()=>({imageUrl:'',caption:'',buttonText:'View details',buttonUrl:''});
 export const blankCampaignDraft=()=>({
+  sendMode:'freeform',templateId:'',templateParams:[],
   contentType:'text',message:'',integrationId:'',
   carouselCards:[blankCard(),blankCard()]
 });
 export const existingCampaignDraft=c=>({
+  sendMode:c?.sendMode||(c?.templateId?'template':'freeform'),
+  templateId:String(c?.templateId?._id||c?.templateId||''),
+  templateParams:c?.templateParams||[],
   contentType:c?.contentType==='carousel'?'carousel':'text',
   message:c?.message||'',
   integrationId:String(c?.integrationId?._id||c?.integrationId||''),
@@ -63,7 +68,7 @@ function Toolbar({inputRef,value,onChange}){
   </div>;
 }
 
-export default function CampaignComposer({draft,onChange}){
+export default function CampaignComposer({draft,onChange,templates=[]}){
   const field=useRef(null);
   const [profiles,setProfiles]=useState([]);
   const [eligibility,setEligibility]=useState(null);
@@ -83,7 +88,22 @@ export default function CampaignComposer({draft,onChange}){
       .catch(e=>{if(active){setEligibility(null);setError(e.message)}});
     return()=>{active=false};
   },[draft.integrationId]);
-  const isCarousel=draft.contentType==='carousel';
+  const isTemplate=draft.sendMode==='template';
+  const isCarousel=!isTemplate&&draft.contentType==='carousel';
+  const approved=templates.filter(t=>t.metaStatus==='APPROVED'&&t.metaTemplateName&&t.integrationId&&t.category!=='AUTHENTICATION');
+  const chosen=approved.find(t=>t._id===draft.templateId);
+  const required=chosen?[...String(chosen.body||'').matchAll(/\{\{\s*(\d+)\s*\}\}/g)]
+    .reduce((max,x)=>Math.max(max,Number(x[1])),0):0;
+  const displayed=isTemplate
+    ? String(chosen?.body||'Choose an approved Meta template').replace(/\{\{\s*(\d+)\s*\}\}/g,(full,n)=>draft.templateParams[Number(n)-1]||full)
+    : draft.message;
+  function chooseTemplate(id){
+    const t=approved.find(x=>x._id===id);
+    const size=t?[...String(t.body||'').matchAll(/\{\{\s*(\d+)\s*\}\}/g)]
+      .reduce((max,x)=>Math.max(max,Number(x[1])),0):0;
+    onChange(prev=>({...prev,templateId:id,templateParams:Array.from({length:size},(_,i)=>prev.templateParams[i]||''),
+      integrationId:String(t?.integrationId?._id||t?.integrationId||prev.integrationId||'')}));
+  }
   const update=(key,value)=>onChange(prev=>({...prev,[key]:value}));
   const updateCard=(i,key,value)=>onChange(prev=>({
     ...prev,carouselCards:prev.carouselCards.map((c,j)=>i===j?{...c,[key]:value}:c)
@@ -96,34 +116,58 @@ export default function CampaignComposer({draft,onChange}){
   return <div className="waComposer">
     <div className="waComposerTop">
       <div><b>Message composer</b><small>WhatsApp-native formatting only — no custom fonts, colours or font sizes.</small></div>
-      <div className="waComposerSwitch" role="group" aria-label="Message format">
+      {!isTemplate&&<div className="waComposerSwitch" role="group" aria-label="Message format">
         <button type="button" aria-pressed={!isCarousel} className={!isCarousel?'selected':''} onClick={()=>update('contentType','text')}>Formatted text</button>
         <button type="button" aria-pressed={isCarousel} className={isCarousel?'selected':''} onClick={()=>update('contentType','carousel')}>Image carousel</button>
-      </div>
+      </div>}
     </div>
-    <label className="waComposerField">Sending Meta profile
+    <div className="waComposerSwitch waSendMode" role="group" aria-label="Campaign sending mode">
+      <button type="button" aria-pressed={!isTemplate} className={!isTemplate?'selected':''}
+        onClick={()=>update('sendMode','freeform')}>Free-form message</button>
+      <button type="button" aria-pressed={isTemplate} className={isTemplate?'selected':''}
+        onClick={()=>update('sendMode','template')}>Approved Meta template</button>
+    </div>
+    {isTemplate?<div className="waTemplateChoice">
+      <label className="waComposerField">Approved WhatsApp template
+        <select required value={draft.templateId||''} onChange={e=>chooseTemplate(e.target.value)}>
+          <option value="">Choose Meta-approved template</option>
+          {approved.map(t=><option key={t._id} value={t._id}>{t.name} · {t.language} · {t.category}</option>)}
+        </select>
+      </label>
+      {chosen&&<div className="waTemplateInfo">
+        <strong>{chosen.metaTemplateName}</strong> · {chosen.category} · {chosen.language}
+        <p>Use this approved template to start opted-in conversations outside the 24-hour window. Its original wording is controlled by Meta.</p>
+        {Array.from({length:required},(_,i)=><label className="waComposerField" key={i}>
+          Template variable {'{{'+(i+1)+'}}'} · supports {'{{name}}'}, {'{{phone}}'}, {'{{email}}'}
+          <input required value={draft.templateParams[i]||''} maxLength={1024}
+            onChange={e=>onChange(prev=>({...prev,templateParams:Array.from({length:required},(_,j)=>j===i?e.target.value:prev.templateParams[j]||'')}))}
+            placeholder={i===0?'{{name}}':'Value for parameter '+(i+1)}/>
+        </label>)}
+      </div>}
+      {!approved.length&&<p className="waComposerWarning">No approved Meta templates found. Create a template under Templates, obtain Meta approval, then sync the profile.</p>}
+    </div>:<label className="waComposerField">Sending Meta profile
       <select value={draft.integrationId||''} onChange={e=>update('integrationId',e.target.value)} required={isCarousel}>
         <option value="">Default profile (text only)</option>
         {profiles.map(p=><option key={p.id} value={p.id}>{p.name}{p.displayPhoneNumber?' · '+p.displayPhoneNumber:''}</option>)}
       </select>
-    </label>
-    {eligibility&&<div className="waEligibility">
+    </label>}
+    {!isTemplate&&eligibility&&<div className="waEligibility">
       <b>{eligibility.eligible}</b> eligible contacts across this workspace for this phone number; <b>{eligibility.outsideWindow}</b> opted-in contacts outside the 24-hour window.
       <small>Campaign audience filters may reduce the eligible count. Eligibility is rechecked at sending time.</small>
     </div>}
     {error&&<div className="waComposerWarning" role="alert">{error}</div>}
     <div className="waComposerLayout">
       <div className="waComposerEdit">
-        <label className="waComposerField">
+        {!isTemplate&&<label className="waComposerField">
           {isCarousel?'Carousel intro message (up to 1024 characters)':'Message (up to 4096 characters)'}
           <Toolbar inputRef={field} value={draft.message} onChange={v=>update('message',v)}/>
           <textarea ref={field} rows={5} value={draft.message} onChange={e=>update('message',e.target.value)}
             maxLength={isCarousel?1024:4096} placeholder="Hi {{name}}, have a look at our new collection!" />
           <small>{draft.message.length} / {isCarousel?1024:4096} · Variables: {'{{name}}, {{phone}}, {{email}}'}</small>
-        </label>
+        </label>}
         {isCarousel&&<div className="waCardsEdit">
           <div className="waCardsHead"><b>Carousel images</b><small>{cards.length} / 10 cards</small></div>
-          <p>2–10 public HTTPS image URLs, each with a URL button. Images must be accessible to Meta. Card captions allow formatting and contact variables.</p>
+          <p>Upload or drag and drop 2–10 JPG/PNG images (5 MB each). WA SANTA stores them persistently and supplies secure image links to Meta. Destination buttons still use normal website URLs.</p>
           {cards.map((c,i)=><div className="waCardEdit" key={i}>
             <div className="waCardEditTitle">
               <b>Card {i+1}</b>
@@ -133,9 +177,7 @@ export default function CampaignComposer({draft,onChange}){
                 <button type="button" disabled={cards.length<=2} onClick={()=>onChange(prev=>({...prev,carouselCards:prev.carouselCards.filter((_,j)=>i!==j)}))}>Remove</button>
               </div>
             </div>
-            <label className="waComposerField">Image URL (HTTPS)
-              <input type="url" value={c.imageUrl} onChange={e=>updateCard(i,'imageUrl',e.target.value)} placeholder="https://your-site.com/product.jpg" required/>
-            </label>
+            <MediaDropzone value={c.imageUrl} onUpload={url=>updateCard(i,'imageUrl',url)} label={'Card '+(i+1)+' image'}/>
             <label className="waComposerField">Caption (160 characters, max 2 line breaks)
               <textarea rows={2} value={c.caption} maxLength={160} onChange={e=>updateCard(i,'caption',e.target.value)} placeholder="*New arrival* — shop now"/>
             </label>
@@ -153,7 +195,7 @@ export default function CampaignComposer({draft,onChange}){
       </div>
       <div className="waPreviewArea">
         <div className="waPreviewTop">WHATSAPP PREVIEW</div>
-        <div className="waPreviewBubble"><StyledText text={draft.message||'Your formatted message appears here…'}/>
+        <div className="waPreviewBubble"><StyledText text={displayed||'Your formatted message appears here…'}/>
           {isCarousel&&<div className="waPreviewCarousel">
             {cards.map((c,i)=><div className="waPreviewCard" key={i}>
               {/^https:\/\//i.test(c.imageUrl)?<img src={c.imageUrl} alt={'Card '+(i+1)+' preview'} loading="lazy"/>:<div className="waImagePlaceholder">Image {i+1}</div>}
@@ -163,7 +205,7 @@ export default function CampaignComposer({draft,onChange}){
           </div>}
           <small className="waPreviewTime">Preview · actual appearance depends on WhatsApp</small>
         </div>
-        <div className="waPreviewNote">Free-form text and interactive carousels require an inbound customer message within 24 hours. Outside that window, use approved Meta templates.</div>
+        <div className="waPreviewNote">{isTemplate?'Template campaign · an approved Meta template is required. Template variables are filled per contact.':'Free-form messages require an inbound customer message within 24 hours. For outbound campaigns use approved Meta templates.'}</div>
       </div>
     </div>
   </div>;
