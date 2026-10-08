@@ -136,29 +136,45 @@ r.post('/embedded-signup/complete',async(req,res)=>{
 
     const code=String(req.body.code||'').trim();
     const wabaId=String(req.body.wabaId||'').trim();
-    const phoneNumberId=String(req.body.phoneNumberId||'').trim();
+    let phoneNumberId=String(req.body.phoneNumberId||'').trim();
     const businessPortfolioId=String(req.body.businessPortfolioId||'').trim();
-    if(!code||!wabaId||!phoneNumberId)return res.status(400).json({message:'Facebook signup did not return the required WABA and phone details'});
+    const coexistence=req.body.coexistence===true;
+    if(!code||!wabaId)return res.status(400).json({message:'Facebook signup did not return the required WhatsApp Business Account details'});
+
+    const {token,graphVersion}=await exchangeEmbeddedCode(code);
+    if(!phoneNumberId){
+      const phones=await metaRequest(
+        graphVersion,
+        wabaId+'/phone_numbers?fields=id,display_phone_number,verified_name&limit=100',
+        token,
+        {method:'GET'}
+      );
+      const items=phones.data||[];
+      if(items.length===1)phoneNumberId=String(items[0].id||'');
+      else if(items.length>1)return res.status(409).json({message:'Meta returned multiple phone numbers but did not identify the selected number. Retry Embedded Signup and select one number.'});
+    }
+    if(!phoneNumberId)return res.status(400).json({message:'No WhatsApp phone number was returned by Meta'});
 
     if(await Integration.exists({workspaceId:req.workspaceId,phoneNumberId})){
       return res.status(409).json({message:'This WhatsApp phone number is already connected'});
     }
 
-    const {token,graphVersion}=await exchangeEmbeddedCode(code);
-    const phone=await metaRequest(graphVersion,phoneNumberId,token,{method:'GET'});
+    const phone=await metaRequest(graphVersion,phoneNumberId+'?fields=id,display_phone_number,verified_name',token,{method:'GET'});
     await metaRequest(graphVersion,wabaId+'/subscribed_apps',token,{method:'POST'});
 
     const pin=String(crypto.randomInt(100000,1000000));
-    let registrationStatus='registered';
+    let registrationStatus=coexistence?'coexistence':'registered';
     let registrationWarning='';
-    try{
-      await metaRequest(graphVersion,phoneNumberId+'/register',token,{
-        method:'POST',
-        body:{messaging_product:'whatsapp',pin}
-      });
-    }catch(e){
-      registrationStatus='needs_attention';
-      registrationWarning=e.message;
+    if(!coexistence){
+      try{
+        await metaRequest(graphVersion,phoneNumberId+'/register',token,{
+          method:'POST',
+          body:{messaging_product:'whatsapp',pin}
+        });
+      }catch(e){
+        registrationStatus='needs_attention';
+        registrationWarning=e.message;
+      }
     }
 
     const count=await Integration.countDocuments({workspaceId:req.workspaceId,provider:'meta'});
@@ -173,7 +189,7 @@ r.post('/embedded-signup/complete',async(req,res)=>{
       businessAccountId:wabaId,
       businessPortfolioId,
       accessTokenEncrypted:encrypt(token),
-      registrationPinEncrypted:encrypt(pin),
+      registrationPinEncrypted:coexistence?'':encrypt(pin),
       connectMethod:'embedded',
       graphVersion,
       connectionStatus:registrationStatus==='registered'?'connected':'error',
@@ -188,7 +204,9 @@ r.post('/embedded-signup/complete',async(req,res)=>{
       warning:registrationWarning||'',
       message:registrationStatus==='registered'
         ? 'Facebook signup completed and WhatsApp phone registered.'
-        : 'Facebook signup completed and saved. Phone registration needs attention.'
+        : registrationStatus==='coexistence'
+          ? 'Facebook signup completed using WhatsApp Business App coexistence.'
+          : 'Facebook signup completed and saved. Phone registration needs attention.'
     });
   }catch(e){
     if(row?._id)await Integration.deleteOne({_id:row._id}).catch(()=>{});
