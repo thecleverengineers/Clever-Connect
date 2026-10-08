@@ -81,11 +81,18 @@ export async function recordInbound(integration,inbound){
       );
     }
   }
+  const optOut=/^(stop|unsubscribe|opt\s*out|cancel\s*messages)$/i.test(String(value||'').trim());
+  if(optOut){
+    await Contact.updateOne({workspaceId:integration.workspaceId,phone:'+'+phone},
+      {$set:{consentStatus:'opted_out',suppressed:true}});
+  }
   const contact=await Contact.findOne({workspaceId:integration.workspaceId,phone:'+'+phone}).select('_id').lean();
   await ChatConversation.updateOne({_id:convo._id},{$set:{
     lastMessageAt:at,lastInboundAt:at,lastPreview:row.text,
-    ...(contact?{contactId:contact._id}:{})
+    ...(contact?{contactId:contact._id}:{}),
+    ...(optOut?{botPaused:true,activeFlowId:null,awaitingNodeId:''}:{})
   },$inc:{unreadCount:1}});
+  if(optOut)convo.botPaused=true;
   return {fresh:true,message:row,conversation:convo,value};
 }
 function matchFlow(flow,value){
