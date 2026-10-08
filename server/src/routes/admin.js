@@ -4,6 +4,7 @@ import {SubscriptionPlan,SubscriptionRequest,Workspace,User} from '../models.js'
 import {requireAuth,requireSuperAdmin} from '../middleware/auth.js';
 import {accessForWorkspace} from '../plan.js';
 import {getMetaConfig,getMetaConfigPublic,saveMetaConfig,clearMetaAppSecret} from '../metaConfig.js';
+import {getOpenAIConfig,getOpenAIConfigPublic,saveOpenAIConfig,clearOpenAIKey} from '../openaiConfig.js';
 
 const r=express.Router();
 r.use(requireAuth,requireSuperAdmin);
@@ -97,6 +98,46 @@ r.post('/meta-settings/test',async(req,res)=>{
   }catch(e){
     res.status(502).json({message:e.name==='TimeoutError'?'Meta credential test timed out':e.message});
   }
+});
+
+
+r.get('/openai-settings',async(req,res)=>{
+  res.json(await getOpenAIConfigPublic());
+});
+
+r.put('/openai-settings',async(req,res)=>{
+  try{
+    const fastModel=String(req.body.fastModel||'gpt-6-luna').trim();
+    const strategyModel=String(req.body.strategyModel||'gpt-6-sol').trim();
+    if(!fastModel||!strategyModel)return res.status(400).json({message:'Fast and strategy model names are required'});
+    await saveOpenAIConfig({
+      apiKey:String(req.body.apiKey||'').trim(),
+      fastModel,
+      strategyModel,
+      enabled:req.body.enabled!==false,
+      updatedBy:req.user._id
+    });
+    res.json(await getOpenAIConfigPublic());
+  }catch(e){res.status(400).json({message:e.message})}
+});
+
+r.post('/openai-settings/clear-key',async(req,res)=>{
+  await clearOpenAIKey(req.user._id);
+  res.json(await getOpenAIConfigPublic());
+});
+
+r.post('/openai-settings/test',async(req,res)=>{
+  try{
+    const cfg=await getOpenAIConfig();
+    if(!cfg.apiKey)return res.status(400).json({message:'Save an OpenAI API key first'});
+    const response=await fetch('https://api.openai.com/v1/models/'+encodeURIComponent(cfg.fastModel),{
+      headers:{Authorization:'Bearer '+cfg.apiKey},
+      signal:AbortSignal.timeout(12000)
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)return res.status(502).json({message:data?.error?.message||'OpenAI rejected the API key or model'});
+    res.json({ok:true,model:data.id||cfg.fastModel,message:'OpenAI API key and fast model are valid.'});
+  }catch(e){res.status(502).json({message:e.name==='TimeoutError'?'OpenAI test timed out':e.message})}
 });
 
 r.post('/plans',async(req,res)=>{
