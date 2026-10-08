@@ -1,0 +1,34 @@
+# WA SANTA: WhatsApp-native text & image-carousel campaigns
+
+## What is implemented
+Open **Campaigns → New campaign → Message composer** and choose:
+- **Formatted text**: bold (`*bold*`), italic (`_italic_`), strike (`~strike~`), monospace (three backticks), inline code, numbered/bulleted lists, quotes, and line breaks.
+- **Image carousel**: two to ten cards, each with a public HTTPS image URL, up to 160 characters of formatted card text, and exactly one CTA URL button (label up to 20 characters). The required introductory body allows up to 1024 characters. No template is combined with a session carousel.
+
+A responsive WhatsApp-style preview sits next to the editor. Message `{{name}}`, `{{phone}}`, and `{{email}}` placeholders are rendered independently for each opted-in recipient, including inside card captions. You can choose a contact list or specific contacts, schedule, and review per-recipient delivery statuses using existing campaign features. Multiple message types share the same campaign audit and scheduler.
+
+## Rules enforced by the backend
+- A free-form text/carousel message is submitted to Meta **only** if an inbound WhatsApp message from that recipient was received through the **same connected business phone number within 24 hours**. An earlier opt-in alone does not open a session.
+- Recipients must be saved opted-in, unsuppressed contacts.
+- The selected Meta profile is bound to the authenticated workspace and must be enabled. Carousels **cannot use the demo sender**.
+- Carousel payloads follow `interactive.type: "carousel"` and `action.cards[].type: "cta_url"`, with card indexes 0–9, image headers, optional bodies, and a URL CTA.
+- URLs must be public HTTPS domain names (not localhost, IP-address hosts, local TLDs, or URLs containing credentials).
+- Carousel image URLs are links to existing, publicly accessible media; WA SANTA does not upload local image files to Meta in this version.
+- The campaign form displays a read-only estimate of opted-in contacts with active conversations for the selected profile. This is **workspace-wide**, not the final filtered audience count. Eligibility is checked again at each actual send; scheduled campaigns can lose eligibility before dispatch.
+- The existing Meta-template flow is still available for messages outside the free-form service window. The new carousel builder creates only **session carousels**, not approved template carousels.
+
+## Not supported
+Custom font family, custom font size, text colour, HTML, CSS, unrestricted rich formatting, mixing Meta-approved templates with a free-form carousel, and outbound session carousels outside the 24-hour window. These are intentionally absent from the campaign composer.
+
+## Relevant files
+- `client/src/CampaignComposer.jsx`, `client/src/campaignComposer.css`
+- `server/src/services/carousel.js` (payload validator)
+- `server/src/services/whatsapp.js` (Meta session-window enforcement)
+- `server/src/services/scheduler.js` (personalized campaign send)
+- `server/src/routes/campaigns.js` (`GET /api/campaigns/eligibility`, validation)
+- `server/test/carousel.test.js` (unit tests)
+
+## Validation
+Run `cd server && npm install && npm test` and `cd client && npm install && npm run build`. Pushes to main also run the `WA SANTA checks` GitHub Actions workflow.
+
+Meta may reject interactive carousels for ineligible accounts or inaccessible external images. A Render deployment succeeding does not constitute an end-to-end test delivery.
