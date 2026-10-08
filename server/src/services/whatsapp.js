@@ -1,9 +1,26 @@
-import { Integration } from '../models.js';
+import { Integration,Workspace,Delivery } from '../models.js';
 import { decrypt } from '../utils/crypto.js';
+import {accessForWorkspace,planLimitsForWorkspace} from '../plan.js';
 
 const normalizePhone=(phone='')=>String(phone).replace(/[^0-9]/g,'');
 
+async function enforceMessageAllowance(workspaceId){
+  const workspace=await Workspace.findById(workspaceId).lean();
+  const access=accessForWorkspace(workspace);
+  if(!access.allowed)throw new Error(access.reason||'WA SANTA subscription required');
+  const limits=await planLimitsForWorkspace(workspace);
+  const max=Number(limits.monthlyMessages)||0;
+  if(max<=0)return;
+  const since=workspace.subscriptionStatus==='active'
+    ? (workspace.currentPeriodStart||new Date(new Date().getFullYear(),new Date().getMonth(),1))
+    : (workspace.trialStartedAt||workspace.createdAt||new Date(Date.now()-7*86400000));
+  const used=await Delivery.countDocuments({workspaceId,createdAt:{$gte:since}});
+  if(used>=max)throw new Error('Monthly message limit reached for your WA SANTA plan');
+}
+
 export async function sendWhatsApp({workspaceId,phone,text,template,integrationId=null}){
+  await enforceMessageAllowance(workspaceId);
+
   let integration=null;
   if(integrationId) integration=await Integration.findOne({_id:integrationId,workspaceId,enabled:true}).lean();
   if(!integration) integration=await Integration.findOne({workspaceId,isDefault:true,enabled:true}).lean();
