@@ -66,7 +66,8 @@ export function warmWorkspace(isSuperAdmin=false){
     '/templates',
     '/integrations/whatsapp-connections',
     '/account/profile',
-    '/subscription'
+    '/subscription',
+    '/ai/status'
   ];
   const deferred=[
     '/campaigns?status=scheduled',
@@ -74,7 +75,7 @@ export function warmWorkspace(isSuperAdmin=false){
     '/integrations/embedded-signup/config',
     '/account/team'
   ];
-  if(isSuperAdmin)deferred.push('/admin/overview','/admin/meta-settings');
+  if(isSuperAdmin)deferred.push('/admin/overview','/admin/meta-settings','/admin/openai-settings');
 
   Promise.allSettled(immediate.map(path=>api(path)));
   const runDeferred=()=>Promise.allSettled(deferred.map(path=>api(path)));
