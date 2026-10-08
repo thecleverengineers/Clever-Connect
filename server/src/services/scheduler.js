@@ -1,4 +1,5 @@
-import { Campaign, Contact, Delivery, Template } from '../models.js';
+import { Campaign, Contact, Delivery, Template, Workspace } from '../models.js';
+import {accessForWorkspace} from '../plan.js';
 import { sendWhatsApp } from './whatsapp.js';
 
 async function audience(c){
@@ -33,6 +34,14 @@ function renderMessage(text,contact){
 }
 
 export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
+  const existing=await Campaign.findById(campaignId).lean();
+  if(!existing)return null;
+  const workspace=await Workspace.findById(existing.workspaceId).lean();
+  const access=accessForWorkspace(workspace);
+  if(!access.allowed){
+    await Campaign.findByIdAndUpdate(campaignId,{$set:{status:'failed',completedAt:new Date(),lastError:access.reason||'WA SANTA subscription required'}});
+    return null;
+  }
   const c=await Campaign.findOneAndUpdate(
     {_id:campaignId,status:{$in:['draft','scheduled','failed','partial','completed']}},
     {$set:{status:'processing',startedAt:new Date(),lastError:''},$unset:{completedAt:1}},
