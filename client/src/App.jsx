@@ -9,6 +9,7 @@ const nav=[
   ['schedule','Schedule','◷'],
   ['templates','Templates','▤'],
   ['reports','Delivery reports','▥'],
+  ['subscription','Subscription','₹'],
   ['settings','Settings','⚙']
 ];
 
@@ -19,7 +20,7 @@ function Notice({children,type='ok'}){return children?<div className={'notice '+
 function Loading(){return <div className="loading">Loading workspace…</div>}
 function Empty({text}){return <div className="empty">{text}</div>}
 function Title({title,sub,action,onAction}){
-  return <div className="title"><div><span>CLEVER CONNECT</span><h1>{title}</h1><p>{sub}</p></div>{action&&<button className="primary" onClick={onAction}>+ {action}</button>}</div>
+  return <div className="title"><div><span>WA SANTA</span><h1>{title}</h1><p>{sub}</p></div>{action&&<button className="primary" onClick={onAction}>+ {action}</button>}</div>
 }
 function Metric({label,value,sub}){return <div className="metric"><span>{label}</span><strong>{value}</strong><small>{sub}</small></div>}
 function Avatar({user,className='userAvatar'}){
@@ -52,13 +53,13 @@ function Auth({onAuth}){
 
   return <div className="auth">
     <div className="brandPanel">
-      <div className="mark">CC</div>
+      <div className="mark">WS</div>
       <h1>Make every message count.</h1>
       <p>A little planning. A lot more connection. Build thoughtful WhatsApp conversations with consent-aware contacts, scheduled delivery and clear reporting.</p>
       <div className="trust">✓ Workspace isolation &nbsp; ✓ Secure sessions &nbsp; ✓ WhatsApp 2FA</div>
     </div>
     {challenge?<form className="authCard" onSubmit={verifyOtp}>
-      <div className="logo">clever <b>connect</b><small>WHATSAPP WORKSPACE</small></div>
+      <div className="logo">WA <b>SANTA</b><small>WHATSAPP WORKSPACE</small></div>
       <div className="otpIcon">✓</div>
       <h2>Verify with WhatsApp</h2>
       <p>Enter the 6-digit OTP sent to {challenge.maskedPhone}.</p>
@@ -67,9 +68,9 @@ function Auth({onAuth}){
       <button className="primary" disabled={busy}>{busy?'Verifying…':'Verify & sign in'}</button>
       <button type="button" className="link" onClick={()=>{setChallenge(null);setErr('')}}>Back to sign in</button>
     </form>:<form className="authCard" onSubmit={submit}>
-      <div className="logo">clever <b>connect</b><small>WHATSAPP WORKSPACE</small></div>
+      <div className="logo">WA <b>SANTA</b><small>WHATSAPP WORKSPACE</small></div>
       <h2>{mode==='login'?'Welcome back':'Create your workspace'}</h2>
-      <p>{mode==='login'?'Sign in to continue to Clever Connect.':'Start in demo mode, then connect Meta WhatsApp when ready.'}</p>
+      <p>{mode==='login'?'Sign in to continue to WA SANTA.':'Start in demo mode, then connect Meta WhatsApp when ready.'}</p>
       {mode==='register'&&<>
         <label>Full name<input name="name" required autoComplete="name"/></label>
         <label>Workspace name<input name="workspaceName" placeholder="Acme Studio"/></label>
@@ -84,30 +85,39 @@ function Auth({onAuth}){
 }
 
 function Shell({session,onLogout,onSessionUpdate}){
-  const[page,setPage]=useState('overview');
+  const access=session.workspace?.access||{allowed:true,state:'active'};
+  const[page,setPage]=useState(access.allowed?'overview':'subscription');
   const[open,setOpen]=useState(false);
   const[profileOpen,setProfileOpen]=useState(false);
+  const menu=session.user.isSuperAdmin?[...nav,['admin','Super Admin','★']]:nav;
   useEffect(()=>{
     const close=e=>{if(!e.target.closest?.('.profileMenu'))setProfileOpen(false)};
+    const subscribe=()=>setPage('subscription');
     document.addEventListener('pointerdown',close);
-    return()=>document.removeEventListener('pointerdown',close);
+    window.addEventListener('wa:subscription-required',subscribe);
+    return()=>{document.removeEventListener('pointerdown',close);window.removeEventListener('wa:subscription-required',subscribe)};
   },[]);
-  const pageTitle=page==='profile'?'Profile':page==='edit-profile'?'Edit profile':nav.find(x=>x[0]===page)?.[1];
+  const pageTitle=page==='profile'?'Profile':page==='edit-profile'?'Edit profile':menu.find(x=>x[0]===page)?.[1];
+  const locked=id=>!access.allowed&&!['subscription','settings','admin'].includes(id);
+  const changePage=id=>{
+    setPage(locked(id)?'subscription':id);
+    setOpen(false);setProfileOpen(false);
+  };
   return <div className="shell">
     <aside className={open?'open':''}>
-      <div className="sideLogo"><span>clever</span> connect<small>WHATSAPP WORKSPACE</small></div>
+      <div className="sideLogo"><span>WA</span> SANTA<small>WHATSAPP WORKSPACE</small></div>
       <div className="workspace">
         <div className="avatar">{session.workspace.name[0]?.toUpperCase()}</div>
-        <div><b>{session.workspace.name}</b><small>{session.user.role} workspace</small></div>
+        <div><b>{session.workspace.name}</b><small>{access.state==='trialing'?'trial · '+(access.daysRemaining||0)+' day(s) left':session.user.role+' workspace'}</small></div>
       </div>
-      <nav>{nav.map(([id,label,ic])=><button key={id} className={page===id?'active':''} onClick={()=>{setPage(id);setOpen(false);setProfileOpen(false)}}><i>{ic}</i>{label}</button>)}</nav>
+      <nav>{menu.map(([id,label,ic])=><button key={id} className={page===id?'active':''} onClick={()=>changePage(id)}><i>{ic}</i>{label}{locked(id)&&<small className="navLock">• locked</small>}</button>)}</nav>
     </aside>
     <main>
       <header>
         <button className="hamb" onClick={()=>setOpen(!open)}>☰</button>
-        <div><small>WORKSPACE</small><b>{pageTitle}</b></div>
+        <div><small>WA SANTA</small><b>{pageTitle}</b></div>
         <div className="headRight">
-          <span className="pill">● Connected</span>
+          {access.state==='trialing'?<button className="trialPill" onClick={()=>setPage('subscription')}>Trial · {access.daysRemaining} day(s) left</button>:access.allowed?<span className="pill">● Subscribed</span>:<button className="expiredPill" onClick={()=>setPage('subscription')}>Subscription required</button>}
           <div className="profileMenu">
             <button className="profileTrigger" aria-label="Open profile menu" aria-expanded={profileOpen} onClick={e=>{e.stopPropagation();setProfileOpen(v=>!v)}}>
               <Avatar user={session.user} className="miniAvatar"/>
@@ -118,13 +128,16 @@ function Shell({session,onLogout,onSessionUpdate}){
                 <Avatar user={session.user} className="dropdownAvatar"/>
                 <div><b>{session.user.name}</b><small>{session.user.email}</small></div>
               </div>
-              <button onClick={()=>{setPage('profile');setProfileOpen(false)}}><span>◎</span><div><b>Profile</b><small>Account center</small></div></button>
+              <button onClick={()=>changePage('profile')}><span>◎</span><div><b>Profile</b><small>Account center</small></div></button>
+              <button onClick={()=>changePage('subscription')}><span>₹</span><div><b>Subscription</b><small>{access.allowed?statusLabel(access.state):'Action required'}</small></div></button>
+              {session.user.isSuperAdmin&&<button onClick={()=>changePage('admin')}><span>★</span><div><b>Super Admin</b><small>Plans & subscriptions</small></div></button>}
               <button className="signoutItem" onClick={onLogout}><span>↪</span><div><b>Sign out</b><small>End this session</small></div></button>
             </div>}
           </div>
         </div>
       </header>
-      <Page id={page} session={session} go={setPage} onSessionUpdate={onSessionUpdate}/>
+      {!access.allowed&&page!=='subscription'&&page!=='admin'&&<div className="accessBanner"><b>7-day trial ended.</b> Subscribe to a WA SANTA plan to restore workspace access.</div>}
+      <Page id={page} session={session} go={changePage} onSessionUpdate={onSessionUpdate}/>
     </main>
   </div>
 }
@@ -516,7 +529,7 @@ function Settings({go}){
       </section>
       <section>
         <h2>Webhook endpoint</h2>
-        <p>Meta delivery webhooks are received by the Clever Connect API.</p>
+        <p>Meta delivery webhooks are received by the WA SANTA API.</p>
         <code>{BASE.replace(/\/api$/,'')+'/api/webhooks/meta'}</code>
         <p className="muted">The verification token is available inside Profile → Meta WhatsApp connection settings.</p>
       </section>
@@ -553,7 +566,7 @@ function EditProfile({go,onSessionUpdate}){
     }catch(e){setErr(e.message)}
   }
   return <div className="page">
-    <div className="title"><div><span>CLEVER CONNECT</span><h1>Edit profile</h1><p>Update your photo, avatar and personal information.</p></div><button onClick={()=>go('profile')}>← Back to profile</button></div>
+    <div className="title"><div><span>WA SANTA</span><h1>Edit profile</h1><p>Update your photo, avatar and personal information.</p></div><button onClick={()=>go('profile')}>← Back to profile</button></div>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
     <div className="editProfileGrid">
       <section className="avatarEditor">
@@ -591,8 +604,15 @@ function Profile({session,go,onSessionUpdate}){
 
   async function load(){
     try{
-      const [p,c,t]=await Promise.all([api('/account/profile'),api('/integrations/whatsapp-connections'),api('/account/team')]);
-      setData(p);setConnections(c.connections);setConnSub(c.subscription);setTeam(t.members);
+      const p=await api('/account/profile');
+      const t=await api('/account/team');
+      setData(p);setTeam(t.members);
+      if(p.workspace?.access?.allowed){
+        const x=await api('/integrations/whatsapp-connections');
+        setConnections(x.connections);setConnSub(x.subscription);
+      }else{
+        setConnections([]);setConnSub({plan:p.workspace.plan||'trial',used:0,max:p.workspace.limits?.metaConnections||0});
+      }
     }catch(e){setErr(e.message)}
   }
   useEffect(()=>{load()},[]);
@@ -693,11 +713,13 @@ function Profile({session,go,onSessionUpdate}){
       </section>
 
       <section className="subscriptionCard">
-        <div className="sectionHead"><div><h2>Subscription</h2><p>Your current Clever Connect plan and usage.</p></div><em className={'status '+(data.workspace.subscriptionStatus==='active'?'completed':'scheduled')}>{data.workspace.subscriptionStatus}</em></div>
+        <div className="sectionHead"><div><h2>Subscription</h2><p>Your current WA SANTA plan and usage.</p></div><em className={'status '+(data.workspace.subscriptionStatus==='active'?'completed':'scheduled')}>{data.workspace.subscriptionStatus}</em></div>
         <div className="planName">{data.workspace.plan}<small>Current plan</small></div>
         <div className="usageRow"><span>Meta WhatsApp connections</span><b>{data.workspace.usage.metaConnections} / {data.workspace.limits.metaConnections}</b></div>
         <div className="usageRow"><span>Team members</span><b>{data.workspace.usage.teamMembers} / {data.workspace.limits.teamMembers}</b></div>
+        {data.workspace.trialEndsAt&&data.workspace.subscriptionStatus==='trialing'&&<div className="usageRow"><span>Trial ends</span><b>{fmt(data.workspace.trialEndsAt)}</b></div>}
         {data.workspace.currentPeriodEnd&&<div className="usageRow"><span>Current period ends</span><b>{fmt(data.workspace.currentPeriodEnd)}</b></div>}
+        <button className="primary manageSubButton" onClick={()=>go('subscription')}>Manage subscription</button>
       </section>
     </div>
 
