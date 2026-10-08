@@ -929,7 +929,8 @@ function WhatsAppApi({go}){
       if(!data||data.type!=='WA_EMBEDDED_SIGNUP')return;
       const name=String(data.event||'').toUpperCase();
       if(name==='CANCEL'){
-        cleanup();setFbBusy(false);setErr('Facebook signup was cancelled.');
+        api('/integrations/embedded-signup/diagnostic',{method:'POST',body:JSON.stringify({event:name,status:'cancel',detail:String(data.data?.current_step||'')})}).catch(()=>{});
+        cleanup();setFbBusy(false);setErr('Facebook signup was cancelled inside Meta.');
         return;
       }
       if(name==='ERROR'){
@@ -966,8 +967,9 @@ function WhatsAppApi({go}){
           setTimeout(()=>{
             if(!finished&&!session){
               cleanup();setFbBusy(false);
-              const status=response?.status?(' Meta status: '+response.status+'.'):'';
-              setErr('Facebook authorization was not completed.'+status+' Check the Meta app configuration, allowed domain, and Embedded Signup Configuration ID, then try again.');
+              const status=response?.status||'unknown';
+              api('/integrations/embedded-signup/diagnostic',{method:'POST',body:JSON.stringify({event:'FB_LOGIN_CALLBACK',status,detail:'No authorization code returned'})}).catch(()=>{});
+              setErr('Facebook authorization was not completed. Meta status: '+status+'. Check the Facebook Login for Business OAuth/JavaScript SDK settings and the Embedded Signup Configuration ID.');
             }
           },2500);
         }
