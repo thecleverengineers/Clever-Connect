@@ -88,8 +88,12 @@ r.post('/single/send',async(req,res)=>{
       if(req.body.consentConfirmed!==true) return res.status(400).json({message:'Confirm that this recipient has opted in'});
     }
     const template=req.body.templateId?await Template.findOne({_id:req.body.templateId,workspaceId:req.workspaceId}).lean():null;
-    const message=String(req.body.message||'').trim();
-    if(!message&&!template) return res.status(400).json({message:'Add a message or choose a template'});
+    const rawMessage=String(req.body.message||template?.body||'').trim();
+    if(!rawMessage&&!template) return res.status(400).json({message:'Add a message or choose a template'});
+    const message=rawMessage
+      .replace(/{{\s*name\s*}}/gi,contact?.name||'')
+      .replace(/{{\s*phone\s*}}/gi,contact?.phone||phone)
+      .replace(/{{\s*email\s*}}/gi,contact?.email||'');
     const result=await sendWhatsApp({workspaceId:req.workspaceId,phone,text:message,template});
     const d=await Delivery.create({
       workspaceId:req.workspaceId,
