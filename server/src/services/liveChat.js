@@ -1,5 +1,5 @@
 import {ChatConversation,ChatMessage,ChatFlow} from '../chatModels.js';
-import {Contact} from '../models.js';
+import {Contact,Delivery} from '../models.js';
 import {sendWhatsApp} from './whatsapp.js';
 
 export const digits=v=>String(v||'').replace(/\D/g,'');
@@ -64,6 +64,22 @@ export async function recordInbound(integration,inbound){
   }catch(e){
     if(e.code===11000)return {fresh:false,message:await ChatMessage.findOne({integrationId:integration._id,providerMessageId}).lean()};
     throw e;
+  }
+  if(row.replyToId){
+    // Attribute replies to a campaign only when Meta supplies an explicit
+    // reply context referencing the provider ID of our actual campaign message.
+    const referenced=await ChatMessage.findOne({
+      integrationId:integration._id,providerMessageId:row.replyToId,
+      workspaceId:integration.workspaceId,campaignId:{$ne:null}
+    }).lean();
+    if(referenced?.campaignId){
+      row.campaignId=referenced.campaignId;
+      await row.save();
+      if(referenced.deliveryId)await Delivery.updateOne(
+        {_id:referenced.deliveryId,workspaceId:integration.workspaceId},
+        {$set:{repliedAt:at}}
+      );
+    }
   }
   const contact=await Contact.findOne({workspaceId:integration.workspaceId,phone:'+'+phone}).select('_id').lean();
   await ChatConversation.updateOne({_id:convo._id},{$set:{
