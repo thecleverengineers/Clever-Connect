@@ -58,7 +58,7 @@ r.get('/:id/deliveries',async(req,res)=>{
   const campaign=await Campaign.findOne({_id:req.params.id,workspaceId:req.workspaceId}).select('_id').lean();
   if(!campaign) return res.sendStatus(404);
   res.json(await Delivery.find({workspaceId:req.workspaceId,campaignId:req.params.id})
-    .sort({createdAt:-1}).populate('contactId','name phone consentStatus').lean());
+    .sort({createdAt:-1}).populate('contactId','name phone consentStatus').populate('campaignId','name status').lean());
 });
 
 r.post('/',async(req,res)=>{
