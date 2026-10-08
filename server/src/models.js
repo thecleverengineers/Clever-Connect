@@ -5,8 +5,12 @@ const opts = { timestamps: true };
 
 const workspaceSchema = new Schema({
   name: { type: String, required: true, trim: true },
-  plan: { type: String, enum:['starter','growth','business','enterprise'], default:'starter' },
-  subscriptionStatus: { type: String, enum:['active','trialing','past_due','cancelled'], default:'active' },
+  plan: { type: String, default:'trial', index:true },
+  subscriptionPlanId: { type: Schema.Types.ObjectId, ref:'SubscriptionPlan', default:null },
+  subscriptionStatus: { type: String, enum:['trialing','active','past_due','cancelled','expired'], default:'trialing', index:true },
+  trialStartedAt: { type:Date, default:Date.now },
+  trialEndsAt: { type:Date, default:()=>new Date(Date.now()+7*24*60*60*1000), index:true },
+  currentPeriodStart: Date,
   currentPeriodEnd: Date
 }, opts);
 
@@ -16,6 +20,7 @@ const userSchema = new Schema({
   email: { type: String, required: true, lowercase: true, trim: true, unique: true, index: true },
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ['owner','admin','member'], default: 'owner' },
+  isSuperAdmin: { type:Boolean, default:false, index:true },
   phone: { type: String, default:'' },
   jobTitle: { type: String, default:'' },
   avatarData: { type: String, default:'' },
@@ -26,6 +31,30 @@ const userSchema = new Schema({
   twoFactorOtpExpiresAt: Date,
   twoFactorOtpAttempts: { type:Number, default:0 }
 }, opts);
+
+const subscriptionPlanSchema = new Schema({
+  name:{type:String,required:true,trim:true},
+  slug:{type:String,required:true,trim:true,lowercase:true,unique:true,index:true},
+  description:{type:String,default:''},
+  priceMonthly:{type:Number,required:true,min:0},
+  currency:{type:String,default:'INR',uppercase:true},
+  active:{type:Boolean,default:true,index:true},
+  sortOrder:{type:Number,default:0},
+  metaConnections:{type:Number,default:1,min:0},
+  teamMembers:{type:Number,default:3,min:1},
+  monthlyMessages:{type:Number,default:1000,min:0},
+  features:[{type:String,trim:true}]
+}, opts);
+
+const subscriptionRequestSchema = new Schema({
+  workspaceId:{type:Schema.Types.ObjectId,ref:'Workspace',required:true,index:true},
+  planId:{type:Schema.Types.ObjectId,ref:'SubscriptionPlan',required:true,index:true},
+  requestedBy:{type:Schema.Types.ObjectId,ref:'User',required:true},
+  status:{type:String,enum:['pending','approved','rejected','cancelled'],default:'pending',index:true},
+  adminNote:{type:String,default:''},
+  approvedBy:{type:Schema.Types.ObjectId,ref:'User',default:null},
+  approvedAt:Date
+},opts);
 
 const listSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
@@ -114,6 +143,8 @@ integrationSchema.index({workspaceId:1,name:1},{unique:true});
 
 export const Workspace = model('Workspace', workspaceSchema);
 export const User = model('User', userSchema);
+export const SubscriptionPlan = model('SubscriptionPlan',subscriptionPlanSchema);
+export const SubscriptionRequest = model('SubscriptionRequest',subscriptionRequestSchema);
 export const ContactList = model('ContactList', listSchema);
 export const Contact = model('Contact', contactSchema);
 export const Template = model('Template', templateSchema);
