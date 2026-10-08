@@ -21,6 +21,7 @@ import flows from './routes/flows.js';
 import account from './routes/account.js';
 import subscription from './routes/subscription.js';
 import admin from './routes/admin.js';
+import ai from './routes/ai.js';
 import {requireAuth,requireSubscription} from './middleware/auth.js';
 import {runDueCampaigns} from './services/scheduler.js';
 import {mongoUri} from './db.js';
@@ -57,6 +58,7 @@ app.use('/api/integrations',apiLimiter,requireAuth,requireSubscription,integrati
 app.use('/api/account',apiLimiter,account);
 app.use('/api/subscription',apiLimiter,subscription);
 app.use('/api/admin',apiLimiter,admin);
+app.use('/api/ai',apiLimiter,ai);
 app.use('/api/webhooks/meta',webhook);
 app.use('/api/payments',apiLimiter,requireAuth,requireSubscription,payments);
 app.use('/api/inbox',apiLimiter,requireAuth,requireSubscription,inbox);
