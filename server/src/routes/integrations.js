@@ -170,7 +170,6 @@ r.post('/whatsapp-connections/:id/default',async(req,res)=>{
 });
 
 r.delete('/whatsapp-connections/:id',async(req,res)=>{
-  if(!await requireMessagingAccess(req.workspaceId,res))return;
   const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId});
   if(!x)return res.sendStatus(404);
   if(x.provider==='demo')return res.status(409).json({message:'The built-in demo provider cannot be deleted'});
