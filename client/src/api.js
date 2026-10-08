@@ -58,28 +58,30 @@ export async function api(path,opts={}){
 }
 
 export function warmWorkspace(isSuperAdmin=false){
-  const paths=[
+  const immediate=[
     '/dashboard',
     '/campaigns',
     '/contacts',
     '/lists',
     '/templates',
-    '/campaigns?status=scheduled',
-    '/campaigns/deliveries?limit=250',
     '/integrations/whatsapp-connections',
-    '/integrations/embedded-signup/config',
     '/account/profile',
-    '/account/team',
     '/subscription'
   ];
-  if(isSuperAdmin){
-    paths.push('/admin/overview','/admin/meta-settings');
-  }
-  const run=()=>Promise.allSettled(paths.map(path=>api(path)));
+  const deferred=[
+    '/campaigns?status=scheduled',
+    '/campaigns/deliveries?limit=250',
+    '/integrations/embedded-signup/config',
+    '/account/team'
+  ];
+  if(isSuperAdmin)deferred.push('/admin/overview','/admin/meta-settings');
+
+  Promise.allSettled(immediate.map(path=>api(path)));
+  const runDeferred=()=>Promise.allSettled(deferred.map(path=>api(path)));
   if(typeof window!=='undefined'&&'requestIdleCallback'in window){
-    window.requestIdleCallback(run,{timeout:1200});
+    window.requestIdleCallback(runDeferred,{timeout:700});
   }else{
-    setTimeout(run,100);
+    setTimeout(runDeferred,80);
   }
 }
 
