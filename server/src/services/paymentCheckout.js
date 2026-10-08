@@ -68,15 +68,17 @@ export async function reconcileOrder(order,integration){
     throw new Error('Payment verification mismatch; manual review required');
   }
   const remoteStatus=String(result.status||'').toLowerCase();
-  const allowed=['pending','captured','failed','canceled'];
+  const allowed=['new','pending','captured','failed','canceled'];
   if(!allowed.includes(remoteStatus))throw new Error('Unknown Meta payment status');
-  // Captured is terminal for payment confirmation. Do not overwrite it with stale callbacks.
-  const status=order.status==='captured'?'captured':remoteStatus;
+  const status=remoteStatus==='new'?'pending':remoteStatus;
   const update={status,lastCheckedAt:now,lastError:''};
-  if(remoteStatus==='captured'){
+  if(status==='captured'){
     update.capturedAt=order.capturedAt||now;
     update.paymentId=String(result.id||result.transaction_id||'').slice(0,128);
   }
-  const fresh=await PaymentOrder.findOneAndUpdate({_id:order._id,workspaceId:order.workspaceId},{$set:update},{new:true});
-  return fresh;
+  // A delayed pending/failed lookup must never undo an already captured payment.
+  const filter={_id:order._id,workspaceId:order.workspaceId};
+  if(status!=='captured')filter.status={$ne:'captured'};
+  return await PaymentOrder.findOneAndUpdate(filter,{$set:update},{new:true})
+    ||await PaymentOrder.findOne({_id:order._id,workspaceId:order.workspaceId});
 }
