@@ -2,8 +2,9 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User, Workspace, Integration } from '../models.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth,isSuperAdmin } from '../middleware/auth.js';
 import {createOtp,hashOtp,sendMetaOtp} from '../otp.js';
+import {refreshWorkspaceAccess,planLimitsForWorkspace} from '../plan.js';
 
 const router=express.Router();
 const sessionSecret=()=>process.env.AUTH_KEY||process.env.JWT_SECRET;
@@ -17,16 +18,23 @@ const cookieOptions=()=>({
 const publicUser=user=>({
   id:user._id,name:user.name,email:user.email,role:user.role,
   phone:user.phone||'',jobTitle:user.jobTitle||'',avatarData:user.avatarData||'',
-  twoFactorEnabled:!!user.twoFactorEnabled
+  twoFactorEnabled:!!user.twoFactorEnabled,isSuperAdmin:isSuperAdmin(user)
 });
 const sessionResponse=async user=>{
-  const workspace=await Workspace.findById(user.workspaceId).lean();
+  const state=await refreshWorkspaceAccess(user.workspaceId);
+  if(!state?.workspace)throw new Error('Workspace unavailable');
+  const workspace=state.workspace;
   return {
     user:publicUser(user),
     workspace:{
-      id:workspace._id,name:workspace.name,plan:workspace.plan||'starter',
-      subscriptionStatus:workspace.subscriptionStatus||'active',
-      currentPeriodEnd:workspace.currentPeriodEnd||null
+      id:workspace._id,name:workspace.name,plan:workspace.plan||'trial',
+      subscriptionStatus:workspace.subscriptionStatus||'trialing',
+      trialStartedAt:workspace.trialStartedAt||workspace.createdAt,
+      trialEndsAt:workspace.trialEndsAt||null,
+      currentPeriodStart:workspace.currentPeriodStart||null,
+      currentPeriodEnd:workspace.currentPeriodEnd||null,
+      access:state.access,
+      limits:await planLimitsForWorkspace(workspace)
     }
   };
 };
@@ -35,6 +43,10 @@ const setCookie=(res,user)=>{
   if(!secret) throw new Error('Authentication key is not configured');
   const token=jwt.sign({sub:user._id.toString(),workspaceId:user.workspaceId.toString(),type:'session'},secret,{expiresIn:'7d'});
   res.cookie('cc_session',token,cookieOptions());
+};
+const emailIsConfiguredSuperAdmin=email=>{
+  const allowed=String(process.env.SUPER_ADMIN_EMAILS||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
+  return allowed.includes(String(email||'').toLowerCase());
 };
 
 router.post('/register',async(req,res)=>{
@@ -45,9 +57,21 @@ router.post('/register',async(req,res)=>{
     const workspaceName=String(req.body.workspaceName||'').trim();
     if(!name||!email||password.length<8) return res.status(400).json({message:'Name, email and password (8+ characters) are required'});
     if(await User.exists({email})) return res.status(409).json({message:'Email already registered'});
-    const workspace=await Workspace.create({name:workspaceName||name+"'s workspace",plan:'starter',subscriptionStatus:'active'});
+    const now=new Date();
+    const workspace=await Workspace.create({
+      name:workspaceName||name+"'s workspace",
+      plan:'trial',
+      subscriptionStatus:'trialing',
+      trialStartedAt:now,
+      trialEndsAt:new Date(now.getTime()+7*24*60*60*1000)
+    });
     try{
-      const user=await User.create({workspaceId:workspace._id,name,email,passwordHash:await bcrypt.hash(password,12),role:'owner'});
+      const user=await User.create({
+        workspaceId:workspace._id,name,email,
+        passwordHash:await bcrypt.hash(password,12),
+        role:'owner',
+        isSuperAdmin:emailIsConfiguredSuperAdmin(email)
+      });
       await Integration.create({workspaceId:workspace._id,name:'Demo provider',provider:'demo',enabled:true,isDefault:true});
       setCookie(res,user);
       res.status(201).json(await sessionResponse(user));
@@ -56,6 +80,7 @@ router.post('/register',async(req,res)=>{
       throw err;
     }
   }catch(e){
+    console.error(e);
     res.status(500).json({message:'Unable to create account'});
   }
 });
@@ -64,6 +89,11 @@ router.post('/login',async(req,res)=>{
   const email=String(req.body.email||'').trim().toLowerCase();
   const user=await User.findOne({email});
   if(!user||!await bcrypt.compare(String(req.body.password||''),user.passwordHash)) return res.status(401).json({message:'Invalid email or password'});
+
+  if(emailIsConfiguredSuperAdmin(user.email)&&!user.isSuperAdmin){
+    user.isSuperAdmin=true;
+    await user.save();
+  }
 
   if(user.twoFactorEnabled){
     if(!user.twoFactorPhone||!user.twoFactorIntegrationId) return res.status(409).json({message:'2FA is enabled but its WhatsApp connection is unavailable. Contact your workspace admin'});
