@@ -33,7 +33,7 @@ async function enforceMessageAllowance(workspaceId){
   if(used>=max)throw new Error('Monthly message limit reached for your WA SANTA plan');
 }
 
-export async function sendWhatsApp({workspaceId,phone,text,template,integrationId=null,carousel=null,buttons=null}){
+export async function sendWhatsApp({workspaceId,phone,text,template,integrationId=null,carousel=null,buttons=null,templateParams=[]}){
   await enforceMessageAllowance(workspaceId);
 
   let integration=null;
@@ -60,8 +60,19 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
   if(!integration.phoneNumberId||!integration.accessTokenEncrypted) throw new Error('Meta WhatsApp integration is incomplete');
 
   const token=decrypt(integration.accessTokenEncrypted);
-  if(template?.integrationId&&template?.metaTemplateName&&template?.metaStatus&&template.metaStatus!=='APPROVED'){
-    throw new Error('Meta template is not approved yet. Current status: '+template.metaStatus);
+  if(template){
+    if(integration.provider!=='meta'||!template.metaTemplateName||template.metaStatus!=='APPROVED'){
+      throw new Error('Template sending requires an APPROVED template and an active Meta WhatsApp profile');
+    }
+    if(!template.integrationId||String(template.integrationId)!==String(integration._id)){
+      throw new Error('Template must be sent using its approved Meta profile');
+    }
+    if(template.category==='AUTHENTICATION')throw new Error('Use the secure OTP flow for authentication templates');
+    const required=[...String(template.body||'').matchAll(/{{\s*(\d+)\s*}}/g)]
+      .map(x=>Number(x[1])).reduce((max,num)=>Math.max(max,num),0);
+    if(templateParams.length!==required||templateParams.some(x=>!String(x||'').trim())){
+      throw new Error('Template body requires '+required+' variable values');
+    }
   }
 
   if((carousel||buttons)&&template)throw new Error('A Meta template cannot be combined with a session interaction');
@@ -82,7 +93,10 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
         messaging_product:'whatsapp',
         to,
         type:'template',
-        template:{name:template.metaTemplateName,language:{code:template.language||'en_US'}}
+        template:{
+          name:template.metaTemplateName,language:{code:template.language||'en_US'},
+          ...(templateParams.length?{components:[{type:'body',parameters:templateParams.map(x=>({type:'text',text:String(x)}))}]}:{})
+        }
       }
     : {
         messaging_product:'whatsapp',
