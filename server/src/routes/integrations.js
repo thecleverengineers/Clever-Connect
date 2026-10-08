@@ -76,43 +76,53 @@ r.get('/whatsapp-connections',async(req,res)=>{
 });
 
 r.post('/whatsapp-connections',async(req,res)=>{
-  const usage=await requireMessagingAccess(req.workspaceId,res);
-  if(!usage)return;
-  if(usage.used>=usage.max)return res.status(409).json({message:'Your '+usage.plan+' plan allows '+usage.max+' Meta WhatsApp connection(s)'});
-  const name=String(req.body.name||'WhatsApp connection').trim();
-  const phoneNumberId=String(req.body.phoneNumberId||'').trim();
-  const accessToken=String(req.body.accessToken||'').trim();
-  if(!name||!phoneNumberId||!accessToken)return res.status(400).json({message:'Connection name, Phone Number ID and access token are required'});
-  if(await Integration.exists({workspaceId:req.workspaceId,name}))return res.status(409).json({message:'A connection with this name already exists'});
-  const row=await Integration.create({
-    workspaceId:req.workspaceId,
-    name,
-    provider:'meta',
-    enabled:true,
-    isDefault:false,
-    phoneNumberId,
-    businessAccountId:String(req.body.businessAccountId||'').trim(),
-    accessTokenEncrypted:encrypt(accessToken),
-    graphVersion:/^v\d+\.\d+$/.test(String(req.body.graphVersion||''))?String(req.body.graphVersion):'v23.0',
-    otpTemplateName:String(req.body.otpTemplateName||'').trim(),
-    otpTemplateLanguage:String(req.body.otpTemplateLanguage||'en_US').trim(),
-    connectionStatus:'connected',
-    connectedAt:new Date()
-  });
   try{
-    const result=await testConnection(row.toObject());
-    row.connectionStatus='connected';
-    row.lastCheckedAt=new Date();
-    row.lastError='';
-    if(result.displayPhoneNumber)row.displayPhoneNumber=result.displayPhoneNumber;
-    await row.save();
-    res.status(201).json({connection:view(row),test:result});
+    const usage=await requireMessagingAccess(req.workspaceId,res);
+    if(!usage)return;
+    if(usage.used>=usage.max)return res.status(409).json({message:'Your '+usage.plan+' plan allows '+usage.max+' Meta WhatsApp connection(s)'});
+    const name=String(req.body.name||'WhatsApp connection').trim();
+    const phoneNumberId=String(req.body.phoneNumberId||'').trim();
+    const accessToken=String(req.body.accessToken||'').trim();
+    if(!name||!phoneNumberId||!accessToken)return res.status(400).json({message:'Connection name, Phone Number ID and access token are required'});
+    if(await Integration.exists({workspaceId:req.workspaceId,name}))return res.status(409).json({message:'A connection with this name already exists'});
+    const row=await Integration.create({
+      workspaceId:req.workspaceId,
+      name,
+      provider:'meta',
+      enabled:true,
+      isDefault:false,
+      phoneNumberId,
+      businessAccountId:String(req.body.businessAccountId||'').trim(),
+      accessTokenEncrypted:encrypt(accessToken),
+      graphVersion:/^v\d+\.\d+$/.test(String(req.body.graphVersion||''))?String(req.body.graphVersion):'v23.0',
+      otpTemplateName:String(req.body.otpTemplateName||'').trim(),
+      otpTemplateLanguage:String(req.body.otpTemplateLanguage||'en_US').trim(),
+      connectionStatus:'connected',
+      connectedAt:new Date()
+    });
+    try{
+      const result=await testConnection(row.toObject());
+      row.connectionStatus='connected';
+      row.lastCheckedAt=new Date();
+      row.lastError='';
+      if(result.displayPhoneNumber)row.displayPhoneNumber=result.displayPhoneNumber;
+      await row.save();
+      return res.status(201).json({connection:view(row),test:result});
+    }catch(e){
+      row.connectionStatus='error';
+      row.lastCheckedAt=new Date();
+      row.lastError=String(e.message||'Connection test failed').slice(0,500);
+      await row.save();
+      return res.status(201).json({connection:view(row),test:{ok:false,message:row.lastError},warning:'Connection saved. Fix credentials and test again; it will remain saved until disconnected.'});
+    }
   }catch(e){
-    row.connectionStatus='error';
-    row.lastCheckedAt=new Date();
-    row.lastError=String(e.message||'Connection test failed').slice(0,500);
-    await row.save();
-    res.status(201).json({connection:view(row),test:{ok:false,message:row.lastError},warning:'Connection saved. Fix credentials and test again; it will remain saved until disconnected.'});
+    if(e?.code===11000){
+      if(e?.keyPattern?.workspaceId&&e?.keyPattern?.name)return res.status(409).json({message:'A connection with this name already exists'});
+      if(e?.keyPattern?.phoneNumberId)return res.status(409).json({message:'This Meta Phone Number ID is already connected'});
+      return res.status(409).json({message:'This Meta WhatsApp profile is already connected'});
+    }
+    console.error('Meta connection create error',e);
+    return res.status(500).json({message:'Unable to save Meta WhatsApp profile. Please retry.'});
   }
 });
 
