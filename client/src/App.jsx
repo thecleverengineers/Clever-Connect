@@ -62,6 +62,13 @@ function Auth({onAuth}){
 function Shell({session,onLogout}){
   const[page,setPage]=useState('overview');
   const[open,setOpen]=useState(false);
+  const[profileOpen,setProfileOpen]=useState(false);
+  useEffect(()=>{
+    const close=e=>{if(!e.target.closest?.('.profileMenu'))setProfileOpen(false)};
+    document.addEventListener('pointerdown',close);
+    return()=>document.removeEventListener('pointerdown',close);
+  },[]);
+  const pageTitle=page==='profile'?'Profile':nav.find(x=>x[0]===page)?.[1];
   return <div className="shell">
     <aside className={open?'open':''}>
       <div className="sideLogo"><span>clever</span> connect<small>WHATSAPP WORKSPACE</small></div>
@@ -69,14 +76,29 @@ function Shell({session,onLogout}){
         <div className="avatar">{session.workspace.name[0]?.toUpperCase()}</div>
         <div><b>{session.workspace.name}</b><small>{session.user.role} workspace</small></div>
       </div>
-      <nav>{nav.map(([id,label,ic])=><button key={id} className={page===id?'active':''} onClick={()=>{setPage(id);setOpen(false)}}><i>{ic}</i>{label}</button>)}</nav>
-      <div className="sideFoot"><span>Signed in as</span><b>{session.user.name}</b><small>{session.user.email}</small><button onClick={onLogout}>Sign out</button></div>
+      <nav>{nav.map(([id,label,ic])=><button key={id} className={page===id?'active':''} onClick={()=>{setPage(id);setOpen(false);setProfileOpen(false)}}><i>{ic}</i>{label}</button>)}</nav>
     </aside>
     <main>
       <header>
         <button className="hamb" onClick={()=>setOpen(!open)}>☰</button>
-        <div><small>WORKSPACE</small><b>{nav.find(x=>x[0]===page)?.[1]}</b></div>
-        <div className="headRight"><span className="pill">● Connected</span><div className="miniAvatar">{session.user.name[0]?.toUpperCase()}</div></div>
+        <div><small>WORKSPACE</small><b>{pageTitle}</b></div>
+        <div className="headRight">
+          <span className="pill">● Connected</span>
+          <div className="profileMenu">
+            <button className="profileTrigger" aria-label="Open profile menu" aria-expanded={profileOpen} onClick={e=>{e.stopPropagation();setProfileOpen(v=>!v)}}>
+              <span className="miniAvatar">{session.user.name[0]?.toUpperCase()}</span>
+              <span className="profileChevron">⌄</span>
+            </button>
+            {profileOpen&&<div className="profileDropdown">
+              <div className="profileSummary">
+                <span className="dropdownAvatar">{session.user.name[0]?.toUpperCase()}</span>
+                <div><b>{session.user.name}</b><small>{session.user.email}</small></div>
+              </div>
+              <button onClick={()=>{setPage('profile');setProfileOpen(false)}}><span>◎</span><div><b>Profile</b><small>Account & security</small></div></button>
+              <button className="signoutItem" onClick={onLogout}><span>↪</span><div><b>Sign out</b><small>End this session</small></div></button>
+            </div>}
+          </div>
+        </div>
       </header>
       <Page id={page} session={session} go={setPage}/>
     </main>
@@ -489,6 +511,51 @@ function Settings({session}){
   </div>
 }
 
+
+function Profile({session}){
+  const[msg,setMsg]=useState('');
+  const[err,setErr]=useState('');
+  async function password(e){
+    e.preventDefault();setErr('');setMsg('');
+    const o=Object.fromEntries(new FormData(e.currentTarget));
+    if(o.newPassword!==o.confirmPassword)return setErr('New passwords do not match');
+    delete o.confirmPassword;
+    try{
+      await api('/auth/password',{method:'POST',body:JSON.stringify(o)});
+      e.currentTarget.reset();
+      setMsg('Password changed successfully.');
+    }catch(e){setErr(e.message)}
+  }
+  return <div className="page">
+    <Title title="Profile" sub="Your Clever Connect account, workspace and security settings."/>
+    <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
+    <div className="profilePageGrid">
+      <section className="profileCard">
+        <div className="profileHero">
+          <span className="profileHeroAvatar">{session.user.name[0]?.toUpperCase()}</span>
+          <div><h2>{session.user.name}</h2><p>{session.user.email}</p></div>
+        </div>
+        <div className="profileDetails">
+          <div><span>Workspace</span><b>{session.workspace.name}</b></div>
+          <div><span>Role</span><b>{session.user.role}</b></div>
+          <div><span>Email</span><b>{session.user.email}</b></div>
+          <div><span>Account</span><b>Active</b></div>
+        </div>
+      </section>
+      <section>
+        <h2>Account security</h2>
+        <p>Change your password for this Clever Connect account.</p>
+        <form className="formGrid" onSubmit={password}>
+          <label className="full">Current password<input type="password" name="currentPassword" required autoComplete="current-password"/></label>
+          <label>New password<input type="password" name="newPassword" minLength="8" required autoComplete="new-password"/></label>
+          <label>Confirm password<input type="password" name="confirmPassword" minLength="8" required autoComplete="new-password"/></label>
+          <div className="actions full"><button className="primary">Change password</button></div>
+        </form>
+      </section>
+    </div>
+  </div>
+}
+
 function Page({id,go,session}){
   if(id==='overview')return <Overview go={go}/>;
   if(id==='send')return <SingleSend/>;
@@ -497,6 +564,7 @@ function Page({id,go,session}){
   if(id==='schedule')return <Schedule/>;
   if(id==='templates')return <Templates/>;
   if(id==='reports')return <Reports/>;
+  if(id==='profile')return <Profile session={session}/>;
   return <Settings session={session}/>;
 }
 
