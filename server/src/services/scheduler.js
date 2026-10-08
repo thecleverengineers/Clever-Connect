@@ -84,7 +84,8 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
         workspaceId:c.workspaceId,
         phone:contact.phone,
         text:rendered,
-        template
+        template,
+        integrationId:template?.integrationId||null
       });
       delivery.message=rendered;
       delivery.provider=result.provider;
