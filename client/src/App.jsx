@@ -1,5 +1,6 @@
 import React,{useEffect,useMemo,useState}from'react';
 import{api,BASE,getCached,warmWorkspace}from'./api.js';
+import Payments from './Payments.jsx';
 
 const nav=[
   ['overview','Overview','⌂'],
@@ -10,6 +11,7 @@ const nav=[
   ['templates','Templates','▤'],
   ['reports','Delivery reports','▥'],
   ['whatsapp-api','Meta WhatsApp API','☏'],
+  ['payments','WhatsApp Payments','₹'],
   ['subscription','Subscription','₹'],
   ['settings','Settings','⚙']
 ];
@@ -1376,6 +1378,7 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='templates')return <Templates/>;
   if(id==='reports')return <Reports/>;
   if(id==='whatsapp-api')return <WhatsAppApi go={go}/>;
+  if(id==='payments')return <Payments session={session} go={go}/>;
   if(id==='subscription')return <Subscription onSessionUpdate={onSessionUpdate}/>;
   if(id==='admin'&&session.user.isSuperAdmin)return <SuperAdmin/>;
   if(id==='profile')return <Profile session={session} go={go} onSessionUpdate={onSessionUpdate}/>;
