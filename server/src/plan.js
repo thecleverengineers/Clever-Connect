@@ -5,11 +5,11 @@ export const TRIAL_LIMITS={metaConnections:1,teamMembers:3,monthlyMessages:1000}
 export async function planLimitsForWorkspace(workspace){
   if(!workspace)return TRIAL_LIMITS;
   if(workspace.subscriptionPlanId){
-    const p=await SubscriptionPlan.findOne({_id:workspace.subscriptionPlanId,active:true}).lean();
+    const p=await SubscriptionPlan.findOne({_id:workspace.subscriptionPlanId}).lean();
     if(p)return {metaConnections:p.metaConnections,teamMembers:p.teamMembers,monthlyMessages:p.monthlyMessages};
   }
   if(workspace.plan&&workspace.plan!=='trial'){
-    const p=await SubscriptionPlan.findOne({slug:workspace.plan,active:true}).lean();
+    const p=await SubscriptionPlan.findOne({slug:workspace.plan}).lean();
     if(p)return {metaConnections:p.metaConnections,teamMembers:p.teamMembers,monthlyMessages:p.monthlyMessages};
   }
   return TRIAL_LIMITS;
