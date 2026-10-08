@@ -134,6 +134,15 @@ const deliverySchema = new Schema({
   readAt: Date
 }, opts);
 
+const systemSettingSchema = new Schema({
+  key:{type:String,required:true,unique:true,index:true},
+  metaAppId:{type:String,default:''},
+  metaAppSecretEncrypted:{type:String,default:''},
+  metaEmbeddedSignupConfigId:{type:String,default:''},
+  metaGraphVersion:{type:String,default:'v23.0'},
+  updatedBy:{type:Schema.Types.ObjectId,ref:'User',default:null}
+},opts);
+
 const integrationSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, required: true, index: true },
   name: { type:String, default:'Primary WhatsApp', trim:true },
@@ -167,3 +176,4 @@ export const Template = model('Template', templateSchema);
 export const Campaign = model('Campaign', campaignSchema);
 export const Delivery = model('Delivery', deliverySchema);
 export const Integration = model('Integration', integrationSchema);
+export const SystemSetting = model('SystemSetting',systemSettingSchema);
