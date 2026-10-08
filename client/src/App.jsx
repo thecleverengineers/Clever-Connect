@@ -22,27 +22,51 @@ function Title({title,sub,action,onAction}){
   return <div className="title"><div><span>CLEVER CONNECT</span><h1>{title}</h1><p>{sub}</p></div>{action&&<button className="primary" onClick={onAction}>+ {action}</button>}</div>
 }
 function Metric({label,value,sub}){return <div className="metric"><span>{label}</span><strong>{value}</strong><small>{sub}</small></div>}
+function Avatar({user,className='userAvatar'}){
+  return <span className={className}>{user?.avatarData?<img src={user.avatarData} alt="Profile"/>:(user?.name?.[0]?.toUpperCase()||'U')}</span>
+}
 
 function Auth({onAuth}){
   const[mode,setMode]=useState('login');
   const[busy,setBusy]=useState(false);
   const[err,setErr]=useState('');
+  const[challenge,setChallenge]=useState(null);
+
   async function submit(e){
     e.preventDefault();setBusy(true);setErr('');
     try{
       const o=Object.fromEntries(new FormData(e.currentTarget));
       const x=await api('/auth/'+mode,{method:'POST',body:JSON.stringify(o)});
+      if(x.twoFactorRequired){setChallenge(x);return}
       onAuth(x);
     }catch(e){setErr(e.message)}finally{setBusy(false)}
   }
+  async function verifyOtp(e){
+    e.preventDefault();setBusy(true);setErr('');
+    try{
+      const otp=new FormData(e.currentTarget).get('otp');
+      const x=await api('/auth/2fa/verify',{method:'POST',body:JSON.stringify({challengeToken:challenge.challengeToken,otp})});
+      onAuth(x);
+    }catch(e){setErr(e.message)}finally{setBusy(false)}
+  }
+
   return <div className="auth">
     <div className="brandPanel">
       <div className="mark">CC</div>
       <h1>Make every message count.</h1>
       <p>A little planning. A lot more connection. Build thoughtful WhatsApp conversations with consent-aware contacts, scheduled delivery and clear reporting.</p>
-      <div className="trust">✓ Workspace isolation &nbsp; ✓ Secure sessions &nbsp; ✓ Consent-aware delivery</div>
+      <div className="trust">✓ Workspace isolation &nbsp; ✓ Secure sessions &nbsp; ✓ WhatsApp 2FA</div>
     </div>
-    <form className="authCard" onSubmit={submit}>
+    {challenge?<form className="authCard" onSubmit={verifyOtp}>
+      <div className="logo">clever <b>connect</b><small>WHATSAPP WORKSPACE</small></div>
+      <div className="otpIcon">✓</div>
+      <h2>Verify with WhatsApp</h2>
+      <p>Enter the 6-digit OTP sent to {challenge.maskedPhone}.</p>
+      <label>WhatsApp OTP<input name="otp" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" placeholder="000000" required autoFocus/></label>
+      {err&&<div className="error">{err}</div>}
+      <button className="primary" disabled={busy}>{busy?'Verifying…':'Verify & sign in'}</button>
+      <button type="button" className="link" onClick={()=>{setChallenge(null);setErr('')}}>Back to sign in</button>
+    </form>:<form className="authCard" onSubmit={submit}>
       <div className="logo">clever <b>connect</b><small>WHATSAPP WORKSPACE</small></div>
       <h2>{mode==='login'?'Welcome back':'Create your workspace'}</h2>
       <p>{mode==='login'?'Sign in to continue to Clever Connect.':'Start in demo mode, then connect Meta WhatsApp when ready.'}</p>
@@ -55,11 +79,11 @@ function Auth({onAuth}){
       {err&&<div className="error">{err}</div>}
       <button className="primary" disabled={busy}>{busy?'Please wait…':mode==='login'?'Sign in':'Create workspace'}</button>
       <button type="button" className="link" onClick={()=>{setErr('');setMode(mode==='login'?'register':'login')}}>{mode==='login'?'New here? Create an account':'Already have an account? Sign in'}</button>
-    </form>
+    </form>}
   </div>
 }
 
-function Shell({session,onLogout}){
+function Shell({session,onLogout,onSessionUpdate}){
   const[page,setPage]=useState('overview');
   const[open,setOpen]=useState(false);
   const[profileOpen,setProfileOpen]=useState(false);
@@ -68,7 +92,7 @@ function Shell({session,onLogout}){
     document.addEventListener('pointerdown',close);
     return()=>document.removeEventListener('pointerdown',close);
   },[]);
-  const pageTitle=page==='profile'?'Profile':nav.find(x=>x[0]===page)?.[1];
+  const pageTitle=page==='profile'?'Profile':page==='edit-profile'?'Edit profile':nav.find(x=>x[0]===page)?.[1];
   return <div className="shell">
     <aside className={open?'open':''}>
       <div className="sideLogo"><span>clever</span> connect<small>WHATSAPP WORKSPACE</small></div>
@@ -86,21 +110,21 @@ function Shell({session,onLogout}){
           <span className="pill">● Connected</span>
           <div className="profileMenu">
             <button className="profileTrigger" aria-label="Open profile menu" aria-expanded={profileOpen} onClick={e=>{e.stopPropagation();setProfileOpen(v=>!v)}}>
-              <span className="miniAvatar">{session.user.name[0]?.toUpperCase()}</span>
+              <Avatar user={session.user} className="miniAvatar"/>
               <span className="profileChevron">⌄</span>
             </button>
             {profileOpen&&<div className="profileDropdown">
               <div className="profileSummary">
-                <span className="dropdownAvatar">{session.user.name[0]?.toUpperCase()}</span>
+                <Avatar user={session.user} className="dropdownAvatar"/>
                 <div><b>{session.user.name}</b><small>{session.user.email}</small></div>
               </div>
-              <button onClick={()=>{setPage('profile');setProfileOpen(false)}}><span>◎</span><div><b>Profile</b><small>Account & security</small></div></button>
+              <button onClick={()=>{setPage('profile');setProfileOpen(false)}}><span>◎</span><div><b>Profile</b><small>Account center</small></div></button>
               <button className="signoutItem" onClick={onLogout}><span>↪</span><div><b>Sign out</b><small>End this session</small></div></button>
             </div>}
           </div>
         </div>
       </header>
-      <Page id={page} session={session} go={setPage}/>
+      <Page id={page} session={session} go={setPage} onSessionUpdate={onSessionUpdate}/>
     </main>
   </div>
 }
@@ -512,51 +536,231 @@ function Settings({session}){
 }
 
 
-function Profile({session}){
+function EditProfile({go,onSessionUpdate}){
+  const[data,setData]=useState(null);
+  const[avatar,setAvatar]=useState('');
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
-  async function password(e){
+  useEffect(()=>{api('/account/profile').then(x=>{setData(x);setAvatar(x.user.avatarData||'')}).catch(e=>setErr(e.message))},[]);
+  if(!data)return <div className="page">{err?<Notice type="bad">{err}</Notice>:<Loading/>}</div>;
+  function chooseImage(e){
+    const file=e.target.files?.[0];
+    if(!file)return;
+    if(!file.type.startsWith('image/'))return setErr('Choose an image file');
+    if(file.size>350*1024)return setErr('Profile image must be under 350 KB');
+    const reader=new FileReader();
+    reader.onload=()=>setAvatar(String(reader.result||''));
+    reader.readAsDataURL(file);
+  }
+  async function save(e){
     e.preventDefault();setErr('');setMsg('');
     const o=Object.fromEntries(new FormData(e.currentTarget));
-    if(o.newPassword!==o.confirmPassword)return setErr('New passwords do not match');
-    delete o.confirmPassword;
+    o.avatarData=avatar;
     try{
-      await api('/auth/password',{method:'POST',body:JSON.stringify(o)});
-      e.currentTarget.reset();
-      setMsg('Password changed successfully.');
+      await api('/account/profile',{method:'PUT',body:JSON.stringify(o)});
+      const fresh=await api('/auth/me');
+      onSessionUpdate(fresh);
+      setMsg('Profile updated.');
+      go('profile');
     }catch(e){setErr(e.message)}
   }
   return <div className="page">
-    <Title title="Profile" sub="Your Clever Connect account, workspace and security settings."/>
+    <div className="title"><div><span>CLEVER CONNECT</span><h1>Edit profile</h1><p>Update your photo, avatar and personal information.</p></div><button onClick={()=>go('profile')}>← Back to profile</button></div>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
-    <div className="profilePageGrid">
-      <section className="profileCard">
-        <div className="profileHero">
-          <span className="profileHeroAvatar">{session.user.name[0]?.toUpperCase()}</span>
-          <div><h2>{session.user.name}</h2><p>{session.user.email}</p></div>
-        </div>
-        <div className="profileDetails">
-          <div><span>Workspace</span><b>{session.workspace.name}</b></div>
-          <div><span>Role</span><b>{session.user.role}</b></div>
-          <div><span>Email</span><b>{session.user.email}</b></div>
-          <div><span>Account</span><b>Active</b></div>
-        </div>
+    <div className="editProfileGrid">
+      <section className="avatarEditor">
+        <div className="largeAvatar">{avatar?<img src={avatar} alt="Profile preview"/>:(data.user.name?.[0]?.toUpperCase()||'U')}</div>
+        <h2>Profile image</h2>
+        <p>Upload a JPG, PNG or WebP image under 350 KB.</p>
+        <label className="uploadButton">Choose image<input type="file" accept="image/*" onChange={chooseImage}/></label>
+        {avatar&&<button className="danger" onClick={()=>setAvatar('')}>Remove image</button>}
       </section>
       <section>
-        <h2>Account security</h2>
-        <p>Change your password for this Clever Connect account.</p>
-        <form className="formGrid" onSubmit={password}>
-          <label className="full">Current password<input type="password" name="currentPassword" required autoComplete="current-password"/></label>
-          <label>New password<input type="password" name="newPassword" minLength="8" required autoComplete="new-password"/></label>
-          <label>Confirm password<input type="password" name="confirmPassword" minLength="8" required autoComplete="new-password"/></label>
-          <div className="actions full"><button className="primary">Change password</button></div>
+        <h2>Profile information</h2>
+        <form className="formGrid" onSubmit={save}>
+          <label>Full name<input name="name" defaultValue={data.user.name} required/></label>
+          <label>Email<input value={data.user.email} readOnly/></label>
+          <label>Phone<input name="phone" defaultValue={data.user.phone||''} placeholder="+919876543210"/></label>
+          <label>Job title<input name="jobTitle" defaultValue={data.user.jobTitle||''} placeholder="Marketing Manager"/></label>
+          <div className="actions full"><button type="button" onClick={()=>go('profile')}>Cancel</button><button className="primary">Save profile</button></div>
         </form>
       </section>
     </div>
   </div>
 }
 
-function Page({id,go,session}){
+function Profile({session,go,onSessionUpdate}){
+  const[data,setData]=useState(null);
+  const[connections,setConnections]=useState([]);
+  const[connSub,setConnSub]=useState(null);
+  const[team,setTeam]=useState([]);
+  const[showConnection,setShowConnection]=useState(false);
+  const[editingConnection,setEditingConnection]=useState(null);
+  const[showMember,setShowMember]=useState(false);
+  const[otpSent,setOtpSent]=useState(false);
+  const[msg,setMsg]=useState('');
+  const[err,setErr]=useState('');
+
+  async function load(){
+    try{
+      const [p,c,t]=await Promise.all([api('/account/profile'),api('/integrations/whatsapp-connections'),api('/account/team')]);
+      setData(p);setConnections(c.connections);setConnSub(c.subscription);setTeam(t.members);
+    }catch(e){setErr(e.message)}
+  }
+  useEffect(()=>{load()},[]);
+  if(!data)return <div className="page">{err?<Notice type="bad">{err}</Notice>:<Loading/>}</div>;
+  const manager=['owner','admin'].includes(data.user.role);
+  const usable2fa=connections.filter(x=>x.provider==='meta'&&x.enabled&&x.otpTemplateName);
+
+  async function changePassword(e){
+    e.preventDefault();setErr('');setMsg('');
+    const o=Object.fromEntries(new FormData(e.currentTarget));
+    if(o.newPassword!==o.confirmPassword)return setErr('New passwords do not match');
+    delete o.confirmPassword;
+    try{await api('/auth/password',{method:'POST',body:JSON.stringify(o)});e.currentTarget.reset();setMsg('Password changed successfully.')}catch(e){setErr(e.message)}
+  }
+  async function saveWorkspace(e){
+    e.preventDefault();setErr('');
+    try{
+      await api('/account/workspace',{method:'PUT',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});
+      const fresh=await api('/auth/me');onSessionUpdate(fresh);setMsg('Workspace updated.');await load();
+    }catch(e){setErr(e.message)}
+  }
+  async function saveConnection(e){
+    e.preventDefault();setErr('');setMsg('');
+    const o=Object.fromEntries(new FormData(e.currentTarget));
+    try{
+      if(editingConnection)await api('/integrations/whatsapp-connections/'+editingConnection.id,{method:'PUT',body:JSON.stringify(o)});
+      else await api('/integrations/whatsapp-connections',{method:'POST',body:JSON.stringify(o)});
+      setShowConnection(false);setEditingConnection(null);setMsg(editingConnection?'WhatsApp connection updated.':'Meta WhatsApp connected.');await load();
+    }catch(e){setErr(e.message)}
+  }
+  async function connectionAction(x,type){
+    setErr('');setMsg('');
+    try{
+      if(type==='test'){const y=await api('/integrations/whatsapp-connections/'+x.id+'/test',{method:'POST'});setMsg('Connected: '+(y.verifiedName||y.displayPhoneNumber||x.name))}
+      if(type==='default'){await api('/integrations/whatsapp-connections/'+x.id+'/default',{method:'POST'});setMsg(x.name+' is now the default sender.')}
+      if(type==='delete'){if(!confirm('Remove '+x.name+'?'))return;await api('/integrations/whatsapp-connections/'+x.id,{method:'DELETE'});setMsg('WhatsApp connection removed.')}
+      await load();
+    }catch(e){setErr(e.message)}
+  }
+  async function addMember(e){
+    e.preventDefault();setErr('');
+    try{await api('/account/team',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});setShowMember(false);setMsg('Team member added.');await load()}catch(e){setErr(e.message)}
+  }
+  async function roleChange(member,role){
+    try{await api('/account/team/'+member.id,{method:'PUT',body:JSON.stringify({role})});await load()}catch(e){setErr(e.message)}
+  }
+  async function removeMember(member){
+    if(!confirm('Remove '+member.name+' from this workspace?'))return;
+    try{await api('/account/team/'+member.id,{method:'DELETE'});setMsg('Team member removed.');await load()}catch(e){setErr(e.message)}
+  }
+  async function send2fa(e){
+    e.preventDefault();setErr('');
+    try{await api('/account/security/2fa/send-setup',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});setOtpSent(true);setMsg('WhatsApp OTP sent. It expires in 5 minutes.')}catch(e){setErr(e.message)}
+  }
+  async function confirm2fa(e){
+    e.preventDefault();setErr('');
+    try{await api('/account/security/2fa/confirm',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});setOtpSent(false);setMsg('WhatsApp two-factor authentication enabled.');await load()}catch(e){setErr(e.message)}
+  }
+  async function disable2fa(e){
+    e.preventDefault();setErr('');
+    try{await api('/account/security/2fa/disable',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});setMsg('Two-factor authentication disabled.');e.currentTarget.reset();await load()}catch(e){setErr(e.message)}
+  }
+
+  return <div className="page">
+    <div className="title"><div><span>ACCOUNT CENTER</span><h1>Profile</h1><p>Identity, security, WhatsApp connections, subscription, workspace and team.</p></div><button className="primary" onClick={()=>go('edit-profile')}>Edit profile</button></div>
+    <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
+
+    <section className="profileOverview">
+      <div className="profileIdentity"><Avatar user={data.user} className="profileHeroAvatar"/><div><h2>{data.user.name}</h2><p>{data.user.jobTitle||data.user.role} · {data.user.email}</p><span className="status completed">Active account</span></div></div>
+      <div className="profileDetails">
+        <div><span>Phone</span><b>{data.user.phone||'Not added'}</b></div>
+        <div><span>Role</span><b>{data.user.role}</b></div>
+        <div><span>Workspace</span><b>{data.workspace.name}</b></div>
+        <div><span>2FA</span><b>{data.user.twoFactorEnabled?'WhatsApp enabled':'Not enabled'}</b></div>
+      </div>
+    </section>
+
+    <div className="accountGrid">
+      <section>
+        <div className="sectionHead"><div><h2>Security</h2><p>Password and WhatsApp Meta OTP two-factor authentication.</p></div></div>
+        <form className="formGrid compactForm" onSubmit={changePassword}>
+          <label className="full">Current password<input type="password" name="currentPassword" required autoComplete="current-password"/></label>
+          <label>New password<input type="password" name="newPassword" minLength="8" required autoComplete="new-password"/></label>
+          <label>Confirm password<input type="password" name="confirmPassword" minLength="8" required autoComplete="new-password"/></label>
+          <div className="actions full"><button className="primary">Change password</button></div>
+        </form>
+        <div className="subDivider"></div>
+        <h3>WhatsApp two-factor authentication</h3>
+        {data.user.twoFactorEnabled?<form className="inlineSecurity" onSubmit={disable2fa}><span className="securityOn">● Enabled on {data.user.twoFactorPhone}</span><input type="password" name="currentPassword" placeholder="Current password to disable" required/><button className="danger">Disable 2FA</button></form>:<>
+          <p className="muted">Login OTP is sent through one of your approved Meta WhatsApp authentication templates.</p>
+          {!usable2fa.length?<Notice type="bad">Add a Meta WhatsApp connection and configure its OTP authentication template first.</Notice>:<form className="formGrid compactForm" onSubmit={send2fa}>
+            <label>WhatsApp number<input name="phone" defaultValue={data.user.phone||''} placeholder="+919876543210" required/></label>
+            <label>OTP connection<select name="integrationId" required defaultValue=""><option value="">Choose Meta connection</option>{usable2fa.map(x=><option key={x.id} value={x.id}>{x.name}{x.displayPhoneNumber?' · '+x.displayPhoneNumber:''}</option>)}</select></label>
+            <div className="actions full"><button>Send verification OTP</button></div>
+          </form>}
+          {otpSent&&<form className="otpConfirm" onSubmit={confirm2fa}><input name="otp" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" placeholder="6-digit OTP" required/><button className="primary">Verify & enable 2FA</button></form>}
+        </>}
+      </section>
+
+      <section className="subscriptionCard">
+        <div className="sectionHead"><div><h2>Subscription</h2><p>Your current Clever Connect plan and usage.</p></div><em className={'status '+(data.workspace.subscriptionStatus==='active'?'completed':'scheduled')}>{data.workspace.subscriptionStatus}</em></div>
+        <div className="planName">{data.workspace.plan}<small>Current plan</small></div>
+        <div className="usageRow"><span>Meta WhatsApp connections</span><b>{data.workspace.usage.metaConnections} / {data.workspace.limits.metaConnections}</b></div>
+        <div className="usageRow"><span>Team members</span><b>{data.workspace.usage.teamMembers} / {data.workspace.limits.teamMembers}</b></div>
+        {data.workspace.currentPeriodEnd&&<div className="usageRow"><span>Current period ends</span><b>{fmt(data.workspace.currentPeriodEnd)}</b></div>}
+      </section>
+    </div>
+
+    <section>
+      <div className="sectionHead"><div><h2>Connect Meta WhatsApp</h2><p>Connect multiple WhatsApp Cloud API numbers according to your subscription plan.</p></div>{connSub&&connSub.used<connSub.max&&<button className="primary" onClick={()=>{setEditingConnection(null);setShowConnection(true)}}>+ Add connection</button>}</div>
+      <div className="planHint">{connSub?.plan} plan · {connSub?.used||0} of {connSub?.max||1} Meta connections used</div>
+      {showConnection&&<div className="panel nestedPanel"><form key={editingConnection?.id||'new-meta'} className="formGrid" onSubmit={saveConnection}>
+        <label>Connection name<input name="name" defaultValue={editingConnection?.name||''} placeholder="Sales WhatsApp" required/></label>
+        <label>Graph version<input name="graphVersion" defaultValue={editingConnection?.graphVersion||'v23.0'}/></label>
+        <label>Phone Number ID<input name="phoneNumberId" defaultValue={editingConnection?.phoneNumberId||''} required/></label>
+        <label>Business Account ID<input name="businessAccountId" defaultValue={editingConnection?.businessAccountId||''}/></label>
+        <label className="full">Access token<input type="password" name="accessToken" required={!editingConnection} placeholder={editingConnection?.hasAccessToken?'Saved securely — leave blank to keep':'Meta system-user access token'}/></label>
+        <label>OTP authentication template<input name="otpTemplateName" defaultValue={editingConnection?.otpTemplateName||''} placeholder="login_otp"/></label>
+        <label>OTP template language<input name="otpTemplateLanguage" defaultValue={editingConnection?.otpTemplateLanguage||'en_US'}/></label>
+        <div className="actions full"><button type="button" onClick={()=>{setShowConnection(false);setEditingConnection(null)}}>Cancel</button><button className="primary">{editingConnection?'Update connection':'Connect & verify'}</button></div>
+      </form></div>}
+      <div className="connectionGrid">{connections.map(x=><article className={'connectionCard '+(x.isDefault?'defaultConnection':'')} key={x.id}>
+        <div className="cardTop"><div><small>{x.provider==='meta'?'META CLOUD API':'DEMO'}</small><h3>{x.name}</h3></div>{x.isDefault&&<em className="status completed">Default</em>}</div>
+        <p>{x.provider==='meta'?(x.displayPhoneNumber||x.phoneNumberId):'Safe test provider — no real WhatsApp messages are sent.'}</p>
+        {x.provider==='meta'&&<div className="connectionMeta"><span>OTP: {x.otpTemplateName||'Not configured'}</span><span>{x.enabled?'Enabled':'Disabled'}</span></div>}
+        <footer><span>{x.hasAccessToken?'Token secured':'No token required'}</span><div className="rowActions">
+          {x.provider==='meta'&&<><button onClick={()=>connectionAction(x,'test')}>Test</button><button onClick={()=>{setEditingConnection(x);setShowConnection(true)}}>Edit</button>{!x.isDefault&&<button onClick={()=>connectionAction(x,'default')}>Make default</button>}<button className="danger" onClick={()=>connectionAction(x,'delete')}>Remove</button></>}
+        </div></footer>
+      </article>)}</div>
+    </section>
+
+    <div className="accountGrid">
+      <section>
+        <div className="sectionHead"><div><h2>Workspace</h2><p>Workspace identity and ownership.</p></div></div>
+        <form className="formGrid compactForm" onSubmit={saveWorkspace}>
+          <label className="full">Workspace name<input name="name" defaultValue={data.workspace.name} disabled={!manager}/></label>
+          <div className="profileDetails full"><div><span>Your role</span><b>{data.user.role}</b></div><div><span>Workspace ID</span><b>{data.workspace.id}</b></div></div>
+          {manager&&<div className="actions full"><button className="primary">Save workspace</button></div>}
+        </form>
+      </section>
+
+      <section>
+        <div className="sectionHead"><div><h2>Team</h2><p>{team.length} of {data.workspace.limits.teamMembers} seats used.</p></div>{manager&&team.length<data.workspace.limits.teamMembers&&<button onClick={()=>setShowMember(!showMember)}>+ Add member</button>}</div>
+        {showMember&&<form className="formGrid compactForm teamAdd" onSubmit={addMember}>
+          <label>Name<input name="name" required/></label><label>Email<input type="email" name="email" required/></label>
+          <label>Role<select name="role"><option value="member">Member</option><option value="admin">Admin</option></select></label>
+          <label>Temporary password<input type="password" name="temporaryPassword" minLength="8" required/></label>
+          <div className="actions full"><button className="primary">Create team account</button></div>
+        </form>}
+        <div className="teamList">{team.map(member=><div className="teamMember" key={member.id}><Avatar user={member} className="teamAvatar"/><div><b>{member.name}</b><small>{member.email}</small></div>{manager&&member.role!=='owner'&&member.id!==data.user.id?<><select value={member.role} onChange={e=>roleChange(member,e.target.value)}><option value="member">Member</option><option value="admin">Admin</option></select><button className="danger" onClick={()=>removeMember(member)}>Remove</button></>:<em>{member.role}</em>}</div>)}</div>
+      </section>
+    </div>
+  </div>
+}
+
+function Page({id,go,session,onSessionUpdate}){
   if(id==='overview')return <Overview go={go}/>;
   if(id==='send')return <SingleSend/>;
   if(id==='campaigns')return <Campaigns/>;
@@ -564,7 +768,8 @@ function Page({id,go,session}){
   if(id==='schedule')return <Schedule/>;
   if(id==='templates')return <Templates/>;
   if(id==='reports')return <Reports/>;
-  if(id==='profile')return <Profile session={session}/>;
+  if(id==='profile')return <Profile session={session} go={go} onSessionUpdate={onSessionUpdate}/>;
+  if(id==='edit-profile')return <EditProfile go={go} onSessionUpdate={onSessionUpdate}/>;
   return <Settings session={session}/>;
 }
 
@@ -581,5 +786,5 @@ export default function App(){
     setSession(null);
   }
   if(session===undefined)return <Loading/>;
-  return session?<Shell session={session} onLogout={logout}/>:<Auth onAuth={setSession}/>;
+  return session?<Shell session={session} onLogout={logout} onSessionUpdate={setSession}/>:<Auth onAuth={setSession}/>;
 }
