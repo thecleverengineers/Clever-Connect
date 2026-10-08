@@ -516,7 +516,7 @@ function Settings({go}){
         <h2>Messaging default</h2>
         <p>{current?('Current sender: '+current.name):'No messaging provider configured.'}</p>
         {current&&<div className="profileDetails"><div><span>Provider</span><b>{current.provider}</b></div><div><span>Status</span><b>{current.enabled?'Enabled':'Disabled'}</b></div></div>}
-        <button className="primary" onClick={()=>go('profile')}>Manage WhatsApp connections</button>
+        <button className="primary" onClick={()=>go('whatsapp-api')}>Manage WhatsApp connections</button>
       </section>
       <section>
         <h2>Account & security</h2>
