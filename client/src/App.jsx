@@ -830,20 +830,50 @@ function Profile({session,go,onSessionUpdate}){
 }
 
 
+function loadFacebookSdk(appId,version='v23.0'){
+  return new Promise((resolve,reject)=>{
+    if(window.FB){
+      try{window.FB.init({appId,cookie:true,xfbml:false,version});resolve(window.FB)}catch(e){reject(e)}
+      return;
+    }
+    const existing=document.getElementById('facebook-jssdk');
+    const finish=()=>{
+      try{window.FB.init({appId,cookie:true,xfbml:false,version});resolve(window.FB)}
+      catch(e){reject(e)}
+    };
+    window.fbAsyncInit=finish;
+    if(existing)return;
+    const script=document.createElement('script');
+    script.id='facebook-jssdk';
+    script.async=true;
+    script.defer=true;
+    script.crossOrigin='anonymous';
+    script.src='https://connect.facebook.net/en_US/sdk.js';
+    script.onerror=()=>reject(new Error('Unable to load Facebook SDK'));
+    document.body.appendChild(script);
+  });
+}
+
 function WhatsAppApi({go}){
   const[connections,setConnections]=useState([]);
   const[subscription,setSubscription]=useState(null);
+  const[embedded,setEmbedded]=useState(null);
   const[showForm,setShowForm]=useState(false);
   const[editing,setEditing]=useState(null);
+  const[fbBusy,setFbBusy]=useState(false);
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
 
   async function load(){
     setErr('');
     try{
-      const x=await api('/integrations/whatsapp-connections');
+      const [x,embed]=await Promise.all([
+        api('/integrations/whatsapp-connections'),
+        api('/integrations/embedded-signup/config')
+      ]);
       setConnections(x.connections||[]);
       setSubscription(x.subscription||null);
+      setEmbedded(embed);
     }catch(e){setErr(e.message)}
   }
   useEffect(()=>{load()},[]);
@@ -853,6 +883,92 @@ function WhatsAppApi({go}){
   const canAdd=allowed&&subscription&&subscription.used<subscription.max;
   const verifyToken=connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
   const webhook=BASE.replace(/\/api$/,'')+'/api/webhooks/meta';
+
+  async function connectWithFacebook(){
+    if(!canAdd)return;
+    if(!embedded?.enabled){
+      setErr('Facebook Embedded Signup is not configured by the WA SANTA administrator yet.');
+      return;
+    }
+    setFbBusy(true);setErr('');setMsg('');
+    let authCode='';
+    let session=null;
+    let finished=false;
+    let timer=null;
+
+    const cleanup=()=>{
+      window.removeEventListener('message',listener);
+      if(timer)clearTimeout(timer);
+    };
+    const complete=async()=>{
+      if(finished||!authCode||!session?.waba_id)return;
+      finished=true;cleanup();
+      try{
+        const eventName=String(session.event||'').toUpperCase();
+        const y=await api('/integrations/embedded-signup/complete',{
+          method:'POST',
+          body:JSON.stringify({
+            code:authCode,
+            wabaId:session.waba_id,
+            phoneNumberId:session.phone_number_id||'',
+            businessPortfolioId:session.business_id||session.businessId||'',
+            coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING')
+          })
+        });
+        setMsg(y.warning||y.message||'Meta WhatsApp connected with Facebook.');
+        await load();
+      }catch(e){setErr(e.message)}
+      finally{setFbBusy(false)}
+    };
+    const listener=(event)=>{
+      const okOrigin=event.origin==='https://www.facebook.com'||event.origin==='https://web.facebook.com'||event.origin.endsWith('.facebook.com');
+      if(!okOrigin)return;
+      let data=event.data;
+      try{if(typeof data==='string')data=JSON.parse(data)}catch{return}
+      if(!data||data.type!=='WA_EMBEDDED_SIGNUP')return;
+      const name=String(data.event||'').toUpperCase();
+      if(name==='CANCEL'){
+        cleanup();setFbBusy(false);setErr('Facebook signup was cancelled.');
+        return;
+      }
+      if(name==='ERROR'){
+        cleanup();setFbBusy(false);setErr(data.data?.error_message||'Meta Embedded Signup reported an error.');
+        return;
+      }
+      if(['FINISH','FINISH_ONLY_WABA','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(name)){
+        session={...(data.data||{}),event:name};
+        complete();
+      }
+    };
+
+    window.addEventListener('message',listener);
+    timer=setTimeout(()=>{
+      if(!finished){cleanup();setFbBusy(false);setErr('Facebook signup timed out. Please try again.')}
+    },120000);
+
+    try{
+      const FB=await loadFacebookSdk(embedded.appId,embedded.graphVersion||'v23.0');
+      FB.login(response=>{
+        if(response?.authResponse?.code){
+          authCode=response.authResponse.code;
+          complete();
+        }else if(!finished){
+          cleanup();setFbBusy(false);setErr('Facebook login was cancelled or authorization was not completed.');
+        }
+      },{
+        config_id:embedded.configId,
+        response_type:'code',
+        override_default_response_type:true,
+        extras:{
+          setup:{},
+          featureType:'whatsapp_business_app_onboarding',
+          sessionInfoVersion:'3'
+        }
+      });
+    }catch(e){
+      cleanup();setFbBusy(false);setErr(e.message||'Unable to open Facebook signup.');
+    }
+  }
 
   async function save(e){
     e.preventDefault();setErr('');setMsg('');
@@ -868,6 +984,7 @@ function WhatsAppApi({go}){
       setShowForm(false);setEditing(null);await load();
     }catch(e){setErr(e.message)}
   }
+
   async function act(x,type){
     setErr('');setMsg('');
     try{
@@ -880,17 +997,29 @@ function WhatsAppApi({go}){
         setMsg(x.name+' is now the default WhatsApp sender.');
       }
       if(type==='delete'){
-        if(!confirm('Remove '+x.name+'?'))return;
+        if(!confirm('Disconnect '+x.name+'? This removes the saved Meta profile from WA SANTA.'))return;
         await api('/integrations/whatsapp-connections/'+x.id,{method:'DELETE'});
-        setMsg('Meta WhatsApp connection removed.');
+        setMsg('Meta WhatsApp profile disconnected.');
       }
       await load();
     }catch(e){setErr(e.message)}
   }
 
   return <div className="page">
-    <div className="title"><div><span>WHATSAPP CLOUD API</span><h1>Meta WhatsApp API</h1><p>Connect and manage multiple WhatsApp Business API numbers according to your subscription plan.</p></div>{canAdd&&<button className="primary" onClick={()=>{setEditing(null);setShowForm(true)}}>+ Connect WhatsApp API</button>}</div>
+    <div className="title"><div><span>WHATSAPP CLOUD API</span><h1>Meta WhatsApp API</h1><p>Connect Meta through Facebook Embedded Signup or use manual credentials as an advanced option.</p></div></div>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
+
+    <section className="facebookConnectHero">
+      <div className="facebookConnectCopy">
+        <span className="facebookLogo">f</span>
+        <div><small>RECOMMENDED</small><h2>Connect with Facebook</h2><p>Sign in to Meta, choose your Business Portfolio, WhatsApp Business Account and phone number. WA SANTA securely completes the API connection for you.</p></div>
+      </div>
+      <div className="facebookConnectAction">
+        <button className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled} onClick={connectWithFacebook}>{fbBusy?'Connecting with Meta…':'Continue with Facebook'}</button>
+        {!embedded?.enabled&&embedded&&<small>Admin setup required: {embedded.missing?.join(', ')||'Meta Embedded Signup configuration'}</small>}
+        {embedded?.enabled&&<small>Meta-hosted login · WA SANTA never sees your Facebook password</small>}
+      </div>
+    </section>
 
     <section className="whatsappApiHero">
       <div><small>SUBSCRIPTION LIMIT</small><h2>{subscription?.used||0} of {subscription?.max||0} Meta connections used</h2><p>{subscription?.plan||'trial'} plan · {subscription?.access?.state||'loading'} access</p></div>
@@ -899,66 +1028,68 @@ function WhatsAppApi({go}){
       {allowed&&subscription?.used>=subscription?.max&&<Notice type="bad">You have reached your plan limit. Upgrade your subscription to connect another WhatsApp number.</Notice>}
     </section>
 
-    {showForm&&<div className="panel metaConnectionForm">
-      <div className="sectionHead"><div><h2>{editing?'Edit Meta connection':'Connect Meta WhatsApp Cloud API'}</h2><p>Use credentials from Meta Business Manager / WhatsApp Manager.</p></div><button onClick={()=>{setShowForm(false);setEditing(null)}}>Close</button></div>
-      <form key={editing?.id||'new-meta'} className="formGrid" onSubmit={save}>
-        <label>Connection name<input name="name" defaultValue={editing?.name||''} placeholder="Sales WhatsApp" required/></label>
-        <label>Graph API version<input name="graphVersion" defaultValue={editing?.graphVersion||'v23.0'} placeholder="v23.0"/></label>
-        <label>Phone Number ID<input name="phoneNumberId" defaultValue={editing?.phoneNumberId||''} required/></label>
-        <label>WhatsApp Business Account ID<input name="businessAccountId" defaultValue={editing?.businessAccountId||''}/></label>
-        <label className="full">Permanent/System-user access token<input type="password" name="accessToken" required={!editing} placeholder={editing?.hasAccessToken?'Saved securely — leave blank to keep current token':'Paste Meta access token'}/></label>
-        <label>OTP authentication template<input name="otpTemplateName" defaultValue={editing?.otpTemplateName||''} placeholder="login_otp"/></label>
-        <label>OTP template language<input name="otpTemplateLanguage" defaultValue={editing?.otpTemplateLanguage||'en_US'} placeholder="en_US"/></label>
-        <div className="actions full"><button type="button" onClick={()=>{setShowForm(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Save changes':'Connect & verify'}</button></div>
-      </form>
-    </div>}
+    <section className="manualConnectionBox">
+      <div className="sectionHead">
+        <div><small>ADVANCED</small><h2>Manual Meta API connection</h2><p>Use this only if you already have a Phone Number ID, WABA ID and access token.</p></div>
+        {canAdd&&<button onClick={()=>{setEditing(null);setShowForm(!showForm)}}>{showForm?'Hide manual form':'Connect manually'}</button>}
+      </div>
+      {showForm&&<div className="panel metaConnectionForm">
+        <form key={editing?.id||'new-meta'} className="formGrid" onSubmit={save}>
+          <label>Connection name<input name="name" defaultValue={editing?.name||''} placeholder="Sales WhatsApp" required/></label>
+          <label>Graph API version<input name="graphVersion" defaultValue={editing?.graphVersion||'v23.0'} placeholder="v23.0"/></label>
+          <label>Phone Number ID<input name="phoneNumberId" defaultValue={editing?.phoneNumberId||''} required/></label>
+          <label>WhatsApp Business Account ID<input name="businessAccountId" defaultValue={editing?.businessAccountId||''}/></label>
+          <label className="full">Permanent/System-user access token<input type="password" name="accessToken" required={!editing} placeholder={editing?.hasAccessToken?'Saved securely — leave blank to keep current token':'Paste Meta access token'}/></label>
+          <label>OTP authentication template<input name="otpTemplateName" defaultValue={editing?.otpTemplateName||''} placeholder="login_otp"/></label>
+          <label>OTP template language<input name="otpTemplateLanguage" defaultValue={editing?.otpTemplateLanguage||'en_US'} placeholder="en_US"/></label>
+          <div className="actions full"><button type="button" onClick={()=>{setShowForm(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Save changes':'Connect & verify'}</button></div>
+        </form>
+      </div>}
+    </section>
 
     <section>
-      <div className="sectionHead"><div><h2>Connected Meta WhatsApp numbers</h2><p>Choose a default sender, test credentials, update API settings or remove a connection.</p></div></div>
+      <div className="sectionHead"><div><h2>Connected Meta WhatsApp profiles</h2><p>Connections remain saved until you explicitly disconnect them.</p></div></div>
       <div className="connectionGrid whatsappConnectionGrid">
         {meta.map(x=><article className={'connectionCard '+(x.isDefault?'defaultConnection':'')} key={x.id}>
-          <div className="cardTop"><div><small>META CLOUD API</small><h3>{x.name}</h3></div><div className="connectionBadges">{x.isDefault&&<em className="status completed">Default sender</em>}<em className={'status '+(x.connectionStatus==='error'?'failed':x.connectionStatus==='disabled'?'cancelled':'completed')}>{x.connectionStatus==='error'?'Needs attention':x.connectionStatus||'connected'}</em></div></div>
+          <div className="cardTop"><div><small>{x.connectMethod==='embedded'?'FACEBOOK EMBEDDED SIGNUP':'META CLOUD API'}</small><h3>{x.name}</h3></div><div className="connectionBadges">{x.isDefault&&<em className="status completed">Default sender</em>}<em className={'status '+(x.connectionStatus==='error'?'failed':x.connectionStatus==='disabled'?'cancelled':'completed')}>{x.connectionStatus==='error'?'Needs attention':x.connectionStatus||'connected'}</em></div></div>
           <div className="connectionPhone">{x.displayPhoneNumber||'Phone Number ID: '+x.phoneNumberId}</div>
           <div className="connectionMeta">
-            <span>Graph {x.graphVersion}</span>
+            <span>{x.connectMethod==='embedded'?'Connected via Facebook':'Manual connection'}</span>
             <span>{x.enabled?'Enabled':'Disabled'}</span>
           </div>
           <div className="connectionDetails">
-            <span><small>Business Account ID</small><b>{x.businessAccountId||'Not added'}</b></span>
+            <span><small>WhatsApp Business Account</small><b>{x.businessAccountId||'Not added'}</b></span>
             <span><small>OTP template</small><b>{x.otpTemplateName||'Not configured'}</b></span>
             <span><small>Access token</small><b>{x.hasAccessToken?'Encrypted & stored':'Missing'}</b></span>
           </div>
-          {x.lastError&&<Notice type="bad">{x.lastError} — profile remains saved until you remove it.</Notice>}
-          <footer><span>{x.otpTemplateName?'Ready for WhatsApp OTP 2FA':'Messaging connection'}</span><div className="rowActions">
-            <button onClick={()=>act(x,'test')}>Test connection</button>
+          {x.lastError&&<Notice type="bad">{x.lastError} — profile remains saved until you disconnect it.</Notice>}
+          <footer><span>{x.connectedAt?'Connected '+fmt(x.connectedAt):'Messaging connection'}</span><div className="rowActions">
+            <button onClick={()=>act(x,'test')}>Test</button>
             <button onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
             <button onClick={()=>{setEditing(x);setShowForm(true)}}>Edit</button>
             {!x.isDefault&&<button onClick={()=>act(x,'default')}>Make default</button>}
-            <button className="danger" onClick={()=>act(x,'delete')}>Remove</button>
+            <button className="danger" onClick={()=>act(x,'delete')}>Disconnect</button>
           </div></footer>
         </article>)}
-        {!meta.length&&<Empty text="No Meta WhatsApp API connections yet."/>}
+        {!meta.length&&<Empty text="No Meta WhatsApp profiles connected yet."/>}
       </div>
     </section>
 
     <div className="accountGrid metaSetupGrid">
       <section>
         <h2>Meta webhook setup</h2>
-        <p>Configure these values in Meta Developer → WhatsApp → Configuration.</p>
+        <p>Embedded Signup automatically subscribes each selected WABA to your app. Keep this callback configured in your Meta app.</p>
         <label className="copyLabel">Callback URL<code>{webhook}</code></label>
         <label className="copyLabel">Verify token<code>{verifyToken||'Available after a provider is initialized'}</code></label>
-        <div className="rowActions">
-          <button onClick={()=>navigator.clipboard?.writeText(webhook)}>Copy callback URL</button>
-          {verifyToken&&<button onClick={()=>navigator.clipboard?.writeText(verifyToken)}>Copy verify token</button>}
-        </div>
+        <div className="rowActions"><button onClick={()=>navigator.clipboard?.writeText(webhook)}>Copy callback URL</button>{verifyToken&&<button onClick={()=>navigator.clipboard?.writeText(verifyToken)}>Copy verify token</button>}</div>
       </section>
       <section>
-        <h2>Connection requirements</h2>
+        <h2>Facebook Embedded Signup requirements</h2>
         <div className="setupChecklist">
-          <span>1 <b>Meta Business portfolio</b><small>Business and WhatsApp account access</small></span>
-          <span>2 <b>Phone Number ID</b><small>From WhatsApp Manager / API Setup</small></span>
-          <span>3 <b>System-user token</b><small>Stored encrypted inside WA SANTA</small></span>
-          <span>4 <b>Approved OTP template</b><small>Required only for WhatsApp 2FA</small></span>
+          <span>1 <b>Meta App + Facebook Login for Business</b><small>Embedded Signup configuration ID</small></span>
+          <span>2 <b>Advanced Meta permissions</b><small>business_management and whatsapp_business_management</small></span>
+          <span>3 <b>App Review / Access Verification</b><small>Required before public customer onboarding</small></span>
+          <span>4 <b>HTTPS + Webhooks</b><small>Your current Render deployment already uses HTTPS</small></span>
         </div>
       </section>
     </div>
