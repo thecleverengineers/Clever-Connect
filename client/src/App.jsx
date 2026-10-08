@@ -1165,6 +1165,7 @@ function Subscription({onSessionUpdate}){
 
 function SuperAdmin(){
   const[data,setData]=useState(null);
+  const[metaSettings,setMetaSettings]=useState(null);
   const[editing,setEditing]=useState(null);
   const[showPlan,setShowPlan]=useState(false);
   const[msg,setMsg]=useState('');
@@ -1172,9 +1173,37 @@ function SuperAdmin(){
   const[workspacePlans,setWorkspacePlans]=useState({});
   async function load(){
     setErr('');
-    try{setData(await api('/admin/overview'))}catch(e){setErr(e.message)}
+    try{
+      const [overview,meta]=await Promise.all([api('/admin/overview'),api('/admin/meta-settings')]);
+      setData(overview);setMetaSettings(meta);
+    }catch(e){setErr(e.message)}
   }
   useEffect(()=>{load()},[]);
+  async function saveMetaSettings(e){
+    e.preventDefault();setErr('');setMsg('');
+    const o=Object.fromEntries(new FormData(e.currentTarget));
+    try{
+      const x=await api('/admin/meta-settings',{method:'PUT',body:JSON.stringify(o)});
+      setMetaSettings(x);
+      e.currentTarget.elements.appSecret.value='';
+      setMsg('Meta Embedded Signup settings saved securely.');
+    }catch(e){setErr(e.message)}
+  }
+  async function testMetaSettings(){
+    setErr('');setMsg('');
+    try{
+      const x=await api('/admin/meta-settings/test',{method:'POST'});
+      setMsg(x.message||'Meta App credentials are valid.');
+    }catch(e){setErr(e.message)}
+  }
+  async function clearMetaSecret(){
+    if(!confirm('Clear the saved Meta App Secret? Continue with Facebook will stop working until a new secret is saved.'))return;
+    try{
+      const x=await api('/admin/meta-settings/clear-secret',{method:'POST'});
+      setMetaSettings(x);setMsg('Saved Meta App Secret cleared.');
+    }catch(e){setErr(e.message)}
+  }
+
   async function savePlan(e){
     e.preventDefault();setErr('');setMsg('');
     const fd=new FormData(e.currentTarget);
@@ -1228,6 +1257,37 @@ function SuperAdmin(){
       <Metric label="Pending requests" value={data.pendingRequests.length} sub="Need approval"/>
       <Metric label="Expired / locked" value={data.workspaces.filter(x=>!x.access?.allowed).length} sub="Subscription required"/>
     </div>
+
+    <section className="adminMetaSettings">
+      <div className="sectionHead">
+        <div>
+          <small>META PLATFORM</small>
+          <h2>Meta Embedded Signup Settings</h2>
+          <p>Configure the global Facebook/Meta app used by every tenant's “Continue with Facebook” WhatsApp onboarding flow.</p>
+        </div>
+        <em className={'status '+(metaSettings?.enabled?'completed':'failed')}>{metaSettings?.enabled?'Ready':'Setup required'}</em>
+      </div>
+      <form className="formGrid" onSubmit={saveMetaSettings}>
+        <label>Meta App ID<input name="appId" defaultValue={metaSettings?.appId||''} placeholder="123456789012345" required/></label>
+        <label>Embedded Signup Config ID<input name="configId" defaultValue={metaSettings?.configId||''} placeholder="Facebook Login for Business config ID" required/></label>
+        <label>Graph API version<input name="graphVersion" defaultValue={metaSettings?.graphVersion||'v23.0'} placeholder="v23.0" required/></label>
+        <label>Meta App Secret<input type="password" name="appSecret" placeholder={metaSettings?.hasAppSecret?'Saved securely — leave blank to keep current secret':'Paste Meta App Secret'} required={!metaSettings?.hasAppSecret}/></label>
+        <div className="metaSecretState full">
+          <span><b>App Secret</b><small>{metaSettings?.hasAppSecret?'Encrypted and stored securely':'Not configured'}</small></span>
+          <span><b>Config source</b><small>{metaSettings?.source==='admin'?'Managed in Super Admin':'Render environment fallback'}</small></span>
+          <span><b>Missing</b><small>{metaSettings?.missing?.length?metaSettings.missing.join(', '):'None — Facebook connection is ready'}</small></span>
+        </div>
+        <div className="actions full">
+          {metaSettings?.hasAppSecret&&<button type="button" className="danger" onClick={clearMetaSecret}>Clear secret</button>}
+          <button type="button" onClick={testMetaSettings}>Test Meta credentials</button>
+          <button className="primary">Save Meta settings</button>
+        </div>
+      </form>
+      <div className="adminMetaHelp">
+        <span><b>Where to get these values</b><small>Meta for Developers → your app → App settings / Facebook Login for Business → Embedded Signup configuration.</small></span>
+        <span><b>Security</b><small>The App Secret is encrypted before being stored and is never returned to the browser after save.</small></span>
+      </div>
+    </section>
 
     {showPlan&&<div className="panel"><form key={editing?editing._id:'new-plan'} className="formGrid" onSubmit={savePlan}>
       <label>Plan name<input name="name" defaultValue={editing?.name||''} required/></label>
