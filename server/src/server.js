@@ -16,6 +16,8 @@ import dashboard from './routes/dashboard.js';
 import integrations from './routes/integrations.js';
 import webhook from './routes/webhook.js';
 import payments from './routes/payments.js';
+import inbox from './routes/inbox.js';
+import flows from './routes/flows.js';
 import account from './routes/account.js';
 import subscription from './routes/subscription.js';
 import admin from './routes/admin.js';
@@ -57,6 +59,8 @@ app.use('/api/subscription',apiLimiter,subscription);
 app.use('/api/admin',apiLimiter,admin);
 app.use('/api/webhooks/meta',webhook);
 app.use('/api/payments',apiLimiter,requireAuth,requireSubscription,payments);
+app.use('/api/inbox',apiLimiter,requireAuth,requireSubscription,inbox);
+app.use('/api/flows',apiLimiter,requireAuth,requireSubscription,flows);
 
 app.get('/api/health',(req,res)=>res.json({
   ok:mongoose.connection.readyState===1,
