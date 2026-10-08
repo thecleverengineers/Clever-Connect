@@ -79,10 +79,34 @@ router.post('/bulk-delete',async(req,res)=>{
   res.json({deleted:result.deletedCount});
 });
 
+router.get('/template.xlsx',(req,res)=>{
+  const wb=XLSX.utils.book_new();
+  const rows=[{name:'Example Contact',phone:'+919876543210',email:'example@yourcompany.com',consent:'yes',opt_in_source:'Website signup',opt_in_date:'2026-10-01',tags:'customer,newsletter',notes:'Replace this sample row'}];
+  const ws=XLSX.utils.json_to_sheet(rows,{header:['name','phone','email','consent','opt_in_source','opt_in_date','tags','notes']});
+  ws['!cols']=[{wch:23},{wch:22},{wch:34},{wch:16},{wch:27},{wch:18},{wch:26},{wch:38}];
+  XLSX.utils.book_append_sheet(wb,ws,'Contacts');
+  const help=XLSX.utils.aoa_to_sheet([
+    ['WA SANTA — WhatsApp Contacts'],
+    ['Replace the sample row on Contacts sheet and import the saved .xlsx file.'],
+    ['phone','International E.164 with country code: +919876543210 (8-15 digits).'],
+    ['consent','yes = documented opt-in, no = opted out, blank = pending.'],
+    ['opt_in_source','Where permission was obtained (optional audit field).'],
+    ['opt_in_date','YYYY-MM-DD date permission was obtained.'],
+    ['tags','Comma-separated tags.'],
+    ['Import limits','5 MB and maximum 5,000 rows per batch (WA SANTA upload cap, not a Meta messaging quota).'],
+    ['Meta limits','Meta sets messaging limits per portfolio; imports do not bypass template approval or recipient opt-in.']
+  ]);help['!cols']=[{wch:24},{wch:110}];
+  XLSX.utils.book_append_sheet(wb,help,'Instructions');
+  res.set('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.set('Content-Disposition','attachment; filename="WA-SANTA-Contacts-Template.xlsx"');
+  res.send(XLSX.write(wb,{bookType:'xlsx',type:'buffer'}));
+});
+
 router.post('/import',upload.single('file'),async(req,res)=>{
   if(!req.file) return res.status(400).json({message:'File required'});
   const wb=XLSX.read(req.file.buffer,{type:'buffer'});
-  const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+  const data=XLSX.utils.sheet_to_json(wb.Sheets['Contacts']||wb.Sheets[wb.SheetNames[0]],{defval:''});
+  if(data.length>5000)return res.status(413).json({message:'Maximum 5,000 contacts per import file. Split your workbook into smaller batches.'});
   const listId=req.body.listId||null;
   const importAsOptedIn=req.body.confirmConsent==='true';
   const validLists=listId?await validListIds(req.workspaceId,[listId]):[];
@@ -97,11 +121,19 @@ router.post('/import',upload.single('file'),async(req,res)=>{
     const explicitOptIn=['yes','true','1','opted_in','opted in'].includes(rawConsent);
     const explicitOptOut=['no','false','0','opted_out','opted out'].includes(rawConsent);
     const consentStatus=explicitOptOut?'opted_out':(explicitOptIn||importAsOptedIn?'opted_in':'pending');
+    const tags=String(r.tags||r.Tags||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,20);
+    const auditNote=[
+      r.opt_in_source?'Consent source: '+String(r.opt_in_source).slice(0,100):'',
+      r.opt_in_date?'Consent date: '+String(r.opt_in_date).slice(0,30):'',
+      r.notes?String(r.notes).slice(0,300):''
+    ].filter(Boolean).join(' | ').slice(0,1000);
     const existing=await Contact.findOne({workspaceId:req.workspaceId,phone});
     if(existing){
       existing.name=name||existing.name;
       existing.email=email||existing.email;
       existing.source='import';
+      if(tags.length)existing.tags=[...new Set([...(existing.tags||[]),...tags])].slice(0,20);
+      if(auditNote)existing.notes=auditNote;
       if(list&&!existing.lists.some(x=>String(x)===String(list))) existing.lists.push(list);
       if(consentStatus!=='pending'){
         existing.consentStatus=consentStatus;
@@ -113,7 +145,7 @@ router.post('/import',upload.single('file'),async(req,res)=>{
     }else{
       await Contact.create({
         workspaceId:req.workspaceId,name,phone,email,
-        lists:list?[list]:[],source:'import',consentStatus,
+        lists:list?[list]:[],source:'import',consentStatus,tags,notes:auditNote,
         suppressed:consentStatus==='opted_out',
         consentAt:consentStatus==='opted_in'?new Date():undefined
       });
