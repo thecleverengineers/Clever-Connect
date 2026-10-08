@@ -62,7 +62,7 @@ function CampaignBuilder({status,onCreated}){
   async function saveDraft(){
     try{
       const x=await api('/campaigns',{method:'POST',body:JSON.stringify({
-        name:result.campaignName,message:result.message,audienceType:result.audienceType||'all',contentType:'text'
+        name:result.campaignName,message:result.message,audienceType:'all',contentType:'text'
       })});
       onCreated('Campaign draft created: '+x.name);
     }catch(e){setErr(e.message)}
