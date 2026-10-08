@@ -392,7 +392,8 @@ function Contacts(){
     setSelected(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n});
   }
   return <div className="page">
-    <Title title="Contacts" sub="Manage consent-aware contacts, lists and Excel/CSV imports." action="Add contact" onAction={()=>{setEditing(null);setShow(true)}}/>
+    <Title title="Contacts" sub="Download the Excel template, import E.164 WhatsApp contacts, and manage documented consent." action="Add contact" onAction={()=>{setEditing(null);setShow(true)}}/>
+    <div className="notice">Excel import: up to 5 MB and 5,000 rows per file (WA SANTA batch cap). Meta's business-initiated template messaging limits depend on your business portfolio and are enforced by Meta; importing contacts does not increase that limit or bypass customer opt-in.</div>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
     <div className="toolbar contactTools">
       <div className="toolbarGroup"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search contacts…"/><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All contacts</option><option value="ready">Opted in</option><option value="pending">Pending consent</option><option value="suppressed">Suppressed / opted out</option></select><button onClick={addList}>+ New list</button></div>
