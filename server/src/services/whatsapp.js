@@ -39,6 +39,10 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
   if(!integration.phoneNumberId||!integration.accessTokenEncrypted) throw new Error('Meta WhatsApp integration is incomplete');
 
   const token=decrypt(integration.accessTokenEncrypted);
+  if(template?.integrationId&&template?.metaTemplateName&&template?.metaStatus&&template.metaStatus!=='APPROVED'){
+    throw new Error('Meta template is not approved yet. Current status: '+template.metaStatus);
+  }
+
   const body=template?.metaTemplateName
     ? {
         messaging_product:'whatsapp',
