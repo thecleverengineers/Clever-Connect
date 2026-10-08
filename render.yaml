@@ -11,9 +11,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: MONGODB_URI
+      - key: MONGODB_HOST
         sync: false
-      - key: JWT_SECRET
+      - key: MONGODB_USER
+        sync: false
+      - key: MONGODB_PASSWORD
+        sync: false
+      - key: AUTH_KEY
         generateValue: true
       - key: CREDENTIAL_ENCRYPTION_KEY
         generateValue: true
