@@ -15,6 +15,9 @@ import dashboard from './routes/dashboard.js';
 import integrations from './routes/integrations.js';
 import webhook from './routes/webhook.js';
 import account from './routes/account.js';
+import subscription from './routes/subscription.js';
+import admin from './routes/admin.js';
+import {requireAuth,requireSubscription} from './middleware/auth.js';
 import {runDueCampaigns} from './services/scheduler.js';
 import {mongoUri} from './db.js';
 
@@ -38,18 +41,20 @@ app.use(cookieParser());
 const authLimiter=rateLimit({windowMs:15*60*1000,limit:100,standardHeaders:true,legacyHeaders:false});
 const apiLimiter=rateLimit({windowMs:60*1000,limit:600,standardHeaders:true,legacyHeaders:false});
 app.use('/api/auth',authLimiter,auth);
-app.use('/api/contacts',apiLimiter,contacts);
-app.use('/api/lists',apiLimiter,lists);
-app.use('/api/templates',apiLimiter,templates);
-app.use('/api/campaigns',apiLimiter,campaigns);
-app.use('/api/dashboard',apiLimiter,dashboard);
-app.use('/api/integrations',apiLimiter,integrations);
+app.use('/api/contacts',apiLimiter,requireAuth,requireSubscription,contacts);
+app.use('/api/lists',apiLimiter,requireAuth,requireSubscription,lists);
+app.use('/api/templates',apiLimiter,requireAuth,requireSubscription,templates);
+app.use('/api/campaigns',apiLimiter,requireAuth,requireSubscription,campaigns);
+app.use('/api/dashboard',apiLimiter,requireAuth,requireSubscription,dashboard);
+app.use('/api/integrations',apiLimiter,requireAuth,requireSubscription,integrations);
 app.use('/api/account',apiLimiter,account);
+app.use('/api/subscription',apiLimiter,subscription);
+app.use('/api/admin',apiLimiter,admin);
 app.use('/api/webhooks/meta',webhook);
 
 app.get('/api/health',(req,res)=>res.json({
   ok:mongoose.connection.readyState===1,
-  service:'clever-connect-api',
+  service:'wa-santa-api',
   database:mongoose.connection.readyState===1?'connected':'unavailable',
   scheduler:'in-process-60s',
   time:new Date().toISOString()
@@ -63,5 +68,5 @@ app.use((err,req,res,next)=>{
 });
 
 const port=process.env.PORT||5000;
-app.listen(port,()=>console.log('Clever Connect API listening on '+port));
+app.listen(port,()=>console.log('WA SANTA API listening on '+port));
 setInterval(()=>runDueCampaigns().catch(console.error),60_000).unref();
