@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import {Integration,Workspace} from '../models.js';
+import {Integration,Workspace,User} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
 import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
 import {planLimits} from '../plan.js';
@@ -126,7 +126,7 @@ r.delete('/whatsapp-connections/:id',async(req,res)=>{
   const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId});
   if(!x)return res.sendStatus(404);
   if(x.provider==='demo')return res.status(409).json({message:'The built-in demo provider cannot be deleted'});
-  const inUse=await (await import('../models.js')).User.countDocuments({workspaceId:req.workspaceId,twoFactorIntegrationId:x._id,twoFactorEnabled:true});
+  const inUse=await User.countDocuments({workspaceId:req.workspaceId,twoFactorIntegrationId:x._id,twoFactorEnabled:true});
   if(inUse)return res.status(409).json({message:'This connection is used by WhatsApp 2FA. Disable or move 2FA first'});
   await x.deleteOne();
   if(x.isDefault){
