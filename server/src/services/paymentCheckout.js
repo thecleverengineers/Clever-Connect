@@ -53,6 +53,23 @@ export async function sendOrderDetails(integration,order){
 }
 
 // Always verify against Meta's payment lookup: webhook notification alone is never proof of payment.
+async function sendPaymentConfirmedStatus(order,integration){
+  const body={
+    messaging_product:'whatsapp',recipient_type:'individual',to:normalizedPhone(order.phone),type:'interactive',
+    interactive:{
+      type:'order_status',
+      body:{text:'Your payment has been confirmed. Thank you!'},
+      action:{name:'review_order',parameters:{
+        reference_id:order.referenceId,
+        order:{status:'processing',description:'Payment received; your order is being processed.'}
+      }}
+    }
+  };
+  const sent=await metaCall(integration,'/messages',{method:'POST',body});
+  if(!sent.messages?.[0]?.id)throw new Error('Meta returned no order status message ID');
+  return sent.messages[0].id;
+}
+
 export async function reconcileOrder(order,integration){
   if(!order||!integration||String(order.integrationId)!==String(integration._id))throw new Error('Order or Meta profile mismatch');
   const path='/payments/'+encodeURIComponent(order.configurationName)+'/'+encodeURIComponent(order.referenceId);
@@ -79,6 +96,26 @@ export async function reconcileOrder(order,integration){
   // A delayed pending/failed lookup must never undo an already captured payment.
   const filter={_id:order._id,workspaceId:order.workspaceId};
   if(status!=='captured')filter.status={$ne:'captured'};
-  return await PaymentOrder.findOneAndUpdate(filter,{$set:update},{new:true})
+  const verified=await PaymentOrder.findOneAndUpdate(filter,{$set:update},{new:true})
     ||await PaymentOrder.findOne({_id:order._id,workspaceId:order.workspaceId});
+  if(verified?.status==='captured'&&!verified.statusMessageId){
+    const claimed=await PaymentOrder.findOneAndUpdate(
+      {_id:verified._id,workspaceId:verified.workspaceId,status:'captured',statusMessageId:''},
+      {$set:{statusMessageId:'sending'}},{new:true}
+    );
+    if(claimed){
+      try{
+        const id=await sendPaymentConfirmedStatus(claimed,integration);
+        await PaymentOrder.updateOne({_id:claimed._id,workspaceId:claimed.workspaceId,statusMessageId:'sending'},{$set:{statusMessageId:id}});
+      }catch(e){
+        // Never undo a verified payment. "uncertain" prevents duplicate status
+        // sends if Meta accepted a request but the network timed out.
+        console.error('Verified payment confirmation notification failed',claimed.referenceId,e.message);
+        await PaymentOrder.updateOne({_id:claimed._id,workspaceId:claimed.workspaceId,statusMessageId:'sending'},{
+          $set:{statusMessageId:'uncertain',lastError:'Payment captured; WhatsApp confirmation delivery not verified'}
+        });
+      }
+    }
+  }
+  return PaymentOrder.findOne({_id:order._id,workspaceId:order.workspaceId});
 }
