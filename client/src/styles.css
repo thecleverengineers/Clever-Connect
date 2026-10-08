@@ -150,3 +150,16 @@ button,input,select,textarea{transition:none}
 @media(max-width:760px){
   .page{min-height:calc(100vh - 70px)}
 }
+
+/* WA SANTA AI integration */
+.adminOpenAISettings{border-color:#d8e6df;background:linear-gradient(135deg,#f8fcfa,#fff)}
+.adminOpenAISettings .sectionHead>div>small{font-size:8px;letter-spacing:.12em;color:#08784a;font-weight:800}
+.aiDashboardTeaser{background:linear-gradient(135deg,#f5fbf7,#fff);border-color:#d8e9df}
+.aiDashboardCards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:14px}
+.aiDashboardCards button{border:1px solid #e0e9e3;background:#fff;border-radius:10px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:4px}
+.aiDashboardCards button>span{font-size:8px;text-transform:uppercase;letter-spacing:.09em;color:#08784a;font-weight:800}
+.aiDashboardCards button>b{font-size:11px;color:#304137}
+.aiDashboardCards button>small{font-size:9px;color:#829087;line-height:1.45}
+.authCard{max-height:94vh;overflow:auto;scrollbar-width:thin;padding-right:4px}
+.authCard select{border:1px solid #d9e2dc;border-radius:10px;padding:13px 14px;background:white;outline:none}
+@media(max-width:900px){.aiDashboardCards{grid-template-columns:1fr}}
