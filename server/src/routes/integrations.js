@@ -21,6 +21,10 @@ const view=x=>({
   otpTemplateName:x.otpTemplateName||'',
   otpTemplateLanguage:x.otpTemplateLanguage||'en_US',
   hasAccessToken:!!x.accessTokenEncrypted,
+  connectionStatus:x.connectionStatus||'connected',
+  connectedAt:x.connectedAt||null,
+  lastCheckedAt:x.lastCheckedAt||null,
+  lastError:x.lastError||'',
   webhookVerifyToken:webhookVerifyToken()
 });
 
@@ -91,18 +95,24 @@ r.post('/whatsapp-connections',async(req,res)=>{
     accessTokenEncrypted:encrypt(accessToken),
     graphVersion:/^v\d+\.\d+$/.test(String(req.body.graphVersion||''))?String(req.body.graphVersion):'v23.0',
     otpTemplateName:String(req.body.otpTemplateName||'').trim(),
-    otpTemplateLanguage:String(req.body.otpTemplateLanguage||'en_US').trim()
+    otpTemplateLanguage:String(req.body.otpTemplateLanguage||'en_US').trim(),
+    connectionStatus:'connected',
+    connectedAt:new Date()
   });
   try{
     const result=await testConnection(row.toObject());
-    if(result.displayPhoneNumber){
-      row.displayPhoneNumber=result.displayPhoneNumber;
-      await row.save();
-    }
+    row.connectionStatus='connected';
+    row.lastCheckedAt=new Date();
+    row.lastError='';
+    if(result.displayPhoneNumber)row.displayPhoneNumber=result.displayPhoneNumber;
+    await row.save();
     res.status(201).json({connection:view(row),test:result});
   }catch(e){
-    await row.deleteOne();
-    res.status(502).json({message:'Connection test failed: '+e.message});
+    row.connectionStatus='error';
+    row.lastCheckedAt=new Date();
+    row.lastError=String(e.message||'Connection test failed').slice(0,500);
+    await row.save();
+    res.status(201).json({connection:view(row),test:{ok:false,message:row.lastError},warning:'Connection saved. Fix credentials and test again; it will remain saved until disconnected.'});
   }
 });
 
@@ -119,7 +129,10 @@ r.put('/whatsapp-connections/:id',async(req,res)=>{
   if(req.body.otpTemplateName!==undefined)row.otpTemplateName=String(req.body.otpTemplateName||'').trim();
   if(req.body.otpTemplateLanguage!==undefined)row.otpTemplateLanguage=String(req.body.otpTemplateLanguage||'en_US').trim();
   if(req.body.accessToken)row.accessTokenEncrypted=encrypt(String(req.body.accessToken).trim());
-  if(req.body.enabled!==undefined)row.enabled=!!req.body.enabled;
+  if(req.body.enabled!==undefined){
+    row.enabled=!!req.body.enabled;
+    row.connectionStatus=row.enabled?(row.connectionStatus==='disabled'?'connected':row.connectionStatus):'disabled';
+  }
   await row.save();
   res.json(view(row));
 });
@@ -130,9 +143,21 @@ r.post('/whatsapp-connections/:id/test',async(req,res)=>{
   if(!x)return res.sendStatus(404);
   try{
     const result=await testConnection(x);
-    if(result.displayPhoneNumber)await Integration.updateOne({_id:x._id},{$set:{displayPhoneNumber:result.displayPhoneNumber}});
+    await Integration.updateOne({_id:x._id},{$set:{
+      displayPhoneNumber:result.displayPhoneNumber||x.displayPhoneNumber||'',
+      connectionStatus:'connected',
+      lastCheckedAt:new Date(),
+      lastError:''
+    }});
     res.json(result);
-  }catch(e){res.status(502).json({message:e.message})}
+  }catch(e){
+    await Integration.updateOne({_id:x._id},{$set:{
+      connectionStatus:'error',
+      lastCheckedAt:new Date(),
+      lastError:String(e.message||'Connection test failed').slice(0,500)
+    }});
+    res.status(502).json({message:e.message,connectionPreserved:true});
+  }
 });
 
 r.post('/whatsapp-connections/:id/default',async(req,res)=>{
