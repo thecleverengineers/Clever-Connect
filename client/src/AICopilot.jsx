@@ -111,6 +111,8 @@ function MessageStudio({status,onCreated}){
 
 function TemplateStudio({onCreated}){
   const[result,setResult]=useState(null),[busy,setBusy]=useState(false),[err,setErr]=useState('');
+  const[profiles,setProfiles]=useState([]),[profileId,setProfileId]=useState('');
+  useEffect(()=>{api('/integrations/whatsapp-connections').then(x=>{const m=(x.connections||[]).filter(p=>p.provider==='meta'&&p.enabled);setProfiles(m);if(!profileId&&m[0])setProfileId(m[0].id)}).catch(()=>{})},[]);
   async function generate(e){
     e.preventDefault();setBusy(true);setErr('');
     try{const x=await api('/ai/template',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});setResult(x.template)}
@@ -119,7 +121,22 @@ function TemplateStudio({onCreated}){
   async function save(){
     try{
       await api('/templates',{method:'POST',body:JSON.stringify({name:result.name,body:result.body,category:result.category,language:result.language})});
-      onCreated('AI template saved locally. Open Templates to review or submit it to Meta.');
+      onCreated('AI template saved locally.');
+    }catch(e){setErr(e.message)}
+  }
+  async function submitMeta(){
+    if(!profileId)return setErr('Choose a connected Meta WhatsApp profile first.');
+    try{
+      const bodyExamples=(result.variables||[]).map(v=>v.example);
+      await api('/templates/meta/'+profileId,{method:'POST',body:JSON.stringify({
+        name:result.name,
+        metaTemplateName:result.name,
+        body:result.body,
+        category:result.category,
+        language:result.language,
+        bodyExamples
+      })});
+      onCreated('AI template submitted to Meta for review.');
     }catch(e){setErr(e.message)}
   }
   return <div className="aiToolGrid"><section><div className="aiSectionHead"><div><small>META TEMPLATE STUDIO</small><h2>Draft WhatsApp templates</h2><p>Generate a structured template draft for review before Meta submission.</p></div></div>
@@ -133,7 +150,8 @@ function TemplateStudio({onCreated}){
       <small>{result.category} · {result.language}</small><h2>{result.name}</h2><p>{result.reason}</p>
       <div className="aiMessagePreview">{result.body}</div>
       <div className="aiVariables">{result.variables?.map((v,i)=><span key={i}><b>{v.key}</b><small>{v.example}</small></span>)}</div>
-      <div className="aiActions"><button onClick={()=>navigator.clipboard?.writeText(result.body)}>Copy</button><button className="primary" onClick={save}>Save template draft</button></div>
+      {!!profiles.length&&<label className="aiMetaProfileSelect">Submit using Meta profile<select value={profileId} onChange={e=>setProfileId(e.target.value)}><option value="">Choose profile</option>{profiles.map(p=><option value={p.id} key={p.id}>{p.name}{p.displayPhoneNumber?' · '+p.displayPhoneNumber:''}</option>)}</select></label>}
+      <div className="aiActions"><button onClick={()=>navigator.clipboard?.writeText(result.body)}>Copy</button><button onClick={save}>Save local draft</button>{profiles.length>0&&<button className="primary" onClick={submitMeta}>Submit to Meta</button>}</div>
     </>:<div className="aiEmpty">Describe the use case and WA SANTA AI will generate a Meta-ready draft.</div>}</section></div>
 }
 
