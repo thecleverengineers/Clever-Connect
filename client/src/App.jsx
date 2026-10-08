@@ -2,6 +2,7 @@ import React,{useEffect,useMemo,useState}from'react';
 import{api,BASE,getCached,warmWorkspace}from'./api.js';
 import Payments from './Payments.jsx';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
+import DropFileInput from './DropFileInput.jsx';
 import {Inbox,FlowBuilder} from './ConversationSuite.jsx';
 import AICopilot from './AICopilot.jsx';
 import {BUSINESS_TYPES,BUSINESS_GOALS,BRAND_TONES,LANGUAGES} from './business.js';
@@ -443,7 +444,7 @@ function Contacts(){
           URL.revokeObjectURL(url);
         }catch(e){setErr(e.message)}
       }}>↓ Excel template</button>
-      <form onSubmit={importFile}><select name="listId"><option value="">No list</option>{lists.map(x=><option value={x._id} key={x._id}>{x.name}</option>)}</select><input type="file" name="file" accept=".xlsx,.xls,.csv" required/><label className="check compact"><input type="checkbox" name="confirmConsent"/> Imported contacts have documented opt-in</label><button className="primary">Import</button></form>
+      <form onSubmit={importFile}><select name="listId"><option value="">No list</option>{lists.map(x=><option value={x._id} key={x._id}>{x.name}</option>)}</select><DropFileInput name="file" accept=".xlsx,.xls,.csv" required description="Drop your Excel/CSV file here or choose a file"/><label className="check compact"><input type="checkbox" name="confirmConsent"/> Imported contacts have documented opt-in</label><button className="primary">Import</button></form>
     </div>
     {selected.size>0&&<div className="bulkBar"><b>{selected.size} selected</b><button onClick={()=>bulkConsent('opted_in')}>Mark opted in</button><button onClick={()=>bulkConsent('opted_out')}>Opt out / suppress</button><button className="danger" onClick={bulkDelete}>Delete</button></div>}
     {show&&<div className="panel"><form key={editing?editing._id:'new'} className="formGrid" onSubmit={save}>
@@ -745,7 +746,7 @@ function EditProfile({go,onSessionUpdate}){
         <div className="largeAvatar">{avatar?<img src={avatar} alt="Profile preview"/>:(data.user.name?.[0]?.toUpperCase()||'U')}</div>
         <h2>Profile image</h2>
         <p>Upload a JPG, PNG or WebP image under 350 KB.</p>
-        <label className="uploadButton">Choose image<input type="file" accept="image/*" onChange={chooseImage}/></label>
+        <DropFileInput accept="image/jpeg,image/png,image/webp" description="Drop a profile image here or choose a file" onFile={file=>chooseImage({target:{files:[file]}})}/>
         {avatar&&<button className="danger" onClick={()=>setAvatar('')}>Remove image</button>}
       </section>
       <section>
