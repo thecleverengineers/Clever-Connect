@@ -162,16 +162,20 @@ function Shell({session,onLogout,onSessionUpdate}){
 
 function AIOverview({go}){
   const[data,setData]=useState(null);
+  const[status,setStatus]=useState(null);
   useEffect(()=>{
     let active=true;
     api('/ai/status').then(s=>{
-      if(!active||!s.enabled||!s.profileComplete)return;
+      if(!active)return;
+      setStatus(s);
+      if(!s.enabled||!s.profileComplete)return;
       return api('/ai/recommendations').then(x=>{if(active)setData(x.recommendations)});
     }).catch(()=>{});
     return()=>{active=false};
   },[]);
+  if(status&& !status.enabled)return null;
   if(!data?.recommendations?.length)return <section className="aiDashboardTeaser">
-    <div className="sectionHead"><div><span className="eyebrow">WA SANTA AI</span><h2>AI recommendations</h2><p>Complete your AI business profile to unlock automatic campaign, message and template suggestions.</p></div><button onClick={()=>go('ai')}>Open AI Copilot</button></div>
+    <div className="sectionHead"><div><span className="eyebrow">WA SANTA AI</span><h2>AI recommendations</h2><p>{status?.profileComplete?'Preparing business-aware recommendations…':'Complete your AI business profile to unlock automatic campaign, message and template suggestions.'}</p></div><button onClick={()=>go('ai')}>Open AI Copilot</button></div>
   </section>;
   return <section className="aiDashboardTeaser">
     <div className="sectionHead"><div><span className="eyebrow">WA SANTA AI</span><h2>{data.headline||'Recommended for your business'}</h2><p>{data.summary}</p></div><button className="primary" onClick={()=>go('ai')}>Open AI Copilot</button></div>
