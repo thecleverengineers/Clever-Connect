@@ -1,4 +1,5 @@
 import { Integration,Workspace,Delivery } from '../models.js';
+import {InboundWindow} from '../paymentModels.js';
 import { decrypt } from '../utils/crypto.js';
 import {accessForWorkspace,planLimitsForWorkspace} from '../plan.js';
 
@@ -58,7 +59,15 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
         text:{preview_url:false,body:String(text||'').trim()}
       };
 
-  if(body.type==='text'&&!body.text.body) throw new Error('Message text is required');
+  if(body.type==='text'){
+    if(!body.text.body)throw new Error('Message text is required');
+    // A consented contact is not automatically eligible for free-form Meta messages.
+    // Templates are mandatory outside the 24-hour inbound customer-service window.
+    const window=await InboundWindow.findOne({workspaceId,integrationId:integration._id,phone:to}).lean();
+    if(!window||Date.now()-new Date(window.lastInboundAt).getTime()>=24*60*60*1000){
+      throw new Error('Free-form Meta message blocked: customer must have messaged this number within 24 hours. Use an approved Meta template instead.');
+    }
+  }
 
   const version=integration.graphVersion||'v23.0';
   let response;
