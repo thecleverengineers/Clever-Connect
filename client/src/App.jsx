@@ -297,11 +297,13 @@ function Campaigns(){
     const fd=new FormData(e.currentTarget);
     const o=Object.fromEntries(fd);
     o.contactIds=fd.getAll('contactIds');
-    o.contentType=draft.contentType;
-    o.message=draft.message;
+    o.sendMode=draft.sendMode||'freeform';
+    o.templateId=o.sendMode==='template'?draft.templateId:null;
+    o.templateParams=o.sendMode==='template'?draft.templateParams:[];
+    o.contentType=o.sendMode==='template'?'text':draft.contentType;
+    o.message=o.sendMode==='template'?'':draft.message;
     o.integrationId=draft.integrationId||null;
-    o.carouselCards=draft.contentType==='carousel'?draft.carouselCards:[];
-    if(draft.contentType==='carousel')o.templateId=null;
+    o.carouselCards=o.sendMode==='freeform'&&draft.contentType==='carousel'?draft.carouselCards:[];
     if(!o.scheduledAt)delete o.scheduledAt;
     if(o.audienceType!=='list')o.listId=null;
     try{
@@ -329,9 +331,9 @@ function Campaigns(){
       <label htmlFor="campaign-name">Campaign name<input id="campaign-name" name="name" required defaultValue={editing?.name||''}/></label>
       <label htmlFor="campaign-audience">Audience<select id="campaign-audience" name="audienceType" defaultValue={editing?.audienceType||'all'}><option value="all">All opted-in contacts</option><option value="list">Contact list</option><option value="contacts">Specific contacts</option></select></label>
       <label>Contact list<select name="listId" defaultValue={editing?.listId?._id||editing?.listId||''}><option value="">Choose list</option>{lists.map(x=><option value={x._id} key={x._id}>{x.name} ({x.contactCount||0})</option>)}</select></label>
-      <label>Template<select name="templateId" disabled={draft.contentType==='carousel'} defaultValue={editing?.templateId?._id||editing?.templateId||''}><option value="">Freeform message</option>{templates.map(x=><option value={x._id} key={x._id}>{x.name}</option>)}</select></label>
+
       <label className="full">Specific contacts<select name="contactIds" multiple size="5" defaultValue={editing?.contactIds?.map(String)||[]}>{contacts.filter(x=>x.consentStatus==='opted_in'&&!x.suppressed).map(x=><option value={x._id} key={x._id}>{x.name||'Unnamed'} · {x.phone}</option>)}</select></label>
-      <CampaignComposer draft={draft} onChange={setDraft}/>
+      <CampaignComposer draft={draft} onChange={setDraft} templates={templates}/>
       <label htmlFor="campaign-scheduled-at">Schedule for<input id="campaign-scheduled-at" type="datetime-local" name="scheduledAt" defaultValue={editing?.scheduledAt?new Date(new Date(editing.scheduledAt).getTime()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):''}/></label>
       <div className="actions"><button type="button" onClick={()=>{setShow(false);setEditing(null);setDraft(blankCampaignDraft())}}>Cancel</button><button className="primary">{editing?'Update campaign':'Save campaign'}</button></div>
     </form></div>}
