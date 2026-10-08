@@ -6,6 +6,19 @@ import {accessForWorkspace,planLimitsForWorkspace} from '../plan.js';
 
 const normalizePhone=(phone='')=>String(phone).replace(/[^0-9]/g,'');
 
+// Conservative app pacing per connected phone. Meta's *actual* portfolio
+// messaging tier/throughput is dynamic and continues to be enforced by Meta.
+// This local 4-msg/s control is not presented as an official Meta limit.
+const nextSendByProfile=new Map();
+async function paceProfile(profileId){
+  const id=String(profileId);
+  const now=Date.now();
+  const due=Math.max(now,nextSendByProfile.get(id)||now);
+  nextSendByProfile.set(id,due+250);
+  if(due>now)await new Promise(resolve=>setTimeout(resolve,due-now));
+}
+
+
 async function enforceMessageAllowance(workspaceId){
   const workspace=await Workspace.findById(workspaceId).lean();
   const access=accessForWorkspace(workspace);
@@ -90,6 +103,7 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
     }
   }
 
+  await paceProfile(integration._id);
   const version=integration.graphVersion||'v23.0';
   let response;
   try{
