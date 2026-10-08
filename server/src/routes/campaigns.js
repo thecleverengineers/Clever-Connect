@@ -39,7 +39,7 @@ async function normalizeCampaign(req, existing=null){
 r.get('/',async(req,res)=>{
   const q={workspaceId:req.workspaceId};
   if(req.query.status) q.status=req.query.status;
-  const rows=await Campaign.find(q).sort({createdAt:-1}).populate('listId','name').populate('templateId','name body').lean();
+  const rows=await Campaign.find(q).sort({createdAt:-1}).populate('listId','name').populate('templateId','name body integrationId metaStatus metaTemplateName').lean();
   res.json(rows);
 });
 
@@ -94,7 +94,7 @@ r.post('/single/send',async(req,res)=>{
       .replace(/{{\s*name\s*}}/gi,contact?.name||'')
       .replace(/{{\s*phone\s*}}/gi,contact?.phone||phone)
       .replace(/{{\s*email\s*}}/gi,contact?.email||'');
-    const result=await sendWhatsApp({workspaceId:req.workspaceId,phone,text:message,template});
+    const result=await sendWhatsApp({workspaceId:req.workspaceId,phone,text:message,template,integrationId:template?.integrationId||null});
     const d=await Delivery.create({
       workspaceId:req.workspaceId,
       contactId:contact?._id||null,
