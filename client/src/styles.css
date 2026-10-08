@@ -124,3 +124,16 @@
 .connectionBadges{display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:flex-end}.connectionBadges .status{white-space:nowrap}
 @media(max-width:850px){.facebookConnectHero{align-items:flex-start;flex-direction:column}.facebookConnectAction{align-items:stretch;min-width:0;width:100%}.facebookButton{width:100%}.facebookConnectAction small{text-align:left}.facebookConnectCopy{align-items:flex-start}}
 @media(max-width:520px){.facebookConnectHero{padding:16px}.facebookLogo{width:40px;height:40px;flex-basis:40px;font-size:24px}.facebookConnectCopy h2{font-size:17px}}
+
+/* Super Admin — Meta Embedded Signup settings */
+.adminMetaSettings{border-color:#d9e6f7;background:linear-gradient(135deg,#fbfdff,#fff)}
+.adminMetaSettings .sectionHead>div>small{font-size:8px;letter-spacing:.12em;color:#1877f2;font-weight:800}
+.metaSecretState{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.metaSecretState span{background:#f7faf8;border:1px solid #e3eae6;border-radius:9px;padding:10px;min-width:0}
+.metaSecretState b{display:block;font-size:9px;color:#35463c;margin-bottom:3px}
+.metaSecretState small{display:block;font-size:8px;color:#839087;line-height:1.45;overflow-wrap:anywhere}
+.adminMetaHelp{display:grid;grid-template-columns:1fr 1fr;gap:10px;border-top:1px solid #edf1ee;margin-top:16px;padding-top:14px}
+.adminMetaHelp span{display:flex;flex-direction:column;gap:4px}
+.adminMetaHelp b{font-size:10px;color:#32443a}
+.adminMetaHelp small{font-size:9px;color:#87938c;line-height:1.5}
+@media(max-width:760px){.metaSecretState,.adminMetaHelp{grid-template-columns:1fr}}
