@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import {Integration,Workspace,User} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
 import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
-import {planLimitsForWorkspace} from '../plan.js';
+import {planLimitsForWorkspace,refreshWorkspaceAccess} from '../plan.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -25,10 +25,28 @@ const view=x=>({
 });
 
 async function limits(workspaceId){
-  const w=await Workspace.findById(workspaceId).lean();
+  const refreshed=await refreshWorkspaceAccess(workspaceId);
+  const w=refreshed?.workspace?.toObject?.()||refreshed?.workspace||await Workspace.findById(workspaceId).lean();
   const max=(await planLimitsForWorkspace(w)).metaConnections;
   const used=await Integration.countDocuments({workspaceId,provider:'meta'});
-  return {plan:w?.plan||'trial',max,used};
+  return {
+    plan:w?.plan||'trial',
+    max,
+    used,
+    access:{
+      allowed:!!refreshed?.access?.allowed,
+      state:refreshed?.access?.state||w?.subscriptionStatus||'expired',
+      endsAt:refreshed?.access?.endsAt||null
+    }
+  };
+}
+async function requireMessagingAccess(workspaceId,res){
+  const usage=await limits(workspaceId);
+  if(!usage.access.allowed){
+    res.status(402).json({message:'An active subscription or valid trial is required to manage Meta WhatsApp connections'});
+    return null;
+  }
+  return usage;
 }
 
 async function testConnection(x){
@@ -54,7 +72,8 @@ r.get('/whatsapp-connections',async(req,res)=>{
 });
 
 r.post('/whatsapp-connections',async(req,res)=>{
-  const usage=await limits(req.workspaceId);
+  const usage=await requireMessagingAccess(req.workspaceId,res);
+  if(!usage)return;
   if(usage.used>=usage.max)return res.status(409).json({message:'Your '+usage.plan+' plan allows '+usage.max+' Meta WhatsApp connection(s)'});
   const name=String(req.body.name||'WhatsApp connection').trim();
   const phoneNumberId=String(req.body.phoneNumberId||'').trim();
@@ -88,6 +107,7 @@ r.post('/whatsapp-connections',async(req,res)=>{
 });
 
 r.put('/whatsapp-connections/:id',async(req,res)=>{
+  if(!await requireMessagingAccess(req.workspaceId,res))return;
   if(!mongoose.isValidObjectId(req.params.id))return res.sendStatus(404);
   const row=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId});
   if(!row)return res.sendStatus(404);
@@ -105,6 +125,7 @@ r.put('/whatsapp-connections/:id',async(req,res)=>{
 });
 
 r.post('/whatsapp-connections/:id/test',async(req,res)=>{
+  if(!await requireMessagingAccess(req.workspaceId,res))return;
   const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId}).lean();
   if(!x)return res.sendStatus(404);
   try{
@@ -115,6 +136,7 @@ r.post('/whatsapp-connections/:id/test',async(req,res)=>{
 });
 
 r.post('/whatsapp-connections/:id/default',async(req,res)=>{
+  if(!await requireMessagingAccess(req.workspaceId,res))return;
   const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId,enabled:true});
   if(!x)return res.status(404).json({message:'Connection not found or disabled'});
   await Integration.updateMany({workspaceId:req.workspaceId},{$set:{isDefault:false}});
@@ -123,6 +145,7 @@ r.post('/whatsapp-connections/:id/default',async(req,res)=>{
 });
 
 r.delete('/whatsapp-connections/:id',async(req,res)=>{
+  if(!await requireMessagingAccess(req.workspaceId,res))return;
   const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId});
   if(!x)return res.sendStatus(404);
   if(x.provider==='demo')return res.status(409).json({message:'The built-in demo provider cannot be deleted'});
