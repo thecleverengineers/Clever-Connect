@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import {User,Workspace,Integration} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
-import {planLimits} from '../plan.js';
+import {planLimitsForWorkspace,accessForWorkspace} from '../plan.js';
 import {createOtp,hashOtp,normalizePhone,sendMetaOtp} from '../otp.js';
 
 const r=express.Router();
@@ -25,15 +25,20 @@ const publicUser=u=>({
 async function workspaceSummary(workspaceId){
   const w=await Workspace.findById(workspaceId).lean();
   if(!w) throw new Error('Workspace unavailable');
-  const limits=planLimits(w.plan);
+  const limits=await planLimitsForWorkspace(w);
   const [teamCount,metaConnections]=await Promise.all([
     User.countDocuments({workspaceId}),
     Integration.countDocuments({workspaceId,provider:'meta'})
   ]);
   return {
-    id:w._id,name:w.name,plan:w.plan,
-    subscriptionStatus:w.subscriptionStatus||'active',
+    id:w._id,name:w.name,plan:w.plan||'trial',
+    subscriptionPlanId:w.subscriptionPlanId||null,
+    subscriptionStatus:w.subscriptionStatus||'trialing',
+    trialStartedAt:w.trialStartedAt||null,
+    trialEndsAt:w.trialEndsAt||null,
+    currentPeriodStart:w.currentPeriodStart||null,
     currentPeriodEnd:w.currentPeriodEnd||null,
+    access:accessForWorkspace(w),
     limits,usage:{teamMembers:teamCount,metaConnections}
   };
 }
@@ -85,9 +90,9 @@ r.get('/team',async(req,res)=>{
 r.post('/team',async(req,res)=>{
   if(!canManage(req.user))return res.status(403).json({message:'Only workspace owners or admins can add team members'});
   const workspace=await Workspace.findById(req.workspaceId).lean();
-  const limits=planLimits(workspace.plan);
+  const limits=await planLimitsForWorkspace(workspace);
   const count=await User.countDocuments({workspaceId:req.workspaceId});
-  if(count>=limits.teamMembers)return res.status(409).json({message:'Your '+workspace.plan+' plan allows '+limits.teamMembers+' team members'});
+  if(count>=limits.teamMembers)return res.status(409).json({message:'Your current WA SANTA access allows '+limits.teamMembers+' team members'});
   const name=String(req.body.name||'').trim();
   const email=String(req.body.email||'').trim().toLowerCase();
   const password=String(req.body.temporaryPassword||'');
