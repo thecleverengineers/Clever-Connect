@@ -9,6 +9,7 @@ const nav=[
   ['schedule','Schedule','◷'],
   ['templates','Templates','▤'],
   ['reports','Delivery reports','▥'],
+  ['whatsapp-api','Meta WhatsApp API','☏'],
   ['subscription','Subscription','₹'],
   ['settings','Settings','⚙']
 ];
@@ -531,7 +532,7 @@ function Settings({go}){
         <h2>Webhook endpoint</h2>
         <p>Meta delivery webhooks are received by the WA SANTA API.</p>
         <code>{BASE.replace(/\/api$/,'')+'/api/webhooks/meta'}</code>
-        <p className="muted">The verification token is available inside Profile → Meta WhatsApp connection settings.</p>
+        <p className="muted">The verification token is available inside the Meta WhatsApp API page.</p>
       </section>
     </div>
   </div>
@@ -595,8 +596,6 @@ function Profile({session,go,onSessionUpdate}){
   const[connections,setConnections]=useState([]);
   const[connSub,setConnSub]=useState(null);
   const[team,setTeam]=useState([]);
-  const[showConnection,setShowConnection]=useState(false);
-  const[editingConnection,setEditingConnection]=useState(null);
   const[showMember,setShowMember]=useState(false);
   const[otpSent,setOtpSent]=useState(false);
   const[msg,setMsg]=useState('');
@@ -633,24 +632,6 @@ function Profile({session,go,onSessionUpdate}){
     try{
       await api('/account/workspace',{method:'PUT',body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});
       const fresh=await api('/auth/me');onSessionUpdate(fresh);setMsg('Workspace updated.');await load();
-    }catch(e){setErr(e.message)}
-  }
-  async function saveConnection(e){
-    e.preventDefault();setErr('');setMsg('');
-    const o=Object.fromEntries(new FormData(e.currentTarget));
-    try{
-      if(editingConnection)await api('/integrations/whatsapp-connections/'+editingConnection.id,{method:'PUT',body:JSON.stringify(o)});
-      else await api('/integrations/whatsapp-connections',{method:'POST',body:JSON.stringify(o)});
-      setShowConnection(false);setEditingConnection(null);setMsg(editingConnection?'WhatsApp connection updated.':'Meta WhatsApp connected.');await load();
-    }catch(e){setErr(e.message)}
-  }
-  async function connectionAction(x,type){
-    setErr('');setMsg('');
-    try{
-      if(type==='test'){const y=await api('/integrations/whatsapp-connections/'+x.id+'/test',{method:'POST'});setMsg('Connected: '+(y.verifiedName||y.displayPhoneNumber||x.name))}
-      if(type==='default'){await api('/integrations/whatsapp-connections/'+x.id+'/default',{method:'POST'});setMsg(x.name+' is now the default sender.')}
-      if(type==='delete'){if(!confirm('Remove '+x.name+'?'))return;await api('/integrations/whatsapp-connections/'+x.id,{method:'DELETE'});setMsg('WhatsApp connection removed.')}
-      await load();
     }catch(e){setErr(e.message)}
   }
   async function addMember(e){
@@ -724,27 +705,17 @@ function Profile({session,go,onSessionUpdate}){
       </section>
     </div>
 
-    <section>
-      <div className="sectionHead"><div><h2>Connect Meta WhatsApp</h2><p>Connect multiple WhatsApp Cloud API numbers according to your subscription plan.</p></div>{data.workspace.access?.allowed&&connSub&&connSub.used<connSub.max&&<button className="primary" onClick={()=>{setEditingConnection(null);setShowConnection(true)}}>+ Add connection</button>}</div>
-      <div className="planHint">{connSub?.plan} plan · {connSub?.used||0} of {connSub?.max||1} Meta connections used</div>{!data.workspace.access?.allowed&&<Notice type="bad">Meta WhatsApp connections are locked until a WA SANTA subscription is activated.</Notice>}
-      {showConnection&&<div className="panel nestedPanel"><form key={editingConnection?.id||'new-meta'} className="formGrid" onSubmit={saveConnection}>
-        <label>Connection name<input name="name" defaultValue={editingConnection?.name||''} placeholder="Sales WhatsApp" required/></label>
-        <label>Graph version<input name="graphVersion" defaultValue={editingConnection?.graphVersion||'v23.0'}/></label>
-        <label>Phone Number ID<input name="phoneNumberId" defaultValue={editingConnection?.phoneNumberId||''} required/></label>
-        <label>Business Account ID<input name="businessAccountId" defaultValue={editingConnection?.businessAccountId||''}/></label>
-        <label className="full">Access token<input type="password" name="accessToken" required={!editingConnection} placeholder={editingConnection?.hasAccessToken?'Saved securely — leave blank to keep':'Meta system-user access token'}/></label>
-        <label>OTP authentication template<input name="otpTemplateName" defaultValue={editingConnection?.otpTemplateName||''} placeholder="login_otp"/></label>
-        <label>OTP template language<input name="otpTemplateLanguage" defaultValue={editingConnection?.otpTemplateLanguage||'en_US'}/></label>
-        <div className="actions full"><button type="button" onClick={()=>{setShowConnection(false);setEditingConnection(null)}}>Cancel</button><button className="primary">{editingConnection?'Update connection':'Connect & verify'}</button></div>
-      </form></div>}
-      <div className="connectionGrid">{connections.map(x=><article className={'connectionCard '+(x.isDefault?'defaultConnection':'')} key={x.id}>
-        <div className="cardTop"><div><small>{x.provider==='meta'?'META CLOUD API':'DEMO'}</small><h3>{x.name}</h3></div>{x.isDefault&&<em className="status completed">Default</em>}</div>
-        <p>{x.provider==='meta'?(x.displayPhoneNumber||x.phoneNumberId):'Safe test provider — no real WhatsApp messages are sent.'}</p>
-        {x.provider==='meta'&&<div className="connectionMeta"><span>OTP: {x.otpTemplateName||'Not configured'}</span><span>{x.enabled?'Enabled':'Disabled'}</span></div>}
-        <footer><span>{x.hasAccessToken?'Token secured':'No token required'}</span><div className="rowActions">
-          {x.provider==='meta'&&<><button onClick={()=>connectionAction(x,'test')}>Test</button><button onClick={()=>{setEditingConnection(x);setShowConnection(true)}}>Edit</button>{!x.isDefault&&<button onClick={()=>connectionAction(x,'default')}>Make default</button>}<button className="danger" onClick={()=>connectionAction(x,'delete')}>Remove</button></>}
-        </div></footer>
-      </article>)}</div>
+    <section className="metaShortcut">
+      <div>
+        <small>META WHATSAPP CLOUD API</small>
+        <h2>WhatsApp API connections</h2>
+        <p>Manage WhatsApp Business API numbers on a dedicated page. Your plan currently allows {data.workspace.limits.metaConnections} connection(s).</p>
+      </div>
+      <div className="metaShortcutStats">
+        <span><b>{connections.filter(x=>x.provider==='meta').length}</b> connected</span>
+        <span><b>{connections.filter(x=>x.provider==='meta'&&x.isDefault).length}</b> default sender</span>
+        <button className="primary" onClick={()=>go('whatsapp-api')}>Manage Meta WhatsApp API</button>
+      </div>
     </section>
 
     <div className="accountGrid">
@@ -772,6 +743,142 @@ function Profile({session,go,onSessionUpdate}){
   </div>
 }
 
+
+function WhatsAppApi({go}){
+  const[connections,setConnections]=useState([]);
+  const[subscription,setSubscription]=useState(null);
+  const[showForm,setShowForm]=useState(false);
+  const[editing,setEditing]=useState(null);
+  const[msg,setMsg]=useState('');
+  const[err,setErr]=useState('');
+
+  async function load(){
+    setErr('');
+    try{
+      const x=await api('/integrations/whatsapp-connections');
+      setConnections(x.connections||[]);
+      setSubscription(x.subscription||null);
+    }catch(e){setErr(e.message)}
+  }
+  useEffect(()=>{load()},[]);
+  const meta=connections.filter(x=>x.provider==='meta');
+  const demo=connections.filter(x=>x.provider==='demo');
+  const allowed=subscription?.access?.allowed!==false;
+  const canAdd=allowed&&subscription&&subscription.used<subscription.max;
+  const verifyToken=connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
+  const webhook=BASE.replace(/\/api$/,'')+'/api/webhooks/meta';
+
+  async function save(e){
+    e.preventDefault();setErr('');setMsg('');
+    const o=Object.fromEntries(new FormData(e.currentTarget));
+    try{
+      if(editing){
+        await api('/integrations/whatsapp-connections/'+editing.id,{method:'PUT',body:JSON.stringify(o)});
+        setMsg('Meta WhatsApp connection updated.');
+      }else{
+        await api('/integrations/whatsapp-connections',{method:'POST',body:JSON.stringify(o)});
+        setMsg('Meta WhatsApp connection added and verified.');
+      }
+      setShowForm(false);setEditing(null);await load();
+    }catch(e){setErr(e.message)}
+  }
+  async function act(x,type){
+    setErr('');setMsg('');
+    try{
+      if(type==='test'){
+        const y=await api('/integrations/whatsapp-connections/'+x.id+'/test',{method:'POST'});
+        setMsg('Connection successful: '+(y.verifiedName||y.displayPhoneNumber||x.name));
+      }
+      if(type==='default'){
+        await api('/integrations/whatsapp-connections/'+x.id+'/default',{method:'POST'});
+        setMsg(x.name+' is now the default WhatsApp sender.');
+      }
+      if(type==='delete'){
+        if(!confirm('Remove '+x.name+'?'))return;
+        await api('/integrations/whatsapp-connections/'+x.id,{method:'DELETE'});
+        setMsg('Meta WhatsApp connection removed.');
+      }
+      await load();
+    }catch(e){setErr(e.message)}
+  }
+
+  return <div className="page">
+    <div className="title"><div><span>WHATSAPP CLOUD API</span><h1>Meta WhatsApp API</h1><p>Connect and manage multiple WhatsApp Business API numbers according to your subscription plan.</p></div>{canAdd&&<button className="primary" onClick={()=>{setEditing(null);setShowForm(true)}}>+ Connect WhatsApp API</button>}</div>
+    <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
+
+    <section className="whatsappApiHero">
+      <div><small>SUBSCRIPTION LIMIT</small><h2>{subscription?.used||0} of {subscription?.max||0} Meta connections used</h2><p>{subscription?.plan||'trial'} plan · {subscription?.access?.state||'loading'} access</p></div>
+      <div className="apiUsageMeter"><i style={{width:Math.min(100,((subscription?.used||0)/Math.max(1,subscription?.max||1))*100)+'%'}}></i></div>
+      {!allowed&&<Notice type="bad">Meta WhatsApp API management is locked until your subscription or trial is active.</Notice>}
+      {allowed&&subscription?.used>=subscription?.max&&<Notice type="bad">You have reached your plan limit. Upgrade your subscription to connect another WhatsApp number.</Notice>}
+    </section>
+
+    {showForm&&<div className="panel metaConnectionForm">
+      <div className="sectionHead"><div><h2>{editing?'Edit Meta connection':'Connect Meta WhatsApp Cloud API'}</h2><p>Use credentials from Meta Business Manager / WhatsApp Manager.</p></div><button onClick={()=>{setShowForm(false);setEditing(null)}}>Close</button></div>
+      <form key={editing?.id||'new-meta'} className="formGrid" onSubmit={save}>
+        <label>Connection name<input name="name" defaultValue={editing?.name||''} placeholder="Sales WhatsApp" required/></label>
+        <label>Graph API version<input name="graphVersion" defaultValue={editing?.graphVersion||'v23.0'} placeholder="v23.0"/></label>
+        <label>Phone Number ID<input name="phoneNumberId" defaultValue={editing?.phoneNumberId||''} required/></label>
+        <label>WhatsApp Business Account ID<input name="businessAccountId" defaultValue={editing?.businessAccountId||''}/></label>
+        <label className="full">Permanent/System-user access token<input type="password" name="accessToken" required={!editing} placeholder={editing?.hasAccessToken?'Saved securely — leave blank to keep current token':'Paste Meta access token'}/></label>
+        <label>OTP authentication template<input name="otpTemplateName" defaultValue={editing?.otpTemplateName||''} placeholder="login_otp"/></label>
+        <label>OTP template language<input name="otpTemplateLanguage" defaultValue={editing?.otpTemplateLanguage||'en_US'} placeholder="en_US"/></label>
+        <div className="actions full"><button type="button" onClick={()=>{setShowForm(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Save changes':'Connect & verify'}</button></div>
+      </form>
+    </div>}
+
+    <section>
+      <div className="sectionHead"><div><h2>Connected Meta WhatsApp numbers</h2><p>Choose a default sender, test credentials, update API settings or remove a connection.</p></div></div>
+      <div className="connectionGrid whatsappConnectionGrid">
+        {meta.map(x=><article className={'connectionCard '+(x.isDefault?'defaultConnection':'')} key={x.id}>
+          <div className="cardTop"><div><small>META CLOUD API</small><h3>{x.name}</h3></div>{x.isDefault&&<em className="status completed">Default sender</em>}</div>
+          <div className="connectionPhone">{x.displayPhoneNumber||'Phone Number ID: '+x.phoneNumberId}</div>
+          <div className="connectionMeta">
+            <span>Graph {x.graphVersion}</span>
+            <span>{x.enabled?'Enabled':'Disabled'}</span>
+          </div>
+          <div className="connectionDetails">
+            <span><small>Business Account ID</small><b>{x.businessAccountId||'Not added'}</b></span>
+            <span><small>OTP template</small><b>{x.otpTemplateName||'Not configured'}</b></span>
+            <span><small>Access token</small><b>{x.hasAccessToken?'Encrypted & stored':'Missing'}</b></span>
+          </div>
+          <footer><span>{x.otpTemplateName?'Ready for WhatsApp OTP 2FA':'Messaging connection'}</span><div className="rowActions">
+            <button onClick={()=>act(x,'test')}>Test connection</button>
+            <button onClick={()=>{setEditing(x);setShowForm(true)}}>Edit</button>
+            {!x.isDefault&&<button onClick={()=>act(x,'default')}>Make default</button>}
+            <button className="danger" onClick={()=>act(x,'delete')}>Remove</button>
+          </div></footer>
+        </article>)}
+        {!meta.length&&<Empty text="No Meta WhatsApp API connections yet."/>}
+      </div>
+    </section>
+
+    <div className="accountGrid metaSetupGrid">
+      <section>
+        <h2>Meta webhook setup</h2>
+        <p>Configure these values in Meta Developer → WhatsApp → Configuration.</p>
+        <label className="copyLabel">Callback URL<code>{webhook}</code></label>
+        <label className="copyLabel">Verify token<code>{verifyToken||'Available after a provider is initialized'}</code></label>
+        <div className="rowActions">
+          <button onClick={()=>navigator.clipboard?.writeText(webhook)}>Copy callback URL</button>
+          {verifyToken&&<button onClick={()=>navigator.clipboard?.writeText(verifyToken)}>Copy verify token</button>}
+        </div>
+      </section>
+      <section>
+        <h2>Connection requirements</h2>
+        <div className="setupChecklist">
+          <span>1 <b>Meta Business portfolio</b><small>Business and WhatsApp account access</small></span>
+          <span>2 <b>Phone Number ID</b><small>From WhatsApp Manager / API Setup</small></span>
+          <span>3 <b>System-user token</b><small>Stored encrypted inside WA SANTA</small></span>
+          <span>4 <b>Approved OTP template</b><small>Required only for WhatsApp 2FA</small></span>
+        </div>
+      </section>
+    </div>
+
+    {!!demo.length&&<section className="demoProviderInfo"><h2>Demo provider</h2><p>The built-in demo provider remains available for testing without sending real WhatsApp messages.</p></section>}
+    <div className="pageBottomActions"><button onClick={()=>go('profile')}>← Back to Profile</button><button onClick={()=>go('subscription')}>View subscription limits</button></div>
+  </div>
+}
 
 function Subscription({onSessionUpdate}){
   const[data,setData]=useState(null);
@@ -973,6 +1080,7 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='schedule')return <Schedule/>;
   if(id==='templates')return <Templates/>;
   if(id==='reports')return <Reports/>;
+  if(id==='whatsapp-api')return <WhatsAppApi go={go}/>;
   if(id==='subscription')return <Subscription onSessionUpdate={onSessionUpdate}/>;
   if(id==='admin'&&session.user.isSuperAdmin)return <SuperAdmin/>;
   if(id==='profile')return <Profile session={session} go={go} onSessionUpdate={onSessionUpdate}/>;
