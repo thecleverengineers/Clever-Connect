@@ -618,6 +618,7 @@ function Profile({session,go,onSessionUpdate}){
   useEffect(()=>{load()},[]);
   if(!data)return <div className="page">{err?<Notice type="bad">{err}</Notice>:<Loading/>}</div>;
   const manager=['owner','admin'].includes(data.user.role);
+  const canManageTeam=manager&&data.workspace.subscriptionStatus==='active';
   const usable2fa=connections.filter(x=>x.provider==='meta'&&x.enabled&&x.otpTemplateName);
 
   async function changePassword(e){
@@ -757,14 +758,15 @@ function Profile({session,go,onSessionUpdate}){
       </section>
 
       <section>
-        <div className="sectionHead"><div><h2>Team</h2><p>{team.length} of {data.workspace.limits.teamMembers} seats used.</p></div>{manager&&team.length<data.workspace.limits.teamMembers&&<button onClick={()=>setShowMember(!showMember)}>+ Add member</button>}</div>
-        {showMember&&<form className="formGrid compactForm teamAdd" onSubmit={addMember}>
+        <div className="sectionHead"><div><h2>Team</h2><p>{team.length} of {data.workspace.limits.teamMembers} seats used.</p></div>{canManageTeam&&team.length<data.workspace.limits.teamMembers&&<button onClick={()=>setShowMember(!showMember)}>+ Add member</button>}</div>
+        {!canManageTeam&&<Notice type="bad">Team management requires an active subscription. You can view existing members, but adding, changing roles, and removing members are locked.</Notice>}
+        {showMember&&canManageTeam&&<form className="formGrid compactForm teamAdd" onSubmit={addMember}>
           <label>Name<input name="name" required/></label><label>Email<input type="email" name="email" required/></label>
           <label>Role<select name="role"><option value="member">Member</option><option value="admin">Admin</option></select></label>
           <label>Temporary password<input type="password" name="temporaryPassword" minLength="8" required/></label>
           <div className="actions full"><button className="primary">Create team account</button></div>
         </form>}
-        <div className="teamList">{team.map(member=><div className="teamMember" key={member.id}><Avatar user={member} className="teamAvatar"/><div><b>{member.name}</b><small>{member.email}</small></div>{manager&&member.role!=='owner'&&member.id!==data.user.id?<><select value={member.role} onChange={e=>roleChange(member,e.target.value)}><option value="member">Member</option><option value="admin">Admin</option></select><button className="danger" onClick={()=>removeMember(member)}>Remove</button></>:<em>{member.role}</em>}</div>)}</div>
+        <div className="teamList">{team.map(member=><div className="teamMember" key={member.id}><Avatar user={member} className="teamAvatar"/><div><b>{member.name}</b><small>{member.email}</small></div>{canManageTeam&&member.role!=='owner'&&member.id!==data.user.id?<><select value={member.role} onChange={e=>roleChange(member,e.target.value)}><option value="member">Member</option><option value="admin">Admin</option></select><button className="danger" onClick={()=>removeMember(member)}>Remove</button></>:<em>{member.role}</em>}</div>)}</div>
       </section>
     </div>
   </div>
