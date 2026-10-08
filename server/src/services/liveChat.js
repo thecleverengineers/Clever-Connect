@@ -134,6 +134,15 @@ export function validateFlow(body){
 async function sendNode(integration,convo,flow,node){
   if(!node)return;
   if(node.type==='handoff'){
+    if(node.text){
+      try{
+        const result=await sendWhatsApp({
+          workspaceId:integration.workspaceId,phone:convo.phone,text:node.text,integrationId:integration._id
+        });
+        await recordOutbound({integration,phone:convo.phone,text:node.text,
+          providerMessageId:result.id,status:result.status,source:'chatbot'});
+      }catch(e){console.error('Human handoff greeting failed',e.message)}
+    }
     convo.botPaused=true;convo.activeFlowId=null;convo.awaitingNodeId='';
     await convo.save();return;
   }
