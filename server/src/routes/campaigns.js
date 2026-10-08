@@ -1,6 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import {Campaign,Delivery,Template,Contact,ContactList} from '../models.js';
+import {Campaign,Delivery,Template,Contact,ContactList,Integration} from '../models.js';
+import {validateCarousel} from '../services/carousel.js';
 import {requireAuth} from '../middleware/auth.js';
 import {processCampaign} from '../services/scheduler.js';
 import {sendWhatsApp} from '../services/whatsapp.js';
@@ -13,6 +14,12 @@ async function normalizeCampaign(req, existing=null){
   const data={};
   if(body.name!==undefined) data.name=String(body.name||'').trim();
   if(body.message!==undefined) data.message=String(body.message||'').trim();
+  if(body.contentType!==undefined){
+    if(!['text','carousel'].includes(body.contentType))throw new Error('Unsupported campaign content type');
+    data.contentType=body.contentType;
+  }
+  if(body.integrationId!==undefined)data.integrationId=body.integrationId||null;
+  if(body.carouselCards!==undefined)data.carouselCards=body.carouselCards;
   if(body.templateId!==undefined) data.templateId=body.templateId||null;
   if(body.audienceType!==undefined) data.audienceType=['all','list','contacts'].includes(body.audienceType)?body.audienceType:'all';
   if(body.listId!==undefined) data.listId=body.listId||null;
@@ -21,7 +28,24 @@ async function normalizeCampaign(req, existing=null){
 
   const merged={...(existing?.toObject?.()||existing||{}),...data};
   if(!merged.name) throw new Error('Campaign name is required');
-  if(!merged.message&&!merged.templateId) throw new Error('Add a message or choose a template');
+  if((merged.contentType||'text')==='carousel'){
+    if(merged.templateId)throw new Error('Free-form image carousels cannot use Meta template messages');
+    if(!merged.integrationId||!mongoose.isValidObjectId(merged.integrationId))throw new Error('Choose the connected Meta WhatsApp profile for this carousel');
+    const connection=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).select('_id').lean();
+    if(!connection)throw new Error('Selected Meta WhatsApp profile is unavailable');
+    const validated=validateCarousel({text:merged.message,cards:merged.carouselCards});
+    data.message=validated.text;
+    data.carouselCards=validated.cards;
+  }else{
+    if(!merged.message&&!merged.templateId)throw new Error('Add a message or choose a template');
+    if(String(merged.message||'').length>4096)throw new Error('Message must contain at most 4096 characters');
+    if(merged.integrationId){
+      if(!mongoose.isValidObjectId(merged.integrationId))throw new Error('Invalid WhatsApp profile');
+      const connection=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,enabled:true}).select('_id').lean();
+      if(!connection)throw new Error('Selected WhatsApp profile is unavailable');
+    }
+    data.carouselCards=[];
+  }
   if(merged.templateId){
     const template=await Template.findOne({_id:merged.templateId,workspaceId:req.workspaceId}).select('_id').lean();
     if(!template) throw new Error('Selected template was not found');
