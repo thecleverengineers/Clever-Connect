@@ -81,13 +81,19 @@ contactSchema.index({ workspaceId: 1, phone: 1 }, { unique: true });
 
 const templateSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
+  integrationId: { type: Schema.Types.ObjectId, ref: 'Integration', default: null, index: true },
   name: { type: String, required: true, trim: true },
   body: { type: String, required: true },
   metaTemplateName: { type: String, default: '' },
+  metaTemplateId: { type: String, default: '', index: true },
+  metaStatus: { type: String, enum: ['LOCAL','PENDING','APPROVED','REJECTED','PAUSED','DISABLED','UNKNOWN'], default: 'LOCAL', index: true },
+  metaRejectedReason: { type: String, default: '' },
+  metaQualityScore: { type: String, default: '' },
+  metaLastSyncedAt: Date,
   language: { type: String, default: 'en_US' },
   category: { type: String, enum: ['MARKETING','UTILITY','AUTHENTICATION'], default: 'MARKETING' }
 }, opts);
-templateSchema.index({ workspaceId: 1, name: 1 }, { unique: true });
+templateSchema.index({ workspaceId: 1, integrationId: 1, metaTemplateName: 1, language: 1 }, { unique: true, sparse: true });
 
 const campaignSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
@@ -137,7 +143,11 @@ const integrationSchema = new Schema({
   accessTokenEncrypted: { type: String, default: '' },
   graphVersion: { type: String, default: 'v23.0' },
   otpTemplateName: { type:String, default:'' },
-  otpTemplateLanguage: { type:String, default:'en_US' }
+  otpTemplateLanguage: { type:String, default:'en_US' },
+  connectionStatus: { type:String, enum:['connected','error','disabled'], default:'connected', index:true },
+  connectedAt: { type:Date, default:Date.now },
+  lastCheckedAt: Date,
+  lastError: { type:String, default:'' }
 }, opts);
 integrationSchema.index({workspaceId:1,name:1},{unique:true});
 
