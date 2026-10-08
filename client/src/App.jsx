@@ -862,8 +862,8 @@ function WhatsAppApi({go}){
         await api('/integrations/whatsapp-connections/'+editing.id,{method:'PUT',body:JSON.stringify(o)});
         setMsg('Meta WhatsApp connection updated.');
       }else{
-        await api('/integrations/whatsapp-connections',{method:'POST',body:JSON.stringify(o)});
-        setMsg('Meta WhatsApp connection added and verified.');
+        const y=await api('/integrations/whatsapp-connections',{method:'POST',body:JSON.stringify(o)});
+        setMsg(y.warning||'Meta WhatsApp connection added and verified.');
       }
       setShowForm(false);setEditing(null);await load();
     }catch(e){setErr(e.message)}
@@ -917,7 +917,7 @@ function WhatsAppApi({go}){
       <div className="sectionHead"><div><h2>Connected Meta WhatsApp numbers</h2><p>Choose a default sender, test credentials, update API settings or remove a connection.</p></div></div>
       <div className="connectionGrid whatsappConnectionGrid">
         {meta.map(x=><article className={'connectionCard '+(x.isDefault?'defaultConnection':'')} key={x.id}>
-          <div className="cardTop"><div><small>META CLOUD API</small><h3>{x.name}</h3></div>{x.isDefault&&<em className="status completed">Default sender</em>}</div>
+          <div className="cardTop"><div><small>META CLOUD API</small><h3>{x.name}</h3></div><div className="connectionBadges">{x.isDefault&&<em className="status completed">Default sender</em>}<em className={'status '+(x.connectionStatus==='error'?'failed':x.connectionStatus==='disabled'?'cancelled':'completed')}>{x.connectionStatus==='error'?'Needs attention':x.connectionStatus||'connected'}</em></div></div>
           <div className="connectionPhone">{x.displayPhoneNumber||'Phone Number ID: '+x.phoneNumberId}</div>
           <div className="connectionMeta">
             <span>Graph {x.graphVersion}</span>
@@ -928,6 +928,7 @@ function WhatsAppApi({go}){
             <span><small>OTP template</small><b>{x.otpTemplateName||'Not configured'}</b></span>
             <span><small>Access token</small><b>{x.hasAccessToken?'Encrypted & stored':'Missing'}</b></span>
           </div>
+          {x.lastError&&<Notice type="bad">{x.lastError} — profile remains saved until you remove it.</Notice>}
           <footer><span>{x.otpTemplateName?'Ready for WhatsApp OTP 2FA':'Messaging connection'}</span><div className="rowActions">
             <button onClick={()=>act(x,'test')}>Test connection</button>
             <button onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
