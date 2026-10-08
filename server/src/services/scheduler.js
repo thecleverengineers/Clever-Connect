@@ -81,6 +81,10 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
 
     let actualIntegrationId=null;
     try{
+      const eligible=await Contact.exists({
+        _id:contact._id,workspaceId:c.workspaceId,consentStatus:'opted_in',suppressed:false
+      });
+      if(!eligible)throw new Error('Contact opted out or was suppressed before dispatch');
       const rendered=renderMessage(c.message||template?.body||'',contact);
       const isCarousel=c.contentType==='carousel';
       const cards=isCarousel?(c.carouselCards||[]).map(card=>({
