@@ -11,8 +11,14 @@ const userSchema = new Schema({
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ['owner','admin','member'], default: 'owner' }
 }, opts);
-const listSchema = new Schema({ workspaceId: { type: Schema.Types.ObjectId, index: true, required: true }, name: { type: String, required: true, trim: true }, description: String }, opts);
+
+const listSchema = new Schema({
+  workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
+  name: { type: String, required: true, trim: true },
+  description: { type: String, default: '' }
+}, opts);
 listSchema.index({ workspaceId: 1, name: 1 }, { unique: true });
+
 const contactSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
   name: { type: String, trim: true, default: '' },
@@ -20,18 +26,25 @@ const contactSchema = new Schema({
   email: { type: String, trim: true, lowercase: true, default: '' },
   lists: [{ type: Schema.Types.ObjectId, ref: 'ContactList' }],
   tags: [{ type: String, trim: true }],
-  custom: { type: Map, of: String }
+  custom: { type: Map, of: String },
+  consentStatus: { type: String, enum: ['opted_in','pending','opted_out'], default: 'pending', index: true },
+  consentAt: Date,
+  suppressed: { type: Boolean, default: false, index: true },
+  source: { type: String, enum: ['manual','import','api'], default: 'manual' },
+  notes: { type: String, default: '' }
 }, opts);
 contactSchema.index({ workspaceId: 1, phone: 1 }, { unique: true });
+
 const templateSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
   name: { type: String, required: true, trim: true },
   body: { type: String, required: true },
   metaTemplateName: { type: String, default: '' },
   language: { type: String, default: 'en_US' },
-  category: { type: String, default: 'MARKETING' }
+  category: { type: String, enum: ['MARKETING','UTILITY','AUTHENTICATION'], default: 'MARKETING' }
 }, opts);
 templateSchema.index({ workspaceId: 1, name: 1 }, { unique: true });
+
 const campaignSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
   name: { type: String, required: true, trim: true },
@@ -41,32 +54,41 @@ const campaignSchema = new Schema({
   listId: { type: Schema.Types.ObjectId, ref: 'ContactList', default: null },
   contactIds: [{ type: Schema.Types.ObjectId, ref: 'Contact' }],
   scheduledAt: Date,
-  status: { type: String, enum: ['draft','scheduled','processing','completed','failed'], default: 'draft', index: true },
-  totals: { submitted: { type: Number, default: 0 }, delivered: { type: Number, default: 0 }, read: { type: Number, default: 0 }, failed: { type: Number, default: 0 } },
+  status: { type: String, enum: ['draft','scheduled','processing','completed','partial','failed','cancelled'], default: 'draft', index: true },
+  totals: {
+    submitted: { type: Number, default: 0 },
+    delivered: { type: Number, default: 0 },
+    read: { type: Number, default: 0 },
+    failed: { type: Number, default: 0 }
+  },
   startedAt: Date,
   completedAt: Date,
-  lastError: String
+  lastError: { type: String, default: '' }
 }, opts);
+
 const deliverySchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
-  campaignId: { type: Schema.Types.ObjectId, ref: 'Campaign', index: true },
-  contactId: { type: Schema.Types.ObjectId, ref: 'Contact' },
+  campaignId: { type: Schema.Types.ObjectId, ref: 'Campaign', index: true, default: null },
+  contactId: { type: Schema.Types.ObjectId, ref: 'Contact', default: null },
   phone: { type: String, required: true },
+  message: { type: String, default: '' },
   providerMessageId: { type: String, index: true },
   provider: { type: String, enum: ['demo','meta'], default: 'demo' },
   status: { type: String, enum: ['queued','submitted','sent','delivered','read','failed'], default: 'queued', index: true },
-  error: String,
+  error: { type: String, default: '' },
   sentAt: Date,
   deliveredAt: Date,
   readAt: Date
 }, opts);
+
 const integrationSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, required: true, unique: true, index: true },
   provider: { type: String, enum: ['demo','meta'], default: 'demo' },
   enabled: { type: Boolean, default: true },
   phoneNumberId: { type: String, default: '', index: true },
   businessAccountId: { type: String, default: '' },
-  accessTokenEncrypted: { type: String, default: '' }
+  accessTokenEncrypted: { type: String, default: '' },
+  graphVersion: { type: String, default: 'v23.0' }
 }, opts);
 
 export const Workspace = model('Workspace', workspaceSchema);
