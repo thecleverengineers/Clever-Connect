@@ -85,8 +85,11 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
         _id:contact._id,workspaceId:c.workspaceId,consentStatus:'opted_in',suppressed:false
       });
       if(!eligible)throw new Error('Contact opted out or was suppressed before dispatch');
-      const rendered=renderMessage(c.message||template?.body||'',contact);
-      const isCarousel=c.contentType==='carousel';
+      const isTemplate=c.sendMode==='template'||(c.templateId&&!c.sendMode);
+      if(isTemplate&&(!template||template.metaStatus!=='APPROVED'))throw new Error('Approved Meta template is unavailable');
+      const rendered=isTemplate?renderMessage(template.body,contact):renderMessage(c.message,contact);
+      const values=isTemplate?(c.templateParams||[]).map(value=>renderMessage(value,contact)):[];
+      const isCarousel=!isTemplate&&c.contentType==='carousel';
       const cards=isCarousel?(c.carouselCards||[]).map(card=>({
         imageUrl:card.imageUrl,
         caption:renderMessage(card.caption,contact),
@@ -96,7 +99,8 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
         workspaceId:c.workspaceId,
         phone:contact.phone,
         text:rendered,
-        template,
+        template:isTemplate?template:null,
+        templateParams:values,
         carousel:cards,
         integrationId:template?.integrationId||c.integrationId||null
       });
