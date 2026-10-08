@@ -100,6 +100,18 @@ async function testConnection(x){
 }
 
 
+r.post('/embedded-signup/diagnostic',async(req,res)=>{
+  const status=String(req.body.status||'').slice(0,80);
+  const event=String(req.body.event||'').slice(0,120);
+  const detail=String(req.body.detail||'').slice(0,300);
+  console.warn('Embedded Signup client diagnostic',{
+    workspaceId:String(req.workspaceId),
+    userId:String(req.user?._id||''),
+    status,event,detail
+  });
+  res.json({ok:true});
+});
+
 r.get('/embedded-signup/config',async(req,res)=>{
   const [cfg,usage]=await Promise.all([getMetaConfigPublic(),limits(req.workspaceId)]);
   res.json({...cfg,subscription:usage});
