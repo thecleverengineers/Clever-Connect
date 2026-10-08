@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 
 import auth from './routes/auth.js';
@@ -27,6 +28,7 @@ const app=express();
 app.set('trust proxy',1);
 app.disable('x-powered-by');
 app.use(helmet());
+app.use(compression());
 const origins=(process.env.CLIENT_URL||'http://localhost:5173').split(',').map(x=>x.trim()).filter(Boolean);
 app.use(cors({
   origin(origin,cb){
