@@ -3,13 +3,28 @@ import mongoose from 'mongoose';
 const { Schema, model } = mongoose;
 const opts = { timestamps: true };
 
-const workspaceSchema = new Schema({ name: { type: String, required: true, trim: true }, plan: { type: String, default: 'starter' } }, opts);
+const workspaceSchema = new Schema({
+  name: { type: String, required: true, trim: true },
+  plan: { type: String, enum:['starter','growth','business','enterprise'], default:'starter' },
+  subscriptionStatus: { type: String, enum:['active','trialing','past_due','cancelled'], default:'active' },
+  currentPeriodEnd: Date
+}, opts);
+
 const userSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, ref: 'Workspace', required: true, index: true },
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, lowercase: true, trim: true, unique: true, index: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ['owner','admin','member'], default: 'owner' }
+  role: { type: String, enum: ['owner','admin','member'], default: 'owner' },
+  phone: { type: String, default:'' },
+  jobTitle: { type: String, default:'' },
+  avatarData: { type: String, default:'' },
+  twoFactorEnabled: { type:Boolean, default:false },
+  twoFactorPhone: { type:String, default:'' },
+  twoFactorIntegrationId: { type:Schema.Types.ObjectId, ref:'Integration', default:null },
+  twoFactorOtpHash: { type:String, default:'' },
+  twoFactorOtpExpiresAt: Date,
+  twoFactorOtpAttempts: { type:Number, default:0 }
 }, opts);
 
 const listSchema = new Schema({
@@ -82,14 +97,20 @@ const deliverySchema = new Schema({
 }, opts);
 
 const integrationSchema = new Schema({
-  workspaceId: { type: Schema.Types.ObjectId, required: true, unique: true, index: true },
+  workspaceId: { type: Schema.Types.ObjectId, required: true, index: true },
+  name: { type:String, default:'Primary WhatsApp', trim:true },
   provider: { type: String, enum: ['demo','meta'], default: 'demo' },
   enabled: { type: Boolean, default: true },
+  isDefault: { type:Boolean, default:false, index:true },
   phoneNumberId: { type: String, default: '', index: true },
+  displayPhoneNumber: { type:String, default:'' },
   businessAccountId: { type: String, default: '' },
   accessTokenEncrypted: { type: String, default: '' },
-  graphVersion: { type: String, default: 'v23.0' }
+  graphVersion: { type: String, default: 'v23.0' },
+  otpTemplateName: { type:String, default:'' },
+  otpTemplateLanguage: { type:String, default:'en_US' }
 }, opts);
+integrationSchema.index({workspaceId:1,name:1},{unique:true});
 
 export const Workspace = model('Workspace', workspaceSchema);
 export const User = model('User', userSchema);
