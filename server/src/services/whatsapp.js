@@ -108,5 +108,5 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
   if(!response.ok) throw new Error(data?.error?.message||'WhatsApp Cloud API rejected the message');
   const id=data.messages?.[0]?.id;
   if(!id) throw new Error('WhatsApp Cloud API did not return a message ID');
-  return {provider:'meta',id,status:'submitted'};
+  return {provider:'meta',id,status:'submitted',integrationId:integration._id};
 }
