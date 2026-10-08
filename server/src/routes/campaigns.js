@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import {Campaign,Delivery,Template,Contact,ContactList,Integration} from '../models.js';
 import {validateCarousel} from '../services/carousel.js';
+import {InboundWindow} from '../paymentModels.js';
 import {requireAuth} from '../middleware/auth.js';
 import {processCampaign} from '../services/scheduler.js';
 import {sendWhatsApp} from '../services/whatsapp.js';
@@ -76,6 +77,24 @@ r.get('/deliveries',async(req,res)=>{
     .populate('campaignId','name status')
     .lean();
   res.json(rows);
+});
+
+// Read-only eligibility preview. The sender re-checks each window at delivery time.
+r.get('/eligibility',async(req,res)=>{
+  const integrationId=String(req.query.integrationId||'');
+  if(!mongoose.isValidObjectId(integrationId))return res.status(400).json({message:'Choose a Meta WhatsApp profile'});
+  const integration=await Integration.findOne({_id:integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).select('_id').lean();
+  if(!integration)return res.sendStatus(404);
+  const now=new Date();
+  const since=new Date(now.getTime()-24*60*60*1000);
+  const windows=await InboundWindow.find({workspaceId:req.workspaceId,integrationId:integration._id,lastInboundAt:{$gt:since}})
+    .select('phone').lean();
+  const phoneList=[...new Set(windows.map(x=>'+'+String(x.phone||'').replace(/\D/g,'')).filter(x=>/^\+\d{8,15}$/.test(x)))];
+  const total=await Contact.countDocuments({workspaceId:req.workspaceId,consentStatus:'opted_in',suppressed:false});
+  const eligible=phoneList.length?await Contact.countDocuments({
+    workspaceId:req.workspaceId,consentStatus:'opted_in',suppressed:false,phone:{$in:phoneList}
+  }):0;
+  res.json({optedIn:total,eligible,outsideWindow:Math.max(0,total-eligible),checkedAt:now});
 });
 
 r.get('/:id/deliveries',async(req,res)=>{
