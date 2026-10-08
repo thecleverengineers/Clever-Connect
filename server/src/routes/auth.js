@@ -6,7 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router=express.Router();
 const cookie=(res,user)=>{
-  const token=jwt.sign({sub:user._id.toString(),workspaceId:user.workspaceId.toString()},process.env.JWT_SECRET,{expiresIn:'7d'});
+  const token=jwt.sign({sub:user._id.toString(),workspaceId:user.workspaceId.toString()},(process.env.AUTH_KEY||process.env.JWT_SECRET),{expiresIn:'7d'});
   res.cookie('cc_session',token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',maxAge:7*24*60*60*1000,path:'/'});
 };
 router.post('/register',async(req,res)=>{
