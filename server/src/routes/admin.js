@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import {SubscriptionPlan,SubscriptionRequest,Workspace,User} from '../models.js';
 import {requireAuth,requireSuperAdmin} from '../middleware/auth.js';
 import {accessForWorkspace} from '../plan.js';
+import {getMetaConfig,getMetaConfigPublic,saveMetaConfig,clearMetaAppSecret} from '../metaConfig.js';
 
 const r=express.Router();
 r.use(requireAuth,requireSuperAdmin);
@@ -39,6 +40,63 @@ r.get('/overview',async(req,res)=>{
       owner:ownerMap.get(String(w._id))||null
     }))
   });
+});
+
+
+r.get('/meta-settings',async(req,res)=>{
+  const cfg=await getMetaConfigPublic();
+  res.json(cfg);
+});
+
+r.put('/meta-settings',async(req,res)=>{
+  const appId=String(req.body.appId||'').trim();
+  const configId=String(req.body.configId||'').trim();
+  const graphVersion=String(req.body.graphVersion||'v23.0').trim();
+  if(!appId||!configId)return res.status(400).json({message:'Meta App ID and Embedded Signup Config ID are required'});
+  if(!/^v\d+\.\d+$/.test(graphVersion))return res.status(400).json({message:'Graph version must look like v23.0'});
+  const existing=await getMetaConfig();
+  const appSecret=String(req.body.appSecret||'').trim();
+  if(!appSecret&&!existing.appSecret)return res.status(400).json({message:'Meta App Secret is required the first time'});
+  await saveMetaConfig({
+    appId,
+    configId,
+    graphVersion,
+    appSecret,
+    updatedBy:req.user._id
+  });
+  res.json(await getMetaConfigPublic());
+});
+
+r.post('/meta-settings/clear-secret',async(req,res)=>{
+  await clearMetaAppSecret(req.user._id);
+  res.json(await getMetaConfigPublic());
+});
+
+r.post('/meta-settings/test',async(req,res)=>{
+  try{
+    const cfg=await getMetaConfig();
+    if(!cfg.appId||!cfg.appSecret)return res.status(400).json({message:'Save Meta App ID and App Secret first'});
+    const params=new URLSearchParams({
+      client_id:cfg.appId,
+      client_secret:cfg.appSecret,
+      grant_type:'client_credentials'
+    });
+    const response=await fetch('https://graph.facebook.com/'+cfg.graphVersion+'/oauth/access_token?'+params.toString(),{
+      signal:AbortSignal.timeout(12000)
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok||!data.access_token)return res.status(502).json({message:data?.error?.message||'Meta rejected the App ID/App Secret'});
+    res.json({
+      ok:true,
+      appCredentialsValid:true,
+      configIdSaved:!!cfg.configId,
+      message:cfg.configId
+        ? 'Meta App credentials are valid. Embedded Signup Config ID is saved; complete validation occurs when opening Continue with Facebook.'
+        : 'Meta App credentials are valid. Add an Embedded Signup Config ID.'
+    });
+  }catch(e){
+    res.status(502).json({message:e.name==='TimeoutError'?'Meta credential test timed out':e.message});
+  }
 });
 
 r.post('/plans',async(req,res)=>{
