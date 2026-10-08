@@ -1,6 +1,7 @@
 import React,{useEffect,useMemo,useState}from'react';
 import{api,BASE,getCached,warmWorkspace}from'./api.js';
 import Payments from './Payments.jsx';
+import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
 
 const nav=[
   ['overview','Overview','⌂'],
@@ -251,6 +252,7 @@ function Campaigns(){
   const[contacts,setContacts]=useState(()=>getCached('/contacts')||[]);
   const[show,setShow]=useState(false);
   const[editing,setEditing]=useState(null);
+  const[draft,setDraft]=useState(blankCampaignDraft);
   const[deliveries,setDeliveries]=useState(null);
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
@@ -261,12 +263,17 @@ function Campaigns(){
     const fd=new FormData(e.currentTarget);
     const o=Object.fromEntries(fd);
     o.contactIds=fd.getAll('contactIds');
+    o.contentType=draft.contentType;
+    o.message=draft.message;
+    o.integrationId=draft.integrationId||null;
+    o.carouselCards=draft.contentType==='carousel'?draft.carouselCards:[];
+    if(draft.contentType==='carousel')o.templateId=null;
     if(!o.scheduledAt)delete o.scheduledAt;
     if(o.audienceType!=='list')o.listId=null;
     try{
       if(editing) await api('/campaigns/'+editing._id,{method:'PUT',body:JSON.stringify(o)});
       else await api('/campaigns',{method:'POST',body:JSON.stringify(o)});
-      setShow(false);setEditing(null);setMsg(editing?'Campaign updated.':'Campaign created.');await load();
+      setShow(false);setEditing(null);setDraft(blankCampaignDraft());setMsg(editing?'Campaign updated.':'Campaign created.');await load();
     }catch(e){setErr(e.message)}
   }
   async function action(id,type){
@@ -282,26 +289,26 @@ function Campaigns(){
     try{const d=await api('/campaigns/'+c._id+'/deliveries');setDeliveries({campaign:c,rows:d})}catch(e){setErr(e.message)}
   }
   return <div className="page">
-    <Title title="Campaigns" sub="Create, schedule, send, retry and audit bulk WhatsApp campaigns." action="New campaign" onAction={()=>{setEditing(null);setShow(true)}}/>
+    <Title title="Campaigns" sub="Create, schedule, send, retry and audit WhatsApp campaigns with native text formatting and image carousels." action="New campaign" onAction={()=>{setEditing(null);setDraft(blankCampaignDraft());setShow(true)}}/>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
     {show&&<div className="panel"><form key={editing?editing._id:'new'} className="formGrid" onSubmit={save}>
       <label htmlFor="campaign-name">Campaign name<input id="campaign-name" name="name" required defaultValue={editing?.name||''}/></label>
       <label htmlFor="campaign-audience">Audience<select id="campaign-audience" name="audienceType" defaultValue={editing?.audienceType||'all'}><option value="all">All opted-in contacts</option><option value="list">Contact list</option><option value="contacts">Specific contacts</option></select></label>
       <label>Contact list<select name="listId" defaultValue={editing?.listId?._id||editing?.listId||''}><option value="">Choose list</option>{lists.map(x=><option value={x._id} key={x._id}>{x.name} ({x.contactCount||0})</option>)}</select></label>
-      <label>Template<select name="templateId" defaultValue={editing?.templateId?._id||editing?.templateId||''}><option value="">Freeform message</option>{templates.map(x=><option value={x._id} key={x._id}>{x.name}</option>)}</select></label>
+      <label>Template<select name="templateId" disabled={draft.contentType==='carousel'} defaultValue={editing?.templateId?._id||editing?.templateId||''}><option value="">Freeform message</option>{templates.map(x=><option value={x._id} key={x._id}>{x.name}</option>)}</select></label>
       <label className="full">Specific contacts<select name="contactIds" multiple size="5" defaultValue={editing?.contactIds?.map(String)||[]}>{contacts.filter(x=>x.consentStatus==='opted_in'&&!x.suppressed).map(x=><option value={x._id} key={x._id}>{x.name||'Unnamed'} · {x.phone}</option>)}</select></label>
-      <label className="full" htmlFor="campaign-message">Message<textarea id="campaign-message" name="message" rows="5" defaultValue={editing?.message||''} placeholder="Hi {{name}}, your appointment is tomorrow…"/></label>
+      <CampaignComposer draft={draft} onChange={setDraft}/>
       <label htmlFor="campaign-scheduled-at">Schedule for<input id="campaign-scheduled-at" type="datetime-local" name="scheduledAt" defaultValue={editing?.scheduledAt?new Date(new Date(editing.scheduledAt).getTime()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):''}/></label>
-      <div className="actions"><button type="button" onClick={()=>{setShow(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Update campaign':'Save campaign'}</button></div>
+      <div className="actions"><button type="button" onClick={()=>{setShow(false);setEditing(null);setDraft(blankCampaignDraft())}}>Cancel</button><button className="primary">{editing?'Update campaign':'Save campaign'}</button></div>
     </form></div>}
     <div className="cards campaignCards">{rows.map(c=><article key={c._id}>
       <div className="cardTop"><div><small>CAMPAIGN</small><h3>{c.name}</h3></div><em className={'status '+c.status}>{statusLabel(c.status)}</em></div>
-      <p>{c.message||c.templateId?.name||'WhatsApp template message'}</p>
+      <p>{c.contentType==='carousel'?'🖼 Image carousel · '+(c.carouselCards?.length||0)+' cards · '+(c.message||''):c.message||c.templateId?.name||'WhatsApp template message'}</p>
       <div className="stats"><span><b>{c.totals?.submitted||0}</b> submitted</span><span><b>{c.totals?.delivered||0}</b> delivered</span><span><b>{c.totals?.read||0}</b> read</span><span><b>{c.totals?.failed||0}</b> failed</span></div>
       {c.lastError&&<small className="warnText">{c.lastError}</small>}
       <footer><span>{c.scheduledAt?fmt(c.scheduledAt):'No schedule'}</span><div className="rowActions">
         <button onClick={()=>viewDeliveries(c)}>Deliveries</button>
-        {!['processing','completed'].includes(c.status)&&<button onClick={()=>{setEditing(c);setShow(true)}}>Edit</button>}
+        {!['processing','completed'].includes(c.status)&&<button onClick={()=>{setEditing(c);setDraft(existingCampaignDraft(c));setShow(true)}}>Edit</button>}
         {['partial','failed'].includes(c.status)&&<button onClick={()=>action(c._id,'retry')}>Retry failed</button>}
         {c.status!=='completed'&&<button onClick={()=>action(c._id,'send')} disabled={c.status==='processing'}>Send now</button>}
         <button className="danger" onClick={()=>action(c._id,'delete')} disabled={c.status==='processing'}>Delete</button>
