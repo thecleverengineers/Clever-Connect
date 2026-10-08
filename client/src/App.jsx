@@ -98,7 +98,7 @@ function Shell({session,onLogout,onSessionUpdate}){
     return()=>{document.removeEventListener('pointerdown',close);window.removeEventListener('wa:subscription-required',subscribe)};
   },[]);
   const pageTitle=page==='profile'?'Profile':page==='edit-profile'?'Edit profile':menu.find(x=>x[0]===page)?.[1];
-  const locked=id=>!access.allowed&&!['subscription','settings','admin'].includes(id);
+  const locked=id=>!access.allowed&&!['subscription','profile','edit-profile','admin'].includes(id);
   const changePage=id=>{
     setPage(locked(id)?'subscription':id);
     setOpen(false);setProfileOpen(false);
@@ -770,6 +770,199 @@ function Profile({session,go,onSessionUpdate}){
   </div>
 }
 
+
+function Subscription({onSessionUpdate}){
+  const[data,setData]=useState(null);
+  const[msg,setMsg]=useState('');
+  const[err,setErr]=useState('');
+  async function load(){
+    setErr('');
+    try{
+      const x=await api('/subscription');
+      setData(x);
+      const fresh=await api('/auth/me');
+      onSessionUpdate(fresh);
+    }catch(e){setErr(e.message)}
+  }
+  useEffect(()=>{load()},[]);
+  async function requestPlan(plan){
+    setErr('');setMsg('');
+    try{
+      await api('/subscription/request',{method:'POST',body:JSON.stringify({planId:plan._id})});
+      setMsg('Subscription request sent to Super Admin.');
+      await load();
+    }catch(e){setErr(e.message)}
+  }
+  async function cancelRequest(){
+    try{await api('/subscription/request/cancel',{method:'POST'});setMsg('Pending subscription request cancelled.');await load()}catch(e){setErr(e.message)}
+  }
+  if(!data)return <div className="page">{err?<Notice type="bad">{err}</Notice>:<Loading/>}</div>;
+  const access=data.access||{};
+  return <div className="page">
+    <Title title="Subscription" sub="Your 7-day trial, subscription status and WA SANTA plans."/>
+    <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
+    <section className={'subscriptionHero '+(access.allowed?'accessOn':'accessOff')}>
+      <div>
+        <small>{access.state==='trialing'?'FREE TRIAL':access.state==='active'?'SUBSCRIPTION ACTIVE':'ACCESS LOCKED'}</small>
+        <h2>{access.state==='trialing'?(access.daysRemaining+' day(s) remaining'):access.state==='active'?'WA SANTA is active':'Your trial or subscription has ended'}</h2>
+        <p>{access.state==='trialing'?'All subscribed workspace features remain available until '+fmt(access.endsAt)+'.':access.state==='active'?'Current access continues until '+fmt(access.endsAt)+'.':'Choose a plan below and submit a subscription request. Super Admin must approve it before access is restored.'}</p>
+      </div>
+      <button onClick={load}>Refresh status</button>
+    </section>
+
+    {data.pendingRequest&&<section className="pendingRequest">
+      <div><small>PENDING APPROVAL</small><h2>{data.pendingRequest.planId?.name||'Subscription request'}</h2><p>Requested {fmt(data.pendingRequest.createdAt)}. WA SANTA Super Admin must approve this request.</p></div>
+      <button className="danger" onClick={cancelRequest}>Cancel request</button>
+    </section>}
+
+    <div className="sectionHead planHeading"><div><h2>Available plans</h2><p>Plans, prices and limits are controlled by WA SANTA Super Admin.</p></div></div>
+    <div className="pricingGrid">
+      {data.plans.map(plan=><article className="priceCard" key={plan._id}>
+        <small>{plan.currency}</small>
+        <h3>{plan.name}</h3>
+        <div className="priceValue">{plan.currency==='INR'?'₹':plan.currency+' '}{Number(plan.priceMonthly).toLocaleString()}<span>/month</span></div>
+        <p>{plan.description||'WA SANTA subscription plan'}</p>
+        <div className="planLimits">
+          <span><b>{plan.metaConnections}</b> Meta WhatsApp connection(s)</span>
+          <span><b>{plan.teamMembers}</b> team member(s)</span>
+          <span><b>{Number(plan.monthlyMessages).toLocaleString()}</b> messages / month</span>
+        </div>
+        {!!plan.features?.length&&<ul>{plan.features.map((x,i)=><li key={i}>✓ {x}</li>)}</ul>}
+        <button className="primary" disabled={!!data.pendingRequest} onClick={()=>requestPlan(plan)}>{data.workspace.subscriptionPlanId===plan._id&&data.access.state==='active'?'Current plan':'Request subscription'}</button>
+      </article>)}
+      {!data.plans.length&&<section className="noPlans"><h2>Plans are being configured</h2><p>Super Admin has not published a subscription plan yet.</p></section>}
+    </div>
+  </div>
+}
+
+function SuperAdmin(){
+  const[data,setData]=useState(null);
+  const[editing,setEditing]=useState(null);
+  const[showPlan,setShowPlan]=useState(false);
+  const[msg,setMsg]=useState('');
+  const[err,setErr]=useState('');
+  const[workspacePlans,setWorkspacePlans]=useState({});
+  async function load(){
+    setErr('');
+    try{setData(await api('/admin/overview'))}catch(e){setErr(e.message)}
+  }
+  useEffect(()=>{load()},[]);
+  async function savePlan(e){
+    e.preventDefault();setErr('');setMsg('');
+    const fd=new FormData(e.currentTarget);
+    const o=Object.fromEntries(fd);
+    o.active=fd.get('active')==='on';
+    o.features=String(o.features||'').split('\n').map(x=>x.trim()).filter(Boolean);
+    try{
+      if(editing)await api('/admin/plans/'+editing._id,{method:'PUT',body:JSON.stringify(o)});
+      else await api('/admin/plans',{method:'POST',body:JSON.stringify(o)});
+      setShowPlan(false);setEditing(null);setMsg(editing?'Plan updated.':'Plan created.');await load();
+    }catch(e){setErr(e.message)}
+  }
+  async function deletePlan(plan){
+    if(!confirm('Delete plan "'+plan.name+'"?'))return;
+    try{await api('/admin/plans/'+plan._id,{method:'DELETE'});setMsg('Plan deleted.');await load()}catch(e){setErr(e.message)}
+  }
+  async function requestAction(req,type){
+    try{
+      if(type==='approve'){
+        const months=Number(prompt('Subscription duration in months','1')||1);
+        await api('/admin/requests/'+req._id+'/approve',{method:'POST',body:JSON.stringify({months})});
+        setMsg('Subscription approved and activated.');
+      }else{
+        const adminNote=prompt('Reason for rejection (optional)','')||'';
+        await api('/admin/requests/'+req._id+'/reject',{method:'POST',body:JSON.stringify({adminNote})});
+        setMsg('Subscription request rejected.');
+      }
+      await load();
+    }catch(e){setErr(e.message)}
+  }
+  async function setWorkspace(w,status){
+    try{
+      const body={subscriptionStatus:status};
+      if(status==='active'){
+        const planId=workspacePlans[w._id]||data.plans.find(x=>x.active)?._id;
+        if(!planId)return setErr('Create an active plan first.');
+        body.planId=planId;body.months=1;
+      }
+      await api('/admin/workspaces/'+w._id+'/subscription',{method:'PUT',body:JSON.stringify(body)});
+      setMsg('Workspace subscription updated.');await load();
+    }catch(e){setErr(e.message)}
+  }
+  if(!data)return <div className="page">{err?<Notice type="bad">{err}</Notice>:<Loading/>}</div>;
+  return <div className="page">
+    <Title title="Super Admin" sub="Control WA SANTA plans, pricing, tenant trials and subscriptions." action="Create plan" onAction={()=>{setEditing(null);setShowPlan(true)}}/>
+    <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
+
+    <div className="metrics">
+      <Metric label="Plans" value={data.plans.length} sub={data.plans.filter(x=>x.active).length+' active'}/>
+      <Metric label="Workspaces" value={data.workspaces.length} sub="Registered tenants"/>
+      <Metric label="Pending requests" value={data.pendingRequests.length} sub="Need approval"/>
+      <Metric label="Expired / locked" value={data.workspaces.filter(x=>!x.access?.allowed).length} sub="Subscription required"/>
+    </div>
+
+    {showPlan&&<div className="panel"><form key={editing?editing._id:'new-plan'} className="formGrid" onSubmit={savePlan}>
+      <label>Plan name<input name="name" defaultValue={editing?.name||''} required/></label>
+      <label>Slug<input name="slug" defaultValue={editing?.slug||''} placeholder="starter" required/></label>
+      <label>Monthly price<input type="number" min="0" step="0.01" name="priceMonthly" defaultValue={editing?.priceMonthly??''} required/></label>
+      <label>Currency<input name="currency" defaultValue={editing?.currency||'INR'} required/></label>
+      <label>Meta WhatsApp connections<input type="number" min="0" name="metaConnections" defaultValue={editing?.metaConnections??1} required/></label>
+      <label>Team members<input type="number" min="1" name="teamMembers" defaultValue={editing?.teamMembers??3} required/></label>
+      <label>Monthly message limit<input type="number" min="0" name="monthlyMessages" defaultValue={editing?.monthlyMessages??1000} required/></label>
+      <label>Sort order<input type="number" name="sortOrder" defaultValue={editing?.sortOrder??0}/></label>
+      <label className="full">Description<textarea name="description" rows="2" defaultValue={editing?.description||''}/></label>
+      <label className="full">Features — one per line<textarea name="features" rows="4" defaultValue={editing?.features?.join('\n')||''}/></label>
+      <label className="check full"><input type="checkbox" name="active" defaultChecked={editing?.active??true}/> Publish this plan</label>
+      <div className="actions full"><button type="button" onClick={()=>{setShowPlan(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Update plan':'Create plan'}</button></div>
+    </form></div>}
+
+    <section>
+      <div className="sectionHead"><div><h2>Subscription plans</h2><p>These are the only plans tenants can request.</p></div></div>
+      <div className="adminPlanGrid">{data.plans.map(p=><article key={p._id}>
+        <div className="cardTop"><div><small>{p.active?'PUBLISHED':'HIDDEN'}</small><h3>{p.name}</h3></div><em className={'status '+(p.active?'completed':'cancelled')}>{p.active?'active':'disabled'}</em></div>
+        <div className="priceValue">{p.currency==='INR'?'₹':p.currency+' '}{Number(p.priceMonthly).toLocaleString()}<span>/month</span></div>
+        <p>{p.metaConnections} WhatsApp · {p.teamMembers} team · {Number(p.monthlyMessages).toLocaleString()} messages</p>
+        <footer><span>{p.slug}</span><div className="rowActions"><button onClick={()=>{setEditing(p);setShowPlan(true)}}>Edit</button><button className="danger" onClick={()=>deletePlan(p)}>Delete</button></div></footer>
+      </article>)}</div>
+    </section>
+
+    <section>
+      <div className="sectionHead"><div><h2>Pending subscription requests</h2><p>Approve to activate paid access; reject to keep the workspace locked/trial state.</p></div></div>
+      <div className="table">
+        <div className="tr adminRequest th"><span>Workspace</span><span>Owner</span><span>Plan</span><span>Price</span><span>Requested</span><span>Action</span></div>
+        {data.pendingRequests.map(x=><div className="tr adminRequest" key={x._id}>
+          <span><b>{x.workspaceId?.name||'Workspace'}</b><small>{x.workspaceId?.subscriptionStatus}</small></span>
+          <span>{x.requestedBy?.email||'—'}</span>
+          <span>{x.planId?.name||'—'}</span>
+          <span>{x.planId?.currency==='INR'?'₹':''}{x.planId?.priceMonthly??'—'}</span>
+          <span>{fmt(x.createdAt)}</span>
+          <span className="inlineActions"><button className="primary" onClick={()=>requestAction(x,'approve')}>Approve</button><button className="danger" onClick={()=>requestAction(x,'reject')}>Reject</button></span>
+        </div>)}{!data.pendingRequests.length&&<Empty text="No pending subscription requests."/>}
+      </div>
+    </section>
+
+    <section>
+      <div className="sectionHead"><div><h2>Tenant workspaces</h2><p>Manually restart a 7-day trial, activate a plan, or expire access.</p></div></div>
+      <div className="table">
+        <div className="tr adminWorkspace th"><span>Workspace</span><span>Owner</span><span>Access</span><span>Plan</span><span>Ends</span><span>Controls</span></div>
+        {data.workspaces.map(w=><div className="tr adminWorkspace" key={w._id}>
+          <span><b>{w.name}</b><small>{String(w._id)}</small></span>
+          <span>{w.owner?.email||'—'}</span>
+          <span><em className={'status '+(w.access?.allowed?'completed':'failed')}>{w.access?.state||w.subscriptionStatus}</em></span>
+          <span>{w.plan||'trial'}</span>
+          <span>{fmt(w.currentPeriodEnd||w.trialEndsAt)}</span>
+          <span className="workspaceControls">
+            <select value={workspacePlans[w._id]||''} onChange={e=>setWorkspacePlans({...workspacePlans,[w._id]:e.target.value})}><option value="">Choose plan</option>{data.plans.filter(p=>p.active).map(p=><option key={p._id} value={p._id}>{p.name}</option>)}</select>
+            <button onClick={()=>setWorkspace(w,'active')}>Activate</button>
+            <button onClick={()=>setWorkspace(w,'trialing')}>7-day trial</button>
+            <button className="danger" onClick={()=>setWorkspace(w,'expired')}>Expire</button>
+          </span>
+        </div>)}
+      </div>
+    </section>
+  </div>
+}
+
 function Page({id,go,session,onSessionUpdate}){
   if(id==='overview')return <Overview go={go}/>;
   if(id==='send')return <SingleSend/>;
@@ -778,6 +971,8 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='schedule')return <Schedule/>;
   if(id==='templates')return <Templates/>;
   if(id==='reports')return <Reports/>;
+  if(id==='subscription')return <Subscription onSessionUpdate={onSessionUpdate}/>;
+  if(id==='admin'&&session.user.isSuperAdmin)return <SuperAdmin/>;
   if(id==='profile')return <Profile session={session} go={go} onSessionUpdate={onSessionUpdate}/>;
   if(id==='edit-profile')return <EditProfile go={go} onSessionUpdate={onSessionUpdate}/>;
   return <Settings go={go}/>;
@@ -788,8 +983,8 @@ export default function App(){
   useEffect(()=>{
     api('/auth/me').then(setSession).catch(()=>setSession(null));
     const unauth=()=>setSession(null);
-    window.addEventListener('cc:unauthorized',unauth);
-    return()=>window.removeEventListener('cc:unauthorized',unauth);
+    window.addEventListener('wa:unauthorized',unauth);
+    return()=>window.removeEventListener('wa:unauthorized',unauth);
   },[]);
   async function logout(){
     try{await api('/auth/logout',{method:'POST'})}catch{}
