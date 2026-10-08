@@ -2,6 +2,7 @@ import React,{useEffect,useMemo,useState}from'react';
 import{api,BASE,getCached,warmWorkspace}from'./api.js';
 import Payments from './Payments.jsx';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
+import {Inbox,FlowBuilder} from './ConversationSuite.jsx';
 
 const nav=[
   ['overview','Overview','⌂'],
@@ -11,6 +12,8 @@ const nav=[
   ['schedule','Schedule','◷'],
   ['templates','Templates','▤'],
   ['reports','Delivery reports','▥'],
+  ['inbox','Live chat','◉'],
+  ['chatbot','Chatbot & Flows','◇'],
   ['whatsapp-api','Meta WhatsApp API','☏'],
   ['payments','WhatsApp Payments','₹'],
   ['subscription','Subscription','₹'],
@@ -393,6 +396,15 @@ function Contacts(){
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
     <div className="toolbar contactTools">
       <div className="toolbarGroup"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search contacts…"/><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All contacts</option><option value="ready">Opted in</option><option value="pending">Pending consent</option><option value="suppressed">Suppressed / opted out</option></select><button onClick={addList}>+ New list</button></div>
+      <button type="button" onClick={async()=>{
+        try{
+          const response=await fetch(BASE+'/contacts/template.xlsx',{credentials:'include'});
+          if(!response.ok)throw new Error('Unable to download contact template');
+          const blob=await response.blob(),url=URL.createObjectURL(blob);
+          const a=document.createElement('a');a.href=url;a.download='WA-SANTA-Contacts-Template.xlsx';a.click();
+          URL.revokeObjectURL(url);
+        }catch(e){setErr(e.message)}
+      }}>↓ Excel template</button>
       <form onSubmit={importFile}><select name="listId"><option value="">No list</option>{lists.map(x=><option value={x._id} key={x._id}>{x.name}</option>)}</select><input type="file" name="file" accept=".xlsx,.xls,.csv" required/><label className="check compact"><input type="checkbox" name="confirmConsent"/> Imported contacts have documented opt-in</label><button className="primary">Import</button></form>
     </div>
     {selected.size>0&&<div className="bulkBar"><b>{selected.size} selected</b><button onClick={()=>bulkConsent('opted_in')}>Mark opted in</button><button onClick={()=>bulkConsent('opted_out')}>Opt out / suppress</button><button className="danger" onClick={bulkDelete}>Delete</button></div>}
@@ -568,24 +580,38 @@ function Templates(){
   </div>
 }
 
-function DeliveryTable({rows}){
+function DeliveryTable({rows,onChat}){
   return <div className="table">
-    <div className="tr delivery th"><span>Recipient</span><span>Campaign</span><span>Status</span><span>Provider</span><span>Time</span><span>Error</span></div>
+    <div className="tr delivery th"><span>Recipient</span><span>Campaign</span><span>Status</span><span>Provider</span><span>Time</span><span>Error</span>{onChat&&<span>Chat</span>}</div>
     {rows.map(x=><div className="tr delivery" key={x._id}>
       <span><b>{x.contactId?.name||x.phone}</b><small>{x.phone}</small></span>
       <span>{x.campaignId?.name||'Personal message'}</span>
       <span><em className={'status '+(x.status==='failed'?'failed':x.status==='read'||x.status==='delivered'?'completed':'scheduled')}>{statusLabel(x.status)}</em></span>
-      <span>{x.provider}</span><span>{fmt(x.sentAt||x.createdAt)}</span><span className="errorText">{x.error||'—'}</span>
+      <span>{x.provider}</span><span>{fmt(x.sentAt||x.createdAt)}</span><span className="errorText">{x.error||'—'}{x.repliedAt?' · Customer replied':''}</span>{onChat&&<span><button type="button" onClick={()=>onChat(x)}>Open chat</button></span>}
     </div>)}{!rows.length&&<Empty text="No delivery records."/>}
   </div>
 }
 
-function Reports(){
+function Reports({go}){
   const[d,setD]=useState(()=>getCached('/dashboard')||null);
   const[rows,setRows]=useState(()=>getCached('/campaigns/deliveries?limit=250')||[]);
   const[filter,setFilter]=useState('all');
+  const[campaigns,setCampaigns]=useState([]);
+  const[opened,setOpened]=useState(null);
   const[err,setErr]=useState('');
-  useEffect(()=>{Promise.all([api('/dashboard'),api('/campaigns/deliveries?limit=250')]).then(([a,b])=>{setD(a);setRows(b)}).catch(e=>setErr(e.message))},[]);
+  useEffect(()=>{Promise.all([api('/dashboard'),api('/campaigns/deliveries?limit=250'),api('/campaigns')])
+    .then(([a,b,c])=>{setD(a);setRows(b);setCampaigns(c)}).catch(e=>setErr(e.message))},[]);
+  async function openCampaign(c){
+    setErr('');
+    try{
+      const rows=await api('/campaigns/'+c._id+'/deliveries',{fresh:true});
+      setOpened({campaign:c,rows});
+    }catch(e){setErr(e.message)}
+  }
+  function openChat(x){
+    sessionStorage.setItem('wa:open-chat',String(x.phone||'').replace(/\D/g,''));
+    go('inbox');
+  }
   if(err)return <div className="page"><Notice type="bad">{err}</Notice></div>;
   if(!d)return <Loading/>;
   const filtered=filter==='all'?rows:rows.filter(x=>x.status===filter);
@@ -594,7 +620,19 @@ function Reports(){
     <div className="metrics"><Metric label="Submitted" value={d.metrics.submitted} sub="Accepted for delivery"/><Metric label="Delivered" value={d.metrics.delivered} sub={d.metrics.deliveryRate+'% delivery rate'}/><Metric label="Read" value={d.metrics.read} sub="Confirmed read receipts"/><Metric label="Failed" value={d.metrics.failed} sub="Last 14 days"/></div>
     <div className="toolbar"><div className="toolbarGroup"><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All statuses</option><option value="submitted">Submitted</option><option value="sent">Sent</option><option value="delivered">Delivered</option><option value="read">Read</option><option value="failed">Failed</option></select></div></div>
     <DeliveryTable rows={filtered}/>
-    <CampaignTable rows={d.recent}/>
+    <div className="reportCampaigns">
+      <h2>Campaign-wise reports</h2>
+      <p>Select a campaign to inspect contact-wise deliveries, failures, and replies.</p>
+      <CampaignTable rows={campaigns} onOpen={openCampaign}/>
+    </div>
+    {opened&&<div className="modalBack" onClick={()=>setOpened(null)}>
+      <div className="modal reportModal" onClick={e=>e.stopPropagation()}>
+        <div className="modalHead"><div><small>CAMPAIGN DELIVERY AUDIT</small><h2>{opened.campaign.name}</h2></div>
+          <button onClick={()=>setOpened(null)}>×</button></div>
+        <p>{opened.rows.length} contact-wise delivery records. Open chat for replies.</p>
+        <DeliveryTable rows={opened.rows} onChat={openChat}/>
+      </div>
+    </div>}
   </div>
 }
 
@@ -1383,7 +1421,9 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='contacts')return <Contacts/>;
   if(id==='schedule')return <Schedule/>;
   if(id==='templates')return <Templates/>;
-  if(id==='reports')return <Reports/>;
+  if(id==='reports')return <Reports go={go}/>;
+  if(id==='inbox')return <Inbox/>;
+  if(id==='chatbot')return <FlowBuilder/>;
   if(id==='whatsapp-api')return <WhatsAppApi go={go}/>;
   if(id==='payments')return <Payments session={session} go={go}/>;
   if(id==='subscription')return <Subscription onSessionUpdate={onSessionUpdate}/>;
