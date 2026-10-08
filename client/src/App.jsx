@@ -3,9 +3,12 @@ import{api,BASE,getCached,warmWorkspace}from'./api.js';
 import Payments from './Payments.jsx';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
 import {Inbox,FlowBuilder} from './ConversationSuite.jsx';
+import AICopilot from './AICopilot.jsx';
+import {BUSINESS_TYPES,BUSINESS_GOALS,BRAND_TONES,LANGUAGES} from './business.js';
 
 const nav=[
   ['overview','Overview','⌂'],
+  ['ai','AI Copilot','✦'],
   ['send','Send message','➤'],
   ['campaigns','Campaigns','✦'],
   ['contacts','Contacts','◎'],
@@ -81,6 +84,14 @@ function Auth({onAuth}){
       {mode==='register'&&<>
         <label>Full name<input name="name" required autoComplete="name"/></label>
         <label>Workspace name<input name="workspaceName" placeholder="Acme Studio"/></label>
+        <label>Business type<select name="businessType" required defaultValue=""><option value="">Choose business type</option>{BUSINESS_TYPES.map(x=><option key={x}>{x}</option>)}</select></label>
+        <label>Primary business goal<select name="primaryGoal" required defaultValue=""><option value="">Choose primary goal</option>{BUSINESS_GOALS.map(x=><option key={x}>{x}</option>)}</select></label>
+        <label>Business subtype<input name="businessSubtype" placeholder="e.g. Rental properties, Dental clinic"/></label>
+        <label>Preferred language<select name="preferredLanguage" defaultValue="English">{LANGUAGES.map(x=><option key={x}>{x}</option>)}</select></label>
+        <label>Brand tone<select name="brandTone" defaultValue="Professional">{BRAND_TONES.map(x=><option key={x}>{x}</option>)}</select></label>
+        <label>Country<input name="country" defaultValue="India"/></label>
+        <label>Products / services<input name="productsServices" placeholder="What do you sell or provide?"/></label>
+        <label>Target customers<input name="targetCustomers" placeholder="Who are your ideal customers?"/></label>
       </>}
       <label>Email<input type="email" name="email" required autoComplete="email"/></label>
       <label>Password<input type="password" name="password" minLength="8" required autoComplete={mode==='login'?'current-password':'new-password'}/></label>
@@ -1417,6 +1428,7 @@ function SuperAdmin(){
 
 function Page({id,go,session,onSessionUpdate}){
   if(id==='overview')return <Overview go={go}/>;
+  if(id==='ai')return <AICopilot go={go} session={session}/>;
   if(id==='send')return <SingleSend/>;
   if(id==='campaigns')return <Campaigns/>;
   if(id==='contacts')return <Contacts/>;
