@@ -11,7 +11,16 @@ const workspaceSchema = new Schema({
   trialStartedAt: { type:Date, default:Date.now },
   trialEndsAt: { type:Date, default:()=>new Date(Date.now()+7*24*60*60*1000), index:true },
   currentPeriodStart: Date,
-  currentPeriodEnd: Date
+  currentPeriodEnd: Date,
+  businessType:{type:String,default:'',index:true},
+  businessSubtype:{type:String,default:''},
+  primaryGoal:{type:String,default:''},
+  productsServices:{type:String,default:''},
+  targetCustomers:{type:String,default:''},
+  country:{type:String,default:'India'},
+  preferredLanguage:{type:String,default:'English'},
+  brandTone:{type:String,default:'Professional'},
+  aiProfileUpdatedAt:Date
 }, opts);
 
 const userSchema = new Schema({
@@ -141,12 +150,29 @@ const deliverySchema = new Schema({
   repliedAt: Date
 }, opts);
 
+
+const aiRecommendationSchema=new Schema({
+  workspaceId:{type:Schema.Types.ObjectId,ref:'Workspace',required:true,index:true},
+  kind:{type:String,enum:['recommendations','campaign','messages','template','analysis','copilot'],required:true,index:true},
+  title:{type:String,default:''},
+  input:{type:Schema.Types.Mixed,default:{}},
+  output:{type:Schema.Types.Mixed,default:{}},
+  model:{type:String,default:''},
+  createdBy:{type:Schema.Types.ObjectId,ref:'User',default:null},
+  expiresAt:{type:Date,index:true}
+},opts);
+aiRecommendationSchema.index({expiresAt:1},{expireAfterSeconds:0});
+
 const systemSettingSchema = new Schema({
   key:{type:String,required:true,unique:true,index:true},
   metaAppId:{type:String,default:''},
   metaAppSecretEncrypted:{type:String,default:''},
   metaEmbeddedSignupConfigId:{type:String,default:''},
   metaGraphVersion:{type:String,default:'v23.0'},
+  openaiApiKeyEncrypted:{type:String,default:''},
+  openaiFastModel:{type:String,default:'gpt-6-luna'},
+  openaiStrategyModel:{type:String,default:'gpt-6-sol'},
+  openaiEnabled:{type:Boolean,default:false},
   updatedBy:{type:Schema.Types.ObjectId,ref:'User',default:null}
 },opts);
 
@@ -184,3 +210,4 @@ export const Campaign = model('Campaign', campaignSchema);
 export const Delivery = model('Delivery', deliverySchema);
 export const Integration = model('Integration', integrationSchema);
 export const SystemSetting = model('SystemSetting',systemSettingSchema);
+export const AIRecommendation = model('AIRecommendation',aiRecommendationSchema);
