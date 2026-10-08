@@ -222,7 +222,7 @@ export function FlowBuilder(){
             <label>Step type<select value={focused.type} onChange={e=>updateNode(selected,{type:e.target.value,choices:e.target.value==='buttons'?[{id:'option_1',label:'Continue',nextId:''}]:[]})}>
               <option value="message">Send text</option><option value="buttons">Quick reply buttons</option>
               <option value="handoff">Human takeover</option><option value="end">End flow</option></select></label>
-            {['message','buttons'].includes(focused.type)&&<label>WhatsApp message<textarea rows={5} maxLength={1024} value={focused.text} onChange={e=>updateNode(selected,{text:e.target.value})}/></label>}
+            {['message','buttons','handoff'].includes(focused.type)&&<label>WhatsApp message<textarea rows={5} maxLength={1024} value={focused.text} onChange={e=>updateNode(selected,{text:e.target.value})}/></label>}
             {focused.type==='message'&&<label>Next step (after next inbound response)<select value={focused.nextId||''} onChange={e=>updateNode(selected,{nextId:e.target.value})}>
               <option value="">Finish / await new keyword</option>{nodes.filter(n=>n.id!==focused.id).map(n=><option key={n.id} value={n.id}>{n.id} · {n.type}</option>)}</select></label>}
             {focused.type==='buttons'&&<div className="flowChoices">
