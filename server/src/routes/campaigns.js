@@ -182,7 +182,14 @@ r.post('/single/send',async(req,res)=>{
       .replace(/{{\s*name\s*}}/gi,contact?.name||'')
       .replace(/{{\s*phone\s*}}/gi,contact?.phone||phone)
       .replace(/{{\s*email\s*}}/gi,contact?.email||'');
-    const result=await sendWhatsApp({workspaceId:req.workspaceId,phone,text:message,template,integrationId:template?.integrationId||null});
+    // Local copy templates are only a writing aid. Approved Meta templates
+    // are a distinct send type with Meta approval and profile requirements.
+    const approved=template?.metaStatus==='APPROVED'&&template?.metaTemplateName?template:null;
+    const result=await sendWhatsApp({
+      workspaceId:req.workspaceId,phone,text:message,template:approved,
+      integrationId:approved?.integrationId||null,
+      templateParams:Array.isArray(req.body.templateParams)?req.body.templateParams.map(x=>String(x||'').trim()):[]
+    });
     const d=await Delivery.create({
       workspaceId:req.workspaceId,
       contactId:contact?._id||null,
