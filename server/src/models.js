@@ -93,7 +93,10 @@ const templateSchema = new Schema({
   language: { type: String, default: 'en_US' },
   category: { type: String, enum: ['MARKETING','UTILITY','AUTHENTICATION'], default: 'MARKETING' }
 }, opts);
-templateSchema.index({ workspaceId: 1, integrationId: 1, metaTemplateName: 1, language: 1 }, { unique: true, sparse: true });
+templateSchema.index(
+  { workspaceId: 1, integrationId: 1, metaTemplateName: 1, language: 1 },
+  { unique: true, partialFilterExpression: { metaTemplateName: { $gt: '' } } }
+);
 
 const campaignSchema = new Schema({
   workspaceId: { type: Schema.Types.ObjectId, index: true, required: true },
