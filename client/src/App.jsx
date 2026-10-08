@@ -241,7 +241,7 @@ function Campaigns(){
         <button onClick={()=>viewDeliveries(c)}>Deliveries</button>
         {!['processing','completed'].includes(c.status)&&<button onClick={()=>{setEditing(c);setShow(true)}}>Edit</button>}
         {['partial','failed'].includes(c.status)&&<button onClick={()=>action(c._id,'retry')}>Retry failed</button>}
-        <button onClick={()=>action(c._id,'send')} disabled={c.status==='processing'}>Send now</button>
+        {c.status!=='completed'&&<button onClick={()=>action(c._id,'send')} disabled={c.status==='processing'}>Send now</button>}
         <button className="danger" onClick={()=>action(c._id,'delete')} disabled={c.status==='processing'}>Delete</button>
       </div></footer>
     </article>)}{!rows.length&&<Empty text="Create your first campaign to get started."/>}</div>
