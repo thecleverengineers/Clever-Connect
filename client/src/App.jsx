@@ -223,13 +223,13 @@ function Campaigns(){
     <Title title="Campaigns" sub="Create, schedule, send, retry and audit bulk WhatsApp campaigns." action="New campaign" onAction={()=>{setEditing(null);setShow(true)}}/>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
     {show&&<div className="panel"><form key={editing?editing._id:'new'} className="formGrid" onSubmit={save}>
-      <label>Campaign name<input name="name" required defaultValue={editing?.name||''}/></label>
-      <label>Audience<select name="audienceType" defaultValue={editing?.audienceType||'all'}><option value="all">All opted-in contacts</option><option value="list">Contact list</option><option value="contacts">Specific contacts</option></select></label>
+      <label htmlFor="campaign-name">Campaign name<input id="campaign-name" name="name" required defaultValue={editing?.name||''}/></label>
+      <label htmlFor="campaign-audience">Audience<select id="campaign-audience" name="audienceType" defaultValue={editing?.audienceType||'all'}><option value="all">All opted-in contacts</option><option value="list">Contact list</option><option value="contacts">Specific contacts</option></select></label>
       <label>Contact list<select name="listId" defaultValue={editing?.listId?._id||editing?.listId||''}><option value="">Choose list</option>{lists.map(x=><option value={x._id} key={x._id}>{x.name} ({x.contactCount||0})</option>)}</select></label>
       <label>Template<select name="templateId" defaultValue={editing?.templateId?._id||editing?.templateId||''}><option value="">Freeform message</option>{templates.map(x=><option value={x._id} key={x._id}>{x.name}</option>)}</select></label>
       <label className="full">Specific contacts<select name="contactIds" multiple size="5" defaultValue={editing?.contactIds?.map(String)||[]}>{contacts.filter(x=>x.consentStatus==='opted_in'&&!x.suppressed).map(x=><option value={x._id} key={x._id}>{x.name||'Unnamed'} · {x.phone}</option>)}</select></label>
-      <label className="full">Message<textarea name="message" rows="5" defaultValue={editing?.message||''} placeholder="Hi {{name}}, your appointment is tomorrow…"/></label>
-      <label>Schedule for<input type="datetime-local" name="scheduledAt" defaultValue={editing?.scheduledAt?new Date(new Date(editing.scheduledAt).getTime()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):''}/></label>
+      <label className="full" htmlFor="campaign-message">Message<textarea id="campaign-message" name="message" rows="5" defaultValue={editing?.message||''} placeholder="Hi {{name}}, your appointment is tomorrow…"/></label>
+      <label htmlFor="campaign-scheduled-at">Schedule for<input id="campaign-scheduled-at" type="datetime-local" name="scheduledAt" defaultValue={editing?.scheduledAt?new Date(new Date(editing.scheduledAt).getTime()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):''}/></label>
       <div className="actions"><button type="button" onClick={()=>{setShow(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Update campaign':'Save campaign'}</button></div>
     </form></div>}
     <div className="cards campaignCards">{rows.map(c=><article key={c._id}>
@@ -373,7 +373,7 @@ function Schedule(){
   return <div className="page">
     <Title title="Schedule" sub="Manage upcoming automated WhatsApp campaigns."/>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
-    <div className="cards">{rows.map(c=><article key={c._id}><div className="cardTop"><div><small>SCHEDULED</small><h3>{c.name}</h3></div><em className="status scheduled">scheduled</em></div><p>{c.message||c.templateId?.name||'Template campaign'}</p><div className="scheduleBox"><b>{fmt(c.scheduledAt)}</b><input type="datetime-local" value={times[c._id]||''} onChange={e=>setTimes({...times,[c._id]:e.target.value})}/></div><footer><span>{c.audienceType==='list'?(c.listId?.name||'List'):'Opted-in audience'}</span><div className="rowActions"><button onClick={()=>reschedule(c)}>Reschedule</button><button onClick={()=>send(c)}>Send now</button><button className="danger" onClick={()=>cancel(c)}>Cancel</button></div></footer></article>)}{!rows.length&&<Empty text="No scheduled campaigns."/>}</div>
+    <div className="cards">{rows.map(c=><article key={c._id}><div className="cardTop"><div><small>SCHEDULED</small><h3>{c.name}</h3></div><em className="status scheduled">scheduled</em></div><p>{c.message||c.templateId?.name||'Template campaign'}</p><div className="scheduleBox"><b>{fmt(c.scheduledAt)}</b><input id={'reschedule-'+c._id} type="datetime-local" value={times[c._id]||''} onChange={e=>setTimes({...times,[c._id]:e.target.value})}/></div><footer><span>{c.audienceType==='list'?(c.listId?.name||'List'):'Opted-in audience'}</span><div className="rowActions"><button onClick={()=>reschedule(c)}>Reschedule</button><button onClick={()=>send(c)}>Send now</button><button className="danger" onClick={()=>cancel(c)}>Cancel</button></div></footer></article>)}{!rows.length&&<Empty text="No scheduled campaigns."/>}</div>
   </div>
 }
 
