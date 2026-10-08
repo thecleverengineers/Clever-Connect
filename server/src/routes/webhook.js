@@ -6,6 +6,8 @@ import {reconcileOrder,normalizedPhone} from '../services/paymentCheckout.js';
 import {refreshCampaignTotals} from '../services/scheduler.js';
 import {webhookVerifyToken} from '../utils/crypto.js';
 import {getMetaConfig} from '../metaConfig.js';
+import {recordInbound,processInboundFlow} from '../services/liveChat.js';
+import {ChatMessage} from '../chatModels.js';
 
 const r=express.Router();
 
@@ -45,6 +47,13 @@ r.post('/',async(req,res)=>{
             {$max:{lastInboundAt:new Date(ms)}},
             {upsert:true}
           );
+          try{
+            const received=await recordInbound(integration,message);
+            if(received?.fresh&&received.conversation){
+              try{await processInboundFlow(integration,message,received.conversation,received.value)}
+              catch(e){console.error('Chatbot flow execution failed',e)}
+            }
+          }catch(e){console.error('Incoming chat persistence failed',e)}
         }
         for(const s of change.value?.statuses||[]){
           if(s.type==='payment'||s.payment?.reference_id){
@@ -69,6 +78,8 @@ r.post('/',async(req,res)=>{
             {workspaceId:integration.workspaceId,providerMessageId:s.id},
             {$set:set},{new:true}
           );
+          await ChatMessage.updateOne({integrationId:integration._id,providerMessageId:s.id},
+            {$set:{status,error:status==='failed'?set.error||'Delivery failed':''}}).catch(console.error);
           if(d?.campaignId)await refreshCampaignTotals(d.campaignId);
         }
       }
