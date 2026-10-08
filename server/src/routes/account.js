@@ -43,6 +43,15 @@ async function workspaceSummary(workspaceId){
   };
 }
 const canManage=u=>['owner','admin'].includes(u.role);
+const hasActiveSubscription=w=>w?.subscriptionStatus==='active';
+async function requireTeamSubscription(workspaceId,res){
+  const w=await Workspace.findById(workspaceId).lean();
+  if(!hasActiveSubscription(w)){
+    res.status(402).json({message:'An active Clever Connect subscription is required to manage team members'});
+    return null;
+  }
+  return w;
+}
 
 r.get('/profile',async(req,res)=>{
   const u=await User.findById(req.user._id).lean();
@@ -89,7 +98,8 @@ r.get('/team',async(req,res)=>{
 
 r.post('/team',async(req,res)=>{
   if(!canManage(req.user))return res.status(403).json({message:'Only workspace owners or admins can add team members'});
-  const workspace=await Workspace.findById(req.workspaceId).lean();
+  const workspace=await requireTeamSubscription(req.workspaceId,res);
+  if(!workspace)return;
   const limits=await planLimitsForWorkspace(workspace);
   const count=await User.countDocuments({workspaceId:req.workspaceId});
   if(count>=limits.teamMembers)return res.status(409).json({message:'Your current WA SANTA access allows '+limits.teamMembers+' team members'});
@@ -105,6 +115,7 @@ r.post('/team',async(req,res)=>{
 
 r.put('/team/:id',async(req,res)=>{
   if(!canManage(req.user))return res.status(403).json({message:'Only workspace owners or admins can update team roles'});
+  if(!await requireTeamSubscription(req.workspaceId,res))return;
   if(!mongoose.isValidObjectId(req.params.id))return res.sendStatus(404);
   const target=await User.findOne({_id:req.params.id,workspaceId:req.workspaceId});
   if(!target)return res.sendStatus(404);
@@ -117,6 +128,7 @@ r.put('/team/:id',async(req,res)=>{
 
 r.delete('/team/:id',async(req,res)=>{
   if(!canManage(req.user))return res.status(403).json({message:'Only workspace owners or admins can remove team members'});
+  if(!await requireTeamSubscription(req.workspaceId,res))return;
   if(String(req.params.id)===String(req.user._id))return res.status(409).json({message:'You cannot remove your own account'});
   const target=await User.findOne({_id:req.params.id,workspaceId:req.workspaceId});
   if(!target)return res.sendStatus(404);
