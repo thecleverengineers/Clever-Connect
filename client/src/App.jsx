@@ -1415,7 +1415,7 @@ function SuperAdmin(){
     const hay=[w.name,w.owner?.name,w.owner?.email,w._id].join(' ').toLowerCase();
     return hay.includes(adminSearch.trim().toLowerCase())&&(adminFilter==='all'||(adminFilter==='active'?w.access?.allowed:!w.access?.allowed));
   });
-  const adminTabs=[['overview','Overview'],['tenants','Tenants'],['approvals','Approvals'],['plans','Plans'],['integrations','Integrations']];
+  const adminTabs=[['overview','Overview'],['tenants','Tenants'],['approvals','Approvals'],['plans','Plans'],['integrations','Integrations'],['audit','Audit trail']];
   return <div className="page adminEnterprise">
     <div className="adminHero">
       <div><span className="adminOverline"><i/> CONTROL CENTER · PLATFORM ADMINISTRATION</span><h1>Enterprise command center</h1><p>Govern tenants, subscription revenue, approvals and connected business infrastructure from one secure workspace.</p></div>
@@ -1425,11 +1425,25 @@ function SuperAdmin(){
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
 
     <div className="metrics adminKpis">
-      <Metric label="Plans" value={data.plans.length} sub={data.plans.filter(x=>x.active).length+' active'}/>
-      <Metric label="Workspaces" value={data.workspaces.length} sub="Registered tenants"/>
-      <Metric label="Pending requests" value={data.pendingRequests.length} sub="Need approval"/>
-      <Metric label="Expired / locked" value={data.workspaces.filter(x=>!x.access?.allowed).length} sub="Subscription required"/>
+      <Metric label="Projected monthly plan value" value={'₹'+Number(data.insights?.projectedMonthlyRevenue||0).toLocaleString('en-IN')} sub="Active plan prices · not collected revenue"/>
+      <Metric label="Active tenants" value={data.insights?.activeTenants??0} sub={data.workspaces.length+' workspaces shown'}/>
+      <Metric label="Pending approvals" value={data.pendingRequests.length} sub="Require admin review"/>
+      <Metric label="14-day delivery rate" value={(data.insights?.deliveryRateLast14Days||0)+'%'} sub={(data.insights?.deliveredLast14Days||0)+' delivered · '+(data.insights?.dispatchedLast14Days||0)+' dispatched'}/>
     </div>
+    {adminTab==='overview'&&<div className="adminMiniInsights"><span><small>PLATFORM USERS</small><b>{data.insights?.totalUsers??0}</b></span><span><small>CAMPAIGNS CREATED</small><b>{data.insights?.totalCampaigns??0}</b></span><span><small>ACTIVE PLANS</small><b>{data.plans.filter(x=>x.active).length}</b></span><span><small>LOCKED WORKSPACES</small><b>{data.workspaces.filter(x=>!x.access?.allowed).length}</b></span></div>}
+
+    {(adminTab==='overview'||adminTab==='audit')&&<section className="adminAudit">
+      <div className="sectionHead"><div><small>GOVERNANCE & COMPLIANCE</small><h2>Administration activity</h2><p>Read-only record of plan, subscription and integration administration. Sensitive credential values are never logged.</p></div></div>
+      <div className="table"><div className="tr adminAuditRow th"><span>Activity</span><span>Actor</span><span>Target</span><span>Recorded</span></div>
+        {(data.recentAudit||[]).map(x=><div className="tr adminAuditRow" key={x._id}>
+          <span><b>{String(x.action||'').replaceAll('.',' · ')}</b><small>{x.description||'Administrative action'}</small></span>
+          <span>{x.actorId?.name||x.actorId?.email||'Administrator'}</span>
+          <span>{x.targetType||'—'} <small>{x.targetId||''}</small></span>
+          <span>{fmt(x.createdAt)}</span>
+        </div>)}{!data.recentAudit?.length&&<Empty text="New administrator actions will be recorded here."/>}
+      </div>
+      {adminTab==='audit'&&<p className="muted">The overview shows the 10 most recent records. Sensitive tokens and passwords are never included in audit descriptions.</p>}
+    </section>}
 
     {(adminTab==='overview'||adminTab==='integrations')&&<section className="adminMetaSettings">
       <div className="sectionHead">
