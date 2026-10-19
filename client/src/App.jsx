@@ -1514,7 +1514,7 @@ function SuperAdmin(){
         <div className="cardTop"><div><small>{p.active?'PUBLISHED':'HIDDEN'}</small><h3>{p.name}</h3></div><em className={'status '+(p.active?'completed':'cancelled')}>{p.active?'active':'disabled'}</em></div>
         <div className="priceValue">{p.currency==='INR'?'₹':p.currency+' '}{Number(p.priceMonthly).toLocaleString()}<span>/month</span></div>
         <p>{p.metaConnections} WhatsApp · {p.teamMembers} team · {Number(p.monthlyMessages).toLocaleString()} messages</p>
-        <footer><span>{p.slug}</span><div className="rowActions"><button onClick={()=>{setEditing(p);setShowPlan(true)}}>Edit</button><button className="danger" onClick={()=>deletePlan(p)}>Delete</button></div></footer>
+        <footer><span>{p.slug}</span><div className="rowActions"><button onClick={()=>{setAdminTab('plans');setEditing(p);setShowPlan(true)}}>Edit</button><button className="danger" onClick={()=>deletePlan(p)}>Delete</button></div></footer>
       </article>)}</div>
     </section>}
 
