@@ -1304,10 +1304,13 @@ function SuperAdmin(){
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
   const[workspacePlans,setWorkspacePlans]=useState({});
+  const[adminSearch,setAdminSearch]=useState('');
+  const[adminFilter,setAdminFilter]=useState('all');
+  const[adminTab,setAdminTab]=useState('overview');
   async function load(){
     setErr('');
     try{
-      const [overview,meta,openai]=await Promise.all([api('/admin/overview'),api('/admin/meta-settings'),api('/admin/openai-settings')]);
+      const [overview,meta,openai]=await Promise.all([api('/admin/overview',{fresh:true}),api('/admin/meta-settings',{fresh:true}),api('/admin/openai-settings',{fresh:true})]);
       setData(overview);setMetaSettings(meta);setOpenaiSettings(openai);
     }catch(e){setErr(e.message)}
   }
@@ -1407,18 +1410,27 @@ function SuperAdmin(){
     }catch(e){setErr(e.message)}
   }
   if(!data)return <div className="page">{err?<Notice type="bad">{err}</Notice>:<Loading/>}</div>;
-  return <div className="page">
-    <Title title="Super Admin" sub="Control WA SANTA plans, pricing, tenant trials and subscriptions." action="Create plan" onAction={()=>{setEditing(null);setShowPlan(true)}}/>
+  const filteredWorkspaces=data.workspaces.filter(w=>{
+    const hay=[w.name,w.owner?.name,w.owner?.email,w._id].join(' ').toLowerCase();
+    return hay.includes(adminSearch.trim().toLowerCase())&&(adminFilter==='all'||(adminFilter==='active'?w.access?.allowed:!w.access?.allowed));
+  });
+  const adminTabs=[['overview','Overview'],['tenants','Tenants'],['approvals','Approvals'],['plans','Plans'],['integrations','Integrations']];
+  return <div className="page adminEnterprise">
+    <div className="adminHero">
+      <div><span className="adminOverline"><i/> CONTROL CENTER · PLATFORM ADMINISTRATION</span><h1>Enterprise command center</h1><p>Govern tenants, subscription revenue, approvals and connected business infrastructure from one secure workspace.</p></div>
+      <div className="adminHeroActions"><span className="adminLiveBadge">● Platform administration</span><button type="button" onClick={load}>↻ Refresh data</button><button type="button" className="primary" onClick={()=>{setAdminTab('plans');setEditing(null);setShowPlan(true)}}>+ New plan</button></div>
+    </div>
+    <nav className="adminTabs" aria-label="Admin workspace sections">{adminTabs.map(([id,label])=><button type="button" key={id} aria-current={adminTab===id?'page':undefined} className={adminTab===id?'active':''} onClick={()=>setAdminTab(id)}>{label}{id==='approvals'&&data.pendingRequests.length>0&&<b>{data.pendingRequests.length}</b>}</button>)}</nav>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
 
-    <div className="metrics">
+    <div className="metrics adminKpis">
       <Metric label="Plans" value={data.plans.length} sub={data.plans.filter(x=>x.active).length+' active'}/>
       <Metric label="Workspaces" value={data.workspaces.length} sub="Registered tenants"/>
       <Metric label="Pending requests" value={data.pendingRequests.length} sub="Need approval"/>
       <Metric label="Expired / locked" value={data.workspaces.filter(x=>!x.access?.allowed).length} sub="Subscription required"/>
     </div>
 
-    <section className="adminMetaSettings">
+    {(adminTab==='overview'||adminTab==='integrations')&&<section className="adminMetaSettings">
       <div className="sectionHead">
         <div>
           <small>META PLATFORM</small>
@@ -1449,7 +1461,7 @@ function SuperAdmin(){
       </div>
     </section>
 
-    <section className="adminOpenAISettings">
+    {(adminTab==='overview'||adminTab==='integrations')&&<section className="adminOpenAISettings">
       <div className="sectionHead">
         <div>
           <small>OPENAI</small>
@@ -1478,9 +1490,9 @@ function SuperAdmin(){
         <span><b>Privacy</b><small>AI recommendations use the business profile and aggregate workspace metrics. Contact names, phone numbers and email addresses are excluded from AI context.</small></span>
         <span><b>Control</b><small>AI creates recommendations and drafts only. Users must explicitly review and send or schedule campaigns.</small></span>
       </div>
-    </section>
+    </section>}
 
-    {showPlan&&<div className="panel"><form key={editing?editing._id:'new-plan'} className="formGrid" onSubmit={savePlan}>
+    {(adminTab==='plans')&&showPlan&&<div className="panel"><form key={editing?editing._id:'new-plan'} className="formGrid" onSubmit={savePlan}>
       <label>Plan name<input name="name" defaultValue={editing?.name||''} required/></label>
       <label>Slug<input name="slug" defaultValue={editing?.slug||''} placeholder="starter" required/></label>
       <label>Monthly price<input type="number" min="0" step="0.01" name="priceMonthly" defaultValue={editing?.priceMonthly??''} required/></label>
@@ -1495,7 +1507,7 @@ function SuperAdmin(){
       <div className="actions full"><button type="button" onClick={()=>{setShowPlan(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Update plan':'Create plan'}</button></div>
     </form></div>}
 
-    <section>
+    {(adminTab==='overview'||adminTab==='plans')&&<section>
       <div className="sectionHead"><div><h2>Subscription plans</h2><p>These are the only plans tenants can request.</p></div></div>
       <div className="adminPlanGrid">{data.plans.map(p=><article key={p._id}>
         <div className="cardTop"><div><small>{p.active?'PUBLISHED':'HIDDEN'}</small><h3>{p.name}</h3></div><em className={'status '+(p.active?'completed':'cancelled')}>{p.active?'active':'disabled'}</em></div>
@@ -1503,9 +1515,9 @@ function SuperAdmin(){
         <p>{p.metaConnections} WhatsApp · {p.teamMembers} team · {Number(p.monthlyMessages).toLocaleString()} messages</p>
         <footer><span>{p.slug}</span><div className="rowActions"><button onClick={()=>{setEditing(p);setShowPlan(true)}}>Edit</button><button className="danger" onClick={()=>deletePlan(p)}>Delete</button></div></footer>
       </article>)}</div>
-    </section>
+    </section>}
 
-    <section>
+    {(adminTab==='overview'||adminTab==='approvals')&&<section>
       <div className="sectionHead"><div><h2>Pending subscription requests</h2><p>Approve to activate paid access; reject to keep the workspace locked/trial state.</p></div></div>
       <div className="table">
         <div className="tr adminRequest th"><span>Workspace</span><span>Owner</span><span>Plan</span><span>Price</span><span>Requested</span><span>Action</span></div>
@@ -1518,13 +1530,14 @@ function SuperAdmin(){
           <span className="inlineActions"><button className="primary" onClick={()=>requestAction(x,'approve')}>Approve</button><button className="danger" onClick={()=>requestAction(x,'reject')}>Reject</button></span>
         </div>)}{!data.pendingRequests.length&&<Empty text="No pending subscription requests."/>}
       </div>
-    </section>
+    </section>}
 
-    <section>
-      <div className="sectionHead"><div><h2>Tenant workspaces</h2><p>Manually restart a 7-day trial, activate a plan, or expire access.</p></div></div>
+    {(adminTab==='overview'||adminTab==='tenants')&&<section>
+      <div className="sectionHead"><div><h2>Tenant workspaces</h2><p>Search and manage tenant lifecycle, plan assignments and access.</p></div></div>
+      <div className="adminDirectoryTools"><input type="search" placeholder="Search workspace, owner or email…" value={adminSearch} onChange={e=>setAdminSearch(e.target.value)}/><select value={adminFilter} onChange={e=>setAdminFilter(e.target.value)} aria-label="Workspace access filter"><option value="all">All workspaces</option><option value="active">Access active</option><option value="locked">Expired / locked</option></select><small>{filteredWorkspaces.length} of {data.workspaces.length} workspaces</small></div>
       <div className="table">
         <div className="tr adminWorkspace th"><span>Workspace</span><span>Owner</span><span>Access</span><span>Plan</span><span>Ends</span><span>Controls</span></div>
-        {data.workspaces.map(w=><div className="tr adminWorkspace" key={w._id}>
+        {filteredWorkspaces.map(w=><div className="tr adminWorkspace" key={w._id}>
           <span><b>{w.name}</b><small>{String(w._id)}</small></span>
           <span>{w.owner?.email||'—'}</span>
           <span><em className={'status '+(w.access?.allowed?'completed':'failed')}>{w.access?.state||w.subscriptionStatus}</em></span>
@@ -1538,7 +1551,7 @@ function SuperAdmin(){
           </span>
         </div>)}
       </div>
-    </section>
+    </section>}
   </div>
 }
 
