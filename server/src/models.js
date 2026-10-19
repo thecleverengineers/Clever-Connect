@@ -125,7 +125,11 @@ const campaignSchema = new Schema({
   contactIds: [{ type: Schema.Types.ObjectId, ref: 'Contact' }],
   scheduledAt: Date,
   status: { type: String, enum: ['draft','scheduled','processing','completed','partial','failed','cancelled'], default: 'draft', index: true },
+  audienceSnapshottedAt:Date,
+  dispatchFinishedAt:Date,
   totals: {
+    audience:{type:Number,default:0},eligible:{type:Number,default:0},skipped:{type:Number,default:0},pending:{type:Number,default:0},
+    deliveredPct:{type:Number,default:0},failedPct:{type:Number,default:0},readPct:{type:Number,default:0},
     submitted: { type: Number, default: 0 },
     delivered: { type: Number, default: 0 },
     read: { type: Number, default: 0 },
@@ -141,10 +145,15 @@ const deliverySchema = new Schema({
   campaignId: { type: Schema.Types.ObjectId, ref: 'Campaign', index: true, default: null },
   contactId: { type: Schema.Types.ObjectId, ref: 'Contact', default: null },
   phone: { type: String, required: true },
+  recipientName:{type:String,default:''},
+  recipientEmail:{type:String,default:''},
+  skipReason:{type:String,default:''},
+  errorCode:{type:String,default:''},
+  attemptCount:{type:Number,default:0},
   message: { type: String, default: '' },
   providerMessageId: { type: String, index: true },
   provider: { type: String, enum: ['demo','meta'], default: 'demo' },
-  status: { type: String, enum: ['queued','submitted','sent','delivered','read','failed'], default: 'queued', index: true },
+  status: { type: String, enum: ['queued','submitted','sent','delivered','read','failed','skipped'], default: 'queued', index: true },
   error: { type: String, default: '' },
   sentAt: Date,
   deliveredAt: Date,
@@ -152,6 +161,17 @@ const deliverySchema = new Schema({
   repliedAt: Date
 }, opts);
 
+deliverySchema.index({workspaceId:1,campaignId:1,contactId:1},{unique:true,partialFilterExpression:{campaignId:{$type:'objectId'},contactId:{$type:'objectId'}}});
+deliverySchema.index({workspaceId:1,providerMessageId:1});
+
+const deliveryReceiptSchema=new Schema({
+ workspaceId:{type:Schema.Types.ObjectId,required:true,index:true},
+ providerMessageId:{type:String,required:true},
+ status:{type:String,enum:['sent','delivered','read','failed'],required:true},
+ occurredAt:{type:Date,default:Date.now},
+ errorCode:{type:String,default:''},errorMessage:{type:String,default:''}
+},opts);
+deliveryReceiptSchema.index({workspaceId:1,providerMessageId:1,status:1},{unique:true});
 
 const aiRecommendationSchema=new Schema({
   workspaceId:{type:Schema.Types.ObjectId,ref:'Workspace',required:true,index:true},
@@ -210,6 +230,7 @@ export const Contact = model('Contact', contactSchema);
 export const Template = model('Template', templateSchema);
 export const Campaign = model('Campaign', campaignSchema);
 export const Delivery = model('Delivery', deliverySchema);
+export const DeliveryReceipt=model('DeliveryReceipt',deliveryReceiptSchema);
 export const Integration = model('Integration', integrationSchema);
 export const SystemSetting = model('SystemSetting',systemSettingSchema);
 export const AIRecommendation = model('AIRecommendation',aiRecommendationSchema);
