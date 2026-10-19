@@ -1,0 +1,82 @@
+/* Premium application shell: responsive, app-like mobile navigation */
+:root{--app-ink:#142a24;--app-muted:#72857b;--app-line:#e3ebe6;--app-green:#087b56;--app-surface:#fff;--app-bg:#f4f7f5}
+body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:transparent}
+.shell aside{background:#fff;box-shadow:3px 0 26px #1c44320a}
+.shell header{backdrop-filter:blur(18px);background:#fffffff0}
+.mobileAppbar{display:none}
+.premiumFunnel{border:1px solid #dce9e2;border-radius:18px;padding:23px;background:linear-gradient(150deg,#fff,#fbfefc);box-shadow:0 12px 38px #0e3a2410}
+.funnelHeading{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.funnelHeading small,.adminOverline{font-size:10px;letter-spacing:.13em;font-weight:800;color:#168262}
+.funnelHeading h3{font-size:22px;letter-spacing:-.04em;margin:8px 0}
+.funnelHeading p,.funnelFine{font-size:12px;color:#81948b;line-height:1.6}
+.funnelMeta{border:1px solid #d3e8dd;background:#eef8f2;color:#087b56;border-radius:30px;padding:7px 12px;text-transform:capitalize;white-space:nowrap;font-size:11px;font-weight:700}
+.funnelCards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin:18px 0}
+.funnelCards article{margin:0;display:flex;flex-direction:column;gap:6px;border-radius:14px;padding:17px;background:#fff;box-shadow:0 4px 18px #073e2410}
+.funnelCards article small{font-size:11px;font-weight:650;color:#62786c}
+.funnelCards article strong{font-size:28px;letter-spacing:-.06em;line-height:1.15}
+.funnelCards article span{font-size:10px;color:#84958c}
+.funnelSegment{display:flex;height:12px;border-radius:20px;overflow:hidden;background:#ebf0ec;margin:15px 0}
+.funnelSegment span{display:block;height:100%;transition:width .3s}
+.funnelTools{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px}
+.funnelTools input{flex:1;min-width:180px}
+.funnelTools input,.funnelTools select,.funnelTools button,.adminDirectoryTools input,.adminDirectoryTools select{border:1px solid #dce6df;background:white;border-radius:10px;padding:11px 13px;color:#334b3d;font-size:12px}
+.funnelTools button{font-weight:700;border-color:#a7cfb7;color:#087b56}
+.funnelRecipientList{display:grid;gap:0;max-height:350px;overflow:auto;border:1px solid #e6eee9;border-radius:12px}
+.funnelRecipientList>div{padding:13px 16px;border-bottom:1px solid #edf1ee;display:grid;grid-template-columns:minmax(140px,1.3fr) auto minmax(160px,1fr) auto;gap:16px;align-items:center;font-size:12px}
+.funnelRecipientList>div:last-child{border-bottom:0}
+.funnelRecipientList>div>div b,.funnelRecipientList>div>div small{display:block}
+.funnelRecipientList>div>div small,.funnelRecipientList>div>small{color:#84958c;font-size:11px;overflow-wrap:anywhere}
+.funnelRecipientList button{border:1px solid #c9e0d2;border-radius:9px;padding:7px 10px;color:#087b56;background:#fff}
+.funnelReasons{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:18px;font-size:11px}
+.funnelReasons span{background:#fff5f3;border:1px solid #f1d8d3;border-radius:9px;padding:8px 11px;color:#9d5550}
+.funnelReasons strong{margin-left:6px}
+.adminEnterprise .adminHero{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:32px;margin-bottom:16px;border-radius:20px;background:radial-gradient(circle at 90% 12%,#2d9b7344,transparent 38%),linear-gradient(125deg,#102e25,#164633);color:#fff;box-shadow:0 18px 48px #143a2c26}
+.adminEnterprise .adminHero h1{font-size:clamp(26px,3vw,37px);margin:13px 0 10px;letter-spacing:-.05em;line-height:1.08}
+.adminEnterprise .adminHero p{font-size:13px;color:#cfdfd6;line-height:1.65;max-width:580px;margin:0}
+.adminOverline{color:#c4e9d8;display:inline-flex;align-items:center;gap:8px}
+.adminOverline i{background:#6ae0a4;width:7px;height:7px;border-radius:50%}
+.adminHeroActions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.adminHeroActions button{background:#ffffff12;color:white;border:1px solid #ffffff44;padding:10px 14px;border-radius:10px;font-weight:700;font-size:12px}
+.adminLiveBadge{color:#baedcc;font-size:11px;white-space:nowrap}
+.adminTabs{display:flex;align-items:center;gap:7px;padding:7px;background:#fff;border:1px solid #e2eae5;border-radius:13px;overflow-x:auto;margin-bottom:20px}
+.adminTabs button{white-space:nowrap;background:transparent;border:0;padding:12px 17px;border-radius:10px;color:#75867c;font-weight:650;font-size:12px;display:flex;align-items:center;gap:7px}
+.adminTabs button.active{background:#e8f5ec;color:#086d4a}
+.adminTabs b{font-size:10px;background:#fdebe7;color:#bb5d50;border-radius:50px;padding:2px 6px}
+.adminKpis .metric{box-shadow:0 6px 26px #152f2110;border-radius:15px;border-color:#e1ebe4}
+.adminEnterprise>section{box-shadow:0 5px 27px #0e412b08;border-radius:16px}
+.adminDirectoryTools{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:19px 0}
+.adminDirectoryTools input{flex:1;min-width:220px}
+.adminDirectoryTools small{color:#8a9a90;font-size:11px}
+@media(max-width:1050px){.funnelCards{grid-template-columns:repeat(3,minmax(0,1fr))}.adminEnterprise .adminHero{align-items:flex-start;flex-direction:column}}
+@media(max-width:760px){
+ .shell header{height:64px;top:0;padding:0 16px;padding-top:env(safe-area-inset-top);height:calc(64px + env(safe-area-inset-top));z-index:40}
+ .shell main{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+ .shell .page{padding:18px 13px 23px}
+ .shell aside{z-index:80;box-shadow:12px 0 45px #001d191f}
+ .mobileAppbar{display:grid!important;position:fixed;bottom:0;left:0;right:0;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;gap:2px;padding:7px 6px calc(9px + env(safe-area-inset-bottom));border-top:1px solid #e5ebe7;background:#ffffffee;backdrop-filter:blur(22px);box-shadow:0 -5px 28px #153d2618;z-index:50}
+ .shell nav.mobileAppbar button{border:0;background:transparent;color:#7c9083;padding:9px 2px 6px;display:grid;justify-items:center;gap:5px;border-radius:12px;font-size:10px;min-height:49px}
+ .mobileAppbar button span{font-size:20px;line-height:1}
+ .mobileAppbar button small{font-size:10px;letter-spacing:0;font-weight:650}
+ .shell nav.mobileAppbar button.active{color:#057e50;background:#eaf7ef}
+ .premiumFunnel{padding:13px;border-radius:15px}
+ .funnelHeading h3{font-size:19px}
+ .funnelCards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .funnelCards article{padding:13px}
+ .funnelCards article strong{font-size:25px}
+ .funnelTools{display:grid;grid-template-columns:1fr 1fr}
+ .funnelTools input{grid-column:1/-1;min-width:0}
+ .funnelRecipientList>div{grid-template-columns:1fr auto;gap:7px}
+ .funnelRecipientList>div>small{grid-column:1/-1}
+ .funnelRecipientList button{grid-column:2;grid-row:2}
+ .adminEnterprise .adminHero{padding:24px 18px}
+ .adminHeroActions{justify-content:flex-start}
+ .adminTabs{gap:0;position:sticky;top:calc(64px + env(safe-area-inset-top));z-index:9}
+ .adminTabs button{padding:12px;font-size:11px}
+ .adminDirectoryTools{display:grid;grid-template-columns:1fr 1fr}
+ .adminDirectoryTools input{grid-column:1/-1;min-width:0}
+ .adminKpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .adminKpis .metric{padding:14px}
+ .adminKpis .metric strong{font-size:26px}
+ .reportModal{width:100vw!important;max-width:100vw!important;max-height:calc(100dvh - env(safe-area-inset-top))!important;border-radius:18px 18px 0 0!important;margin:0!important;align-self:end;padding-bottom:calc(22px + env(safe-area-inset-bottom))}
+}
+@media(max-width:380px){.funnelCards{grid-template-columns:1fr 1fr}.mobileAppbar button small{font-size:9px}.adminLiveBadge{display:none}}
