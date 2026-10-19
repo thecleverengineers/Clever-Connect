@@ -29,7 +29,7 @@ async function enforceMessageAllowance(workspaceId){
   const since=workspace.subscriptionStatus==='active'
     ? (workspace.currentPeriodStart||new Date(new Date().getFullYear(),new Date().getMonth(),1))
     : (workspace.trialStartedAt||workspace.createdAt||new Date(Date.now()-7*86400000));
-  const used=await Delivery.countDocuments({workspaceId,createdAt:{$gte:since}});
+  const used=await Delivery.countDocuments({workspaceId,createdAt:{$gte:since},status:{$nin:['queued','skipped']}});
   if(used>=max)throw new Error('Monthly message limit reached for your WA SANTA plan');
 }
 
