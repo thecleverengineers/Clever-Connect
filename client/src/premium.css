@@ -80,3 +80,25 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
  .reportModal{width:100vw!important;max-width:100vw!important;max-height:calc(100dvh - env(safe-area-inset-top))!important;border-radius:18px 18px 0 0!important;margin:0!important;align-self:end;padding-bottom:calc(22px + env(safe-area-inset-bottom))}
 }
 @media(max-width:380px){.funnelCards{grid-template-columns:1fr 1fr}.mobileAppbar button small{font-size:9px}.adminLiveBadge{display:none}}
+
+
+/* Conversational workspace refinements */
+.inboxFilterTabs{display:flex;gap:5px;overflow-x:auto;padding:11px 12px 4px;scrollbar-width:none}
+.inboxFilterTabs button{border:1px solid transparent;border-radius:8px;background:#f0f5f1;color:#617a69;font-size:11px;padding:9px 11px;white-space:nowrap;font-weight:700}
+.inboxFilterTabs button.active{border-color:#c5e4d0;background:#e4f4e9;color:#057e50}
+.windowOpen{color:#0d8758!important;font-weight:800}
+.windowClosed{color:#b16644!important;font-weight:800}
+.chatBubble .campaignContext{margin:8px 0;padding:8px 9px;background:#f4f9f6;border-left:3px solid #12845a;border-radius:6px;text-align:left;font-weight:650;color:#24694a}
+.chatWindow{box-shadow:0 10px 30px #183c2610}
+.chatThread.selected{background:linear-gradient(90deg,#e8f5ed,#f3faf6)}
+@media(max-width:680px){
+ .liveChatGrid{min-height:calc(100dvh - 220px);gap:10px}
+ .chatThreads{max-height:240px;border-radius:15px}
+ .chatWindow{min-height:420px;border-radius:15px}
+ .chatMessages{height:300px}
+ .chatReply{padding:10px}
+ .chatReply textarea{font-size:16px;border-radius:12px}
+ .chatTop{padding:12px}
+ .chatTop button{min-height:38px}
+ .inboxFilterTabs{padding:10px 8px 2px}
+}
