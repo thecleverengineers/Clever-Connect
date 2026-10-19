@@ -47,6 +47,10 @@ export async function refreshCampaignTotals(campaignId){
   const summary=summarizeStatuses(Object.fromEntries(counts.map(x=>[x._id,x.count])));
   summary.replied=await Delivery.countDocuments({campaignId,repliedAt:{$ne:null}});
   await Campaign.findByIdAndUpdate(campaignId,{$set:{totals:summary}});
+  const campaign=await Campaign.findById(campaignId).select('dispatchFinishedAt status').lean();
+  if(campaign?.dispatchFinishedAt&&campaign.status==='processing'&&!summary.pending){
+    await Campaign.updateOne({_id:campaignId,status:'processing'},{$set:{status:summary.failed?(summary.delivered?'partial':'failed'):'completed',completedAt:new Date()}});
+  }
   return summary;
 }
 
