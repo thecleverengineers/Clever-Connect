@@ -2,30 +2,31 @@ import { Campaign, Contact, Delivery, Template, Workspace, Integration } from '.
 import {recordOutbound} from './liveChat.js';
 import {accessForWorkspace} from '../plan.js';
 import { sendWhatsApp } from './whatsapp.js';
+import {precheckRecipient,refreshCampaignTotals,reconcileMetaReceipts} from './campaignTracking.js';
 
 async function audience(c){
-  const q={workspaceId:c.workspaceId,consentStatus:'opted_in',suppressed:false};
-  if(c.audienceType==='list' && c.listId) q.lists=c.listId;
-  if(c.audienceType==='contacts') q._id={$in:c.contactIds||[]};
-  return Contact.find(q).lean();
+  const q={workspaceId:c.workspaceId};
+  if(c.audienceType==='list'&&c.listId)q.lists=c.listId;
+  if(c.audienceType==='contacts')q._id={$in:c.contactIds||[]};
+  return Contact.find(q).sort({_id:1}).lean();
 }
-
-export async function refreshCampaignTotals(campaignId){
-  const rows=await Delivery.aggregate([
-    {$match:{campaignId}},
-    {$group:{_id:'$status',count:{$sum:1}}}
-  ]);
-  const counts=Object.fromEntries(rows.map(x=>[x._id,x.count]));
-  const submitted=(counts.submitted||0)+(counts.sent||0)+(counts.delivered||0)+(counts.read||0);
-  const delivered=(counts.delivered||0)+(counts.read||0);
-  await Campaign.findByIdAndUpdate(campaignId,{$set:{totals:{
-    submitted,
-    delivered,
-    read:counts.read||0,
-    failed:counts.failed||0
-  }}});
-  return {submitted,delivered,read:counts.read||0,failed:counts.failed||0};
+async function snapshotAudience(c){
+  if(c.audienceSnapshottedAt)return;
+  const seen=new Set();
+  for(const contact of await audience(c)){
+    const excluded=precheckRecipient(contact,seen);
+    await Delivery.updateOne({workspaceId:c.workspaceId,campaignId:c._id,contactId:contact._id},{
+      $setOnInsert:{
+        workspaceId:c.workspaceId,campaignId:c._id,contactId:contact._id,
+        phone:String(contact.phone||''),recipientName:contact.name||'',recipientEmail:contact.email||'',
+        message:c.message||'',status:excluded?'skipped':'queued',
+        skipReason:excluded?.reason||'',errorCode:excluded?.code||''
+      }
+    },{upsert:true});
+  }
+  await Campaign.updateOne({_id:c._id},{$set:{audienceSnapshottedAt:new Date()}});
 }
+export {refreshCampaignTotals} from './campaignTracking.js';
 
 function renderMessage(text,contact){
   return String(text||'')
@@ -50,24 +51,24 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
   );
   if(!c) return null;
 
-  const contacts=await audience(c);
-  if(!contacts.length){
-    c.status='failed';
-    c.completedAt=new Date();
-    c.lastError='No opted-in, unsuppressed contacts matched this audience';
-    await c.save();
-    return c;
+  await snapshotAudience(c);
+  await refreshCampaignTotals(c._id);
+  const queued=await Delivery.find({workspaceId:c.workspaceId,campaignId:c._id,status:retryFailedOnly?'failed':'queued'}).lean();
+  if(!queued.length){
+    const summary=await refreshCampaignTotals(c._id);
+    c.status=summary.pending?'processing':summary.failed?(summary.delivered?'partial':'failed'):'completed';
+    c.dispatchFinishedAt=new Date();c.completedAt=summary.pending?null:new Date();
+    await c.save();return c;
   }
-
   const template=c.templateId
     ? await Template.findOne({_id:c.templateId,workspaceId:c.workspaceId}).lean()
     : null;
 
   let attempted=0;
-  for(const contact of contacts){
-    let delivery=await Delivery.findOne({campaignId:c._id,contactId:contact._id});
-    if(retryFailedOnly && (!delivery || delivery.status!=='failed')) continue;
-    if(!retryFailedOnly && delivery && delivery.status!=='failed') continue;
+  for(const item of queued){
+    let delivery=await Delivery.findOne({_id:item._id,workspaceId:c.workspaceId});
+    if(!delivery||!['queued',...(retryFailedOnly?['failed']:[])].includes(delivery.status))continue;
+    const contact={_id:delivery.contactId,name:delivery.recipientName,phone:delivery.phone,email:delivery.recipientEmail};
 
     attempted++;
     delivery=delivery||new Delivery({
@@ -111,12 +112,14 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
       delivery.status=result.status;
       delivery.sentAt=new Date();
       if(result.status==='delivered') delivery.deliveredAt=new Date();
-      delivery.error='';
+      delivery.error='';delivery.errorCode='';delivery.attemptCount=(delivery.attemptCount||0)+1;
     }catch(err){
       delivery.status='failed';
       delivery.error=String(err.message||'Delivery failed').slice(0,500);
+      delivery.errorCode='DISPATCH_ERROR';delivery.attemptCount=(delivery.attemptCount||0)+1;
     }
     await delivery.save();
+    await reconcileMetaReceipts(delivery);
     if(delivery.status==='submitted'&&delivery.provider==='meta'&&delivery.providerMessageId){
       try{
         const profile=await Integration.findOne({_id:actualIntegrationId||template?.integrationId||c.integrationId,workspaceId:c.workspaceId}).lean()
@@ -129,12 +132,10 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
   }
 
   const totals=await refreshCampaignTotals(c._id);
-  const allDeliveries=await Delivery.countDocuments({campaignId:c._id});
-  c.status=totals.failed
-    ? (totals.submitted>0?'partial':'failed')
-    : (allDeliveries?'completed':'failed');
-  c.completedAt=new Date();
-  c.lastError=totals.failed?(String(totals.failed)+' message(s) failed'):(attempted?'':'No new deliveries were required');
+  c.status=totals.pending?'processing':totals.failed?(totals.delivered?'partial':'failed'):'completed';
+  c.dispatchFinishedAt=new Date();
+  c.completedAt=totals.pending?null:new Date();
+  c.lastError=totals.failed?String(totals.failed)+' message(s) failed':'';
   await c.save();
   return c;
 }
