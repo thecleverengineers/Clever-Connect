@@ -9,6 +9,9 @@ export function Inbox(){
   const [selected,setSelected]=useState('');
   const [data,setData]=useState(null);
   const [search,setSearch]=useState('');
+  const [inboxFilter,setInboxFilter]=useState('all');
+  const [campaignFilter,setCampaignFilter]=useState('');
+  const [clock,setClock]=useState(Date.now());
   const [reply,setReply]=useState('');
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState('');
@@ -50,9 +53,15 @@ export function Inbox(){
     return()=>{live=false;clearInterval(interval)};
   },[selected]);
   const active=conversations.find(c=>c._id===selected);
-  const matches=useMemo(()=>conversations.filter(c=>
-    clean(c.contactId?.name||c.phone).includes(clean(search))||clean(c.phone).includes(clean(search))),[conversations,search]);
-  const recent=active?.lastInboundAt&&Date.now()-new Date(active.lastInboundAt).getTime()<24*60*60*1000;
+  const matches=useMemo(()=>conversations.filter(c=>{
+    const matched=clean(c.contactId?.name||c.phone).includes(clean(search))||clean(c.phone).includes(clean(search));
+    const category=inboxFilter==='all'||(inboxFilter==='unread'&&c.unreadCount>0)||(inboxFilter==='campaigns'&&!!c.lastCampaignId)||(inboxFilter==='mine'&&!!c.assignedTo&&String(c.assignedTo)===String(c.currentUserId||''));
+    return matched&&category&&(inboxFilter!=='campaigns'||!campaignFilter||String(c.lastCampaignId)===campaignFilter);
+  }),[conversations,search,inboxFilter,campaignFilter]);
+  useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),30000);return()=>clearInterval(timer)},[]);
+  const remaining=Math.max(0,24*60*60*1000-(clock-new Date(active?.lastInboundAt||0).getTime()));
+  const recent=remaining>0;
+  const countdown=recent?Math.floor(remaining/3600000)+'h '+Math.floor(remaining%3600000/60000)+'m left':'Window closed';
   async function send(e){
     e.preventDefault();if(!selected||!reply.trim())return;
     setBusy(true);setErr('');setNotice('');
@@ -82,6 +91,7 @@ export function Inbox(){
     {err&&<div className="notice bad">{err}</div>}{notice&&<div className="notice">{notice}</div>}
     <div className="liveChatGrid">
       <aside className="chatThreads">
+        <div className="inboxFilterTabs">{[['all','All'],['unread','Unread'],['campaigns','Campaign replies'],['mine','Assigned']].map(([id,label])=><button type="button" key={id} className={inboxFilter===id?'active':''} onClick={()=>setInboxFilter(id)}>{label}</button>)}</div>
         <input placeholder="Search contact or phone" value={search} onChange={e=>setSearch(e.target.value)}/>
         {matches.map(c=><button className={'chatThread '+(c._id===selected?'selected':'')} key={c._id} onClick={()=>markRead(c._id)}>
           <span className="chatCircle">{(c.contactId?.name||c.phone||'?')[0]?.toUpperCase()}</span>
@@ -94,7 +104,7 @@ export function Inbox(){
       <section className="chatWindow">
         {!active?<div className="chatEmpty">Choose a conversation from the left to read and reply.</div>:<>
           <div className="chatTop">
-            <div><b>{active.contactId?.name||'+'+active.phone}</b><small>+{active.phone} · {recent?'24-hour session open':'24-hour session closed'}</small></div>
+            <div><b>{active.contactId?.name||'+'+active.phone}</b><small>+{active.phone} · <span className={recent?'windowOpen':'windowClosed'}>{countdown}</span></small></div>
             <div className="chatControls">
               <button onClick={()=>setAgent(!active.botPaused)}>{active.botPaused?'Resume chatbot':'Take over chat'}</button>
               <button onClick={()=>refreshMessages(selected)}>Refresh</button>
@@ -103,7 +113,7 @@ export function Inbox(){
           <div className="chatMessages" key={selected}>
             {(data?.messages||[]).map(m=><div key={m._id} className={'chatBubble '+(m.direction==='out'?'out':'in')}>
               <div>{m.text||'['+m.type+']'}</div>
-              {m.campaignId&&<small>Campaign reply / message</small>}
+              {m.campaignId&&<small className="campaignContext">↳ Replied to campaign: {m.campaignId?.name||'Campaign message'}</small>}
               <small>{date(m.metaTimestamp||m.createdAt)} · {m.direction==='out'?m.status:m.type}</small>
             </div>)}
             {!data?.messages?.length&&<div className="chatEmpty">No messages stored in this conversation yet.</div>}
@@ -111,7 +121,7 @@ export function Inbox(){
           <form className="chatReply" onSubmit={send}>
             <textarea rows={2} maxLength={4096} placeholder={recent?'Write a WhatsApp reply…':'24-hour session expired. Start with an approved template from Campaigns.'}
               value={reply} onChange={e=>setReply(e.target.value)} disabled={!recent}/>
-            <button className="primary" disabled={!recent||busy||!reply.trim()}>{busy?'Sending…':'Send reply'}</button>
+            {recent?<button className="primary" disabled={busy||!reply.trim()}>{busy?'Sending…':'Send reply'}</button>:<button type="button" onClick={()=>setNotice('Use an approved Meta template from the Templates and Campaigns screens to re-engage this contact.')}>Send template to re-engage ↗</button>}
           </form>
         </>}
       </section>
