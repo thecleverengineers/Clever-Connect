@@ -5,6 +5,7 @@ import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './Campa
 import DropFileInput from './DropFileInput.jsx';
 import {Inbox,FlowBuilder} from './ConversationSuite.jsx';
 import AICopilot from './AICopilot.jsx';
+import './premium.css';
 import {BUSINESS_TYPES,BUSINESS_GOALS,BRAND_TONES,LANGUAGES} from './business.js';
 
 const nav=[
