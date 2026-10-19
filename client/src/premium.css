@@ -115,3 +115,11 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .adminAuditRow>span{overflow-wrap:anywhere}
 @media(max-width:950px){.adminMiniInsights{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.adminMiniInsights{gap:8px}.adminMiniInsights>span{padding:14px}.adminMiniInsights b{font-size:20px}}
+
+
+.emojiPicker{position:relative;display:inline-flex}
+.emojiGrid{position:absolute;top:calc(100% + 8px);left:0;z-index:24;display:grid;grid-template-columns:repeat(4,34px);gap:5px;padding:10px;border-radius:14px;border:1px solid #dfeae3;background:#fff;box-shadow:0 14px 34px #12291b22}
+.emojiGrid button{font-size:18px;min-height:34px;border-radius:8px}
+.waFormatBar{position:relative;align-items:center;gap:4px}
+.waFormatBar>button[title^="Insert"]{color:#087b56;background:#eaf6ee;border-radius:8px;border:1px solid #d0e5d8;font-weight:700}
+@media(max-width:600px){.emojiGrid{left:auto;right:0}.waFormatBar{overflow:visible}.waFormatBar button{min-height:34px}}
