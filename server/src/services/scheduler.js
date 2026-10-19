@@ -46,7 +46,7 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
   }
   const c=await Campaign.findOneAndUpdate(
     {_id:campaignId,status:{$in:['draft','scheduled','failed','partial','completed']}},
-    {$set:{status:'processing',startedAt:new Date(),lastError:''},$unset:{completedAt:1}},
+    {$set:{status:'processing',startedAt:new Date(),lastError:''},$unset:{completedAt:1,dispatchFinishedAt:1}},
     {new:true}
   );
   if(!c) return null;
@@ -71,14 +71,6 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
     const contact={_id:delivery.contactId,name:delivery.recipientName,phone:delivery.phone,email:delivery.recipientEmail};
 
     attempted++;
-    delivery=delivery||new Delivery({
-      workspaceId:c.workspaceId,
-      campaignId:c._id,
-      contactId:contact._id,
-      phone:contact.phone,
-      message:c.message||'',
-      status:'queued'
-    });
 
     let actualIntegrationId=null;
     try{
