@@ -157,6 +157,7 @@ function Shell({session,onLogout,onSessionUpdate}){
       </header>
       {!access.allowed&&page!=='subscription'&&page!=='admin'&&<div className="accessBanner"><b>7-day trial ended.</b> Subscribe to a WA SANTA plan to restore workspace access.</div>}
       <Page id={page} session={session} go={changePage} onSessionUpdate={onSessionUpdate}/>
+      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['reports','Reports','▥'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
     </main>
   </div>
 }
@@ -327,7 +328,10 @@ function Campaigns(){
     }catch(e){setErr(e.message)}
   }
   async function viewDeliveries(c){
-    try{const d=await api('/campaigns/'+c._id+'/deliveries');setDeliveries({campaign:c,rows:d})}catch(e){setErr(e.message)}
+    try{
+      const [rows,funnel]=await Promise.all([api('/campaigns/'+c._id+'/deliveries',{fresh:true}),api('/campaigns/'+c._id+'/funnel',{fresh:true})]);
+      setDeliveries({campaign:c,rows,funnel});
+    }catch(e){setErr(e.message)}
   }
   return <div className="page">
     <Title title="Campaigns" sub="Create, schedule, send, retry and audit WhatsApp campaigns with native text formatting and image carousels." action="New campaign" onAction={()=>{setEditing(null);setDraft(blankCampaignDraft());setShow(true)}}/>
@@ -619,6 +623,32 @@ function Templates(){
   </div>
 }
 
+function CampaignFunnel({detail,onChat}){
+  const [filter,setFilter]=useState('all');
+  const [query,setQuery]=useState('');
+  const t=detail.funnel?.totals||{};
+  const buckets=[['Audience',t.audience||0,'Selected contacts'],['Excluded',t.skipped||0,'Pre-send checks'],['Delivered',t.delivered||0,(t.deliveredPct||0)+'% of eligible'],['Non-delivered',t.failed||0,(t.failedPct||0)+'% of eligible'],['Pending',t.pending||0,'Awaiting receipt'],['Read',t.read||0,(t.readPct||0)+'% of delivered'],['Replied',t.replied||0,'Customer responses']];
+  const rows=detail.rows.filter(x=>(filter==='all'||(filter==='pending'?['queued','submitted','sent'].includes(x.status):filter==='non-delivered'?x.status==='failed':filter==='delivered'?['delivered','read'].includes(x.status):x.status===filter))&&
+    (!query||[x.recipientName,x.contactId?.name,x.phone,x.error,x.skipReason,x.errorCode].some(v=>String(v||'').toLowerCase().includes(query.toLowerCase()))));
+  function exportCsv(){
+    const csv=[['Name','Phone','Status','Reason','Error code','Provider message ID','Sent at','Delivered at','Read at'],...rows.map(x=>[
+      x.recipientName||x.contactId?.name||'',x.phone,x.status,x.skipReason||x.error||'',x.errorCode||'',x.providerMessageId||'',
+      x.sentAt||'',x.deliveredAt||'',x.readAt||''
+    ])].map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
+    const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+    const link=document.createElement('a');link.href=url;link.download='campaign-deliveries-'+detail.campaign._id+'.csv';link.click();URL.revokeObjectURL(url);
+  }
+  return <section className="premiumFunnel">
+    <div className="funnelHeading"><div><small>PERFORMANCE OVERVIEW</small><h3>Campaign delivery funnel</h3><p>Every selected contact is accounted for, with receipts and failure reasons.</p></div><span className="funnelMeta">{detail.funnel?.status||detail.campaign.status}</span></div>
+    <div className="funnelCards">{buckets.map(([name,value,sub])=><article key={name}><small>{name}</small><strong>{Number(value).toLocaleString()}</strong><span>{sub}</span></article>)}</div>
+    <div className="funnelSegment" aria-label="Exclusive audience buckets">{[['Excluded',t.skipped,'#94a3b8'],['Delivered',t.delivered,'#087b56'],['Non-delivered',t.failed,'#d86e69'],['Pending',t.pending,'#d9a441']].map(([name,value,color])=><span key={name} title={name+': '+(value||0)} style={{width:(t.audience?100*(value||0)/t.audience:0)+'%',background:color}} />)}</div>
+    <div className="funnelTools"><select aria-label="Filter campaign recipients" value={filter} onChange={e=>setFilter(e.target.value)}>{[['all','All recipients'],['skipped','Excluded'],['pending','Pending'],['submitted','Dispatched'],['sent','Sent'],['delivered','Delivered'],['read','Read'],['non-delivered','Non-delivered']].map(([id,label])=><option key={id} value={id}>{label}</option>)}</select><input aria-label="Search recipients" placeholder="Search name, phone or failure" value={query} onChange={e=>setQuery(e.target.value)}/><button type="button" onClick={exportCsv}>↓ Export CSV</button></div>
+    <p className="funnelFine">{rows.length} matching recipients · Read receipts are included within Delivered (never double-counted).</p>
+    <div className="funnelRecipientList">{rows.length?rows.map(x=><div key={x._id}><div><b>{x.recipientName||x.contactId?.name||x.phone}</b><small>{x.phone}</small></div><em className={'status '+(x.status==='failed'?'failed':x.status==='delivered'||x.status==='read'?'completed':'scheduled')}>{x.status}</em><small title={x.skipReason||x.error||''}>{x.skipReason||x.error||x.errorCode||'—'}</small>{onChat&&<button type="button" onClick={()=>onChat(x)}>Chat ↗</button>}</div>):<div className="empty">No recipients match this filter.</div>}</div>
+    {!!detail.funnel?.failures?.length&&<div className="funnelReasons"><b>Failure & exclusion reasons</b>{detail.funnel.failures.map((x,i)=><span key={i}>{x.status} · {x.code||'UNKNOWN'} <strong>{x.count}</strong></span>)}</div>}
+  </section>;
+}
+
 function DeliveryTable({rows,onChat}){
   return <div className="table">
     <div className="tr delivery th"><span>Recipient</span><span>Campaign</span><span>Status</span><span>Provider</span><span>Time</span><span>Error</span>{onChat&&<span>Chat</span>}</div>
@@ -643,8 +673,8 @@ function Reports({go}){
   async function openCampaign(c){
     setErr('');
     try{
-      const rows=await api('/campaigns/'+c._id+'/deliveries',{fresh:true});
-      setOpened({campaign:c,rows});
+      const [rows,funnel]=await Promise.all([api('/campaigns/'+c._id+'/deliveries',{fresh:true}),api('/campaigns/'+c._id+'/funnel',{fresh:true})]);
+      setOpened({campaign:c,rows,funnel});
     }catch(e){setErr(e.message)}
   }
   function openChat(x){
