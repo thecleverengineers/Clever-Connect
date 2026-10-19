@@ -1,5 +1,6 @@
 import {ChatConversation,ChatMessage,ChatFlow} from '../chatModels.js';
 import {Contact,Delivery} from '../models.js';
+import {refreshCampaignTotals} from './campaignTracking.js';
 import {sendWhatsApp} from './whatsapp.js';
 
 export const digits=v=>String(v||'').replace(/\D/g,'');
@@ -72,13 +73,17 @@ export async function recordInbound(integration,inbound){
       integrationId:integration._id,providerMessageId:row.replyToId,
       workspaceId:integration.workspaceId,campaignId:{$ne:null}
     }).lean();
-    if(referenced?.campaignId){
-      row.campaignId=referenced.campaignId;
+    const delivery=referenced?.deliveryId
+      ?await Delivery.findOne({_id:referenced.deliveryId,workspaceId:integration.workspaceId}).lean()
+      :await Delivery.findOne({workspaceId:integration.workspaceId,provider:'meta',providerMessageId:row.replyToId,campaignId:{$ne:null}}).lean();
+    const campaignId=referenced?.campaignId||delivery?.campaignId;
+    if(campaignId){
+      row.campaignId=campaignId;
       await row.save();
-      if(referenced.deliveryId)await Delivery.updateOne(
-        {_id:referenced.deliveryId,workspaceId:integration.workspaceId},
-        {$set:{repliedAt:at}}
-      );
+      if(delivery){
+        await Delivery.updateOne({_id:delivery._id,workspaceId:integration.workspaceId,repliedAt:null},{$set:{repliedAt:at}});
+        await refreshCampaignTotals(campaignId);
+      }
     }
   }
   const optOut=/^(stop|unsubscribe|opt\s*out|cancel\s*messages)$/i.test(String(value||'').trim());
