@@ -10,7 +10,6 @@ export function Inbox(){
   const [data,setData]=useState(null);
   const [search,setSearch]=useState('');
   const [inboxFilter,setInboxFilter]=useState('all');
-  const [campaignFilter,setCampaignFilter]=useState('');
   const [clock,setClock]=useState(Date.now());
   const [reply,setReply]=useState('');
   const [busy,setBusy]=useState(false);
@@ -55,9 +54,9 @@ export function Inbox(){
   const active=conversations.find(c=>c._id===selected);
   const matches=useMemo(()=>conversations.filter(c=>{
     const matched=clean(c.contactId?.name||c.phone).includes(clean(search))||clean(c.phone).includes(clean(search));
-    const category=inboxFilter==='all'||(inboxFilter==='unread'&&c.unreadCount>0)||(inboxFilter==='campaigns'&&!!c.lastCampaignId)||(inboxFilter==='mine'&&!!c.assignedTo&&String(c.assignedTo)===String(c.currentUserId||''));
-    return matched&&category&&(inboxFilter!=='campaigns'||!campaignFilter||String(c.lastCampaignId)===campaignFilter);
-  }),[conversations,search,inboxFilter,campaignFilter]);
+    const category=inboxFilter==='all'||(inboxFilter==='unread'&&c.unreadCount>0)||(inboxFilter==='campaigns'&&!!c.lastCampaignId)||(inboxFilter==='mine'&&c.isAssignedToMe===true);
+    return matched&&category;
+  }),[conversations,search,inboxFilter]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),30000);return()=>clearInterval(timer)},[]);
   const remaining=Math.max(0,24*60*60*1000-(clock-new Date(active?.lastInboundAt||0).getTime()));
   const recent=remaining>0;
