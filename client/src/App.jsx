@@ -1460,7 +1460,7 @@ function SuperAdmin(){
         <span><b>Where to get these values</b><small>Meta for Developers → your app → App settings / Facebook Login for Business → Embedded Signup configuration.</small></span>
         <span><b>Security</b><small>The App Secret is encrypted before being stored and is never returned to the browser after save.</small></span>
       </div>
-    </section>
+    </section>}
 
     {(adminTab==='overview'||adminTab==='integrations')&&<section className="adminOpenAISettings">
       <div className="sectionHead">
