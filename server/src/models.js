@@ -221,6 +221,15 @@ const integrationSchema = new Schema({
 }, opts);
 integrationSchema.index({workspaceId:1,name:1},{unique:true});
 
+const adminAuditSchema=new Schema({
+ actorId:{type:Schema.Types.ObjectId,ref:'User',required:true,index:true},
+ action:{type:String,required:true,trim:true,maxlength:100},
+ targetType:{type:String,required:true,trim:true,maxlength:50},
+ targetId:{type:String,default:'',maxlength:100},
+ description:{type:String,default:'',maxlength:400},
+},opts);
+adminAuditSchema.index({createdAt:-1});
+
 export const Workspace = model('Workspace', workspaceSchema);
 export const User = model('User', userSchema);
 export const SubscriptionPlan = model('SubscriptionPlan',subscriptionPlanSchema);
@@ -234,3 +243,4 @@ export const DeliveryReceipt=model('DeliveryReceipt',deliveryReceiptSchema);
 export const Integration = model('Integration', integrationSchema);
 export const SystemSetting = model('SystemSetting',systemSettingSchema);
 export const AIRecommendation = model('AIRecommendation',aiRecommendationSchema);
+export const AdminAuditEvent=model('AdminAuditEvent',adminAuditSchema);
