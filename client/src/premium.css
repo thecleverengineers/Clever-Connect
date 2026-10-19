@@ -102,3 +102,16 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
  .chatTop button{min-height:38px}
  .inboxFilterTabs{padding:10px 8px 2px}
 }
+
+
+/* Platform intelligence and governance */
+.adminMiniInsights{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:22px}
+.adminMiniInsights>span{display:flex;flex-direction:column;gap:9px;background:#fff;border:1px solid #e2ebe5;border-radius:14px;padding:18px;box-shadow:0 5px 26px #0d33220b}
+.adminMiniInsights small{font-size:10px;letter-spacing:.1em;color:#829289;font-weight:750}
+.adminMiniInsights b{font-size:23px;letter-spacing:-.04em;color:#183a2a}
+.adminAudit .sectionHead>div>small{font-weight:750;font-size:10px;color:#0c8354;letter-spacing:.1em}
+.tr.adminAuditRow{grid-template-columns:minmax(200px,2fr) minmax(120px,1fr) minmax(150px,1.1fr) minmax(120px,.9fr);min-width:680px}
+.adminAuditRow b{color:#204437}
+.adminAuditRow>span{overflow-wrap:anywhere}
+@media(max-width:950px){.adminMiniInsights{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.adminMiniInsights{gap:8px}.adminMiniInsights>span{padding:14px}.adminMiniInsights b{font-size:20px}}
