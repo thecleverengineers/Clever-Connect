@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import {Integration,Delivery} from '../models.js';
 import {PaymentOrder,InboundWindow} from '../paymentModels.js';
 import {reconcileOrder,normalizedPhone} from '../services/paymentCheckout.js';
-import {refreshCampaignTotals} from '../services/scheduler.js';
+import {storeMetaReceipt} from '../services/campaignTracking.js';
 import {webhookVerifyToken} from '../utils/crypto.js';
 import {getMetaConfig} from '../metaConfig.js';
 import {recordInbound,processInboundFlow} from '../services/liveChat.js';
@@ -70,17 +70,16 @@ r.post('/',async(req,res)=>{
           const map={sent:'sent',delivered:'delivered',read:'read',failed:'failed'};
           const status=map[s.status];
           if(!status)continue;
-          const set={status};
-          if(status==='delivered')set.deliveredAt=new Date();
-          if(status==='read')set.readAt=new Date();
-          if(status==='failed')set.error=s.errors?.[0]?.title||s.errors?.[0]?.message||'Provider reported failure';
-          const d=await Delivery.findOneAndUpdate(
-            {workspaceId:integration.workspaceId,providerMessageId:s.id},
-            {$set:set},{new:true}
-          );
+          const error=s.errors?.[0]||{};
+          const receiptTime=new Date(Number(s.timestamp)*1000);
+          const occurredAt=Number.isNaN(receiptTime.getTime())?new Date():receiptTime;
+          const d=await storeMetaReceipt({
+            workspaceId:integration.workspaceId,providerMessageId:s.id,status,occurredAt,
+            errorCode:String(error.code||''),errorMessage:String(error.title||error.message||'')
+          });
           await ChatMessage.updateOne({integrationId:integration._id,providerMessageId:s.id},
-            {$set:{status,error:status==='failed'?set.error||'Delivery failed':''}}).catch(console.error);
-          if(d?.campaignId)await refreshCampaignTotals(d.campaignId);
+            {$set:{status,error:status==='failed'?String(error.title||error.message||'Delivery failed'):''}}).catch(console.error);
+
         }
       }
     }
