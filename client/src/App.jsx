@@ -1308,6 +1308,7 @@ function SuperAdmin(){
   const[adminSearch,setAdminSearch]=useState('');
   const[adminFilter,setAdminFilter]=useState('all');
   const[adminTab,setAdminTab]=useState('overview');
+  const[auditEvents,setAuditEvents]=useState([]);
   async function load(){
     setErr('');
     try{
@@ -1316,6 +1317,12 @@ function SuperAdmin(){
     }catch(e){setErr(e.message)}
   }
   useEffect(()=>{load()},[]);
+  useEffect(()=>{
+    if(adminTab!=='audit')return;
+    let live=true;
+    api('/admin/audit?limit=100',{fresh:true}).then(events=>{if(live)setAuditEvents(events)}).catch(e=>{if(live)setErr(e.message)});
+    return()=>{live=false};
+  },[adminTab]);
   async function saveMetaSettings(e){
     e.preventDefault();setErr('');setMsg('');
     const o=Object.fromEntries(new FormData(e.currentTarget));
@@ -1435,14 +1442,14 @@ function SuperAdmin(){
     {(adminTab==='overview'||adminTab==='audit')&&<section className="adminAudit">
       <div className="sectionHead"><div><small>GOVERNANCE & COMPLIANCE</small><h2>Administration activity</h2><p>Read-only record of plan, subscription and integration administration. Sensitive credential values are never logged.</p></div></div>
       <div className="table"><div className="tr adminAuditRow th"><span>Activity</span><span>Actor</span><span>Target</span><span>Recorded</span></div>
-        {(data.recentAudit||[]).map(x=><div className="tr adminAuditRow" key={x._id}>
+        {(adminTab==='audit'?auditEvents:data.recentAudit||[]).map(x=><div className="tr adminAuditRow" key={x._id}>
           <span><b>{String(x.action||'').replaceAll('.',' · ')}</b><small>{x.description||'Administrative action'}</small></span>
           <span>{x.actorId?.name||x.actorId?.email||'Administrator'}</span>
           <span>{x.targetType||'—'} <small>{x.targetId||''}</small></span>
           <span>{fmt(x.createdAt)}</span>
-        </div>)}{!data.recentAudit?.length&&<Empty text="New administrator actions will be recorded here."/>}
+        </div>)}{!(adminTab==='audit'?auditEvents:data.recentAudit||[]).length&&<Empty text="New administrator actions will be recorded here."/>}
       </div>
-      {adminTab==='audit'&&<p className="muted">The overview shows the 10 most recent records. Sensitive tokens and passwords are never included in audit descriptions.</p>}
+      {adminTab==='audit'&&<p className="muted">Showing up to 100 most recent administrator actions. Credential values and access tokens are never included in audit descriptions.</p>}
     </section>}
 
     {(adminTab==='overview'||adminTab==='integrations')&&<section className="adminMetaSettings">
