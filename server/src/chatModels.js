@@ -62,6 +62,20 @@ const chatFlow=new Schema({
 },opts);
 chatFlow.index({workspaceId:1,integrationId:1,enabled:1,priority:-1});
 
+const chatAttribute=new Schema({
+ workspaceId:{type:Schema.Types.ObjectId,required:true,index:true},
+ scope:{type:String,enum:['global','user'],required:true},
+ key:{type:String,required:true,trim:true,maxlength:48},
+ label:{type:String,required:true,trim:true,maxlength:80},
+ value:{type:String,default:'',maxlength:2000},
+ secretEncrypted:{type:String,default:'',select:false},
+ isSecret:{type:Boolean,default:false},
+ enabled:{type:Boolean,default:true}
+},opts);
+chatAttribute.index({workspaceId:1,scope:1,key:1},{unique:true});
+
 export const ChatConversation=model('ChatConversation',conversation);
 export const ChatMessage=model('ChatMessage',chatMessage);
 export const ChatFlow=model('ChatFlow',chatFlow);
+
+export const ChatAttribute=model('ChatAttribute',chatAttribute);
