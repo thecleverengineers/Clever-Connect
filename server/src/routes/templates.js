@@ -8,7 +8,7 @@ import {getMetaConfig} from '../metaConfig.js';
 import {refreshWorkspaceAccess,requireMetaSenderEntitlement} from '../plan.js';
 import {
   normalizeTemplate,createMetaTemplatePayload,remoteTemplateFields,
-  recommendTemplate,draftRecommendation
+  recommendTemplate,draftRecommendation,isTemplateUsable
 } from '../services/metaTemplateManager.js';
 
 const r=express.Router();
@@ -74,9 +74,11 @@ r.get('/recommend',async(req,res)=>{
     if(!query)return res.json({matches:[],suggestedDraft:null});
     const integrationId=String(req.query.integrationId||'');
     if(!validId(integrationId))return res.status(400).json({message:'Choose WhatsApp sender first'});
+    const connection=await metaConnection(req,integrationId);
+    if(!connection)return res.status(409).json({message:'WhatsApp sender is not connected or is outside subscription allowance'});
     const existing=await Template.find({workspaceId:req.workspaceId,integrationId,
       metaStatus:'APPROVED',category:{$ne:'AUTHENTICATION'}}).lean();
-    const matches=recommendTemplate(existing,query).map(x=>({
+    const matches=recommendTemplate(existing.filter(x=>isTemplateUsable(x,connection)),query).map(x=>({
       id:x._id,name:x.name,body:x.body,category:x.category,matchScore:x.matchScore
     }));
     res.json({matches,suggestedDraft:matches.length?null:draftRecommendation(query,'UTILITY')});
