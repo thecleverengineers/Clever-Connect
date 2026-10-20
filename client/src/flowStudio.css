@@ -1,0 +1,213 @@
+/* Premium WhatsApp Flow Studio — graph, attribute management, mobile drawers */
+.flowStudio{max-width:1600px;color:#173c2c}
+.flowStudioHeading{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:21px}
+.flowStudioHeading>div>span{font-size:10px;letter-spacing:.15em;color:#0e8760;font-weight:850}
+.flowStudioHeading h1{font-size:clamp(25px,3vw,35px);line-height:1.1;letter-spacing:-.05em;margin:8px 0}
+.flowStudioHeading p{font-size:12px;line-height:1.6;color:#85978a;margin:0}
+.flowStudioHeading>button{border-radius:10px;border:0;padding:13px 18px;font-size:12px;font-weight:800;white-space:nowrap}
+.flowStudioTabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid #dfece4;background:#fff;border-radius:12px 12px 0 0;padding:4px 13px 0;gap:11px;margin:0 0 20px}
+.flowStudioTabs button{background:transparent;border:0;border-bottom:3px solid transparent;min-height:58px;padding:14px 9px;color:#8b9b92;font-weight:700;font-size:13px;white-space:nowrap}
+.flowStudioTabs button.selected{color:#0f8959;border-color:#0f9a64}
+.flowAlert{border:1px solid #c5e6d1;background:#edf9f1;color:#117b50;padding:11px 15px;border-radius:11px;font-size:12px;margin:14px 0}
+.flowAlert.bad{background:#fff2f0;border-color:#f5d5cf;color:#af5a50}
+.workflowOverview{background:#fff;border:1px solid #e3ede5;border-radius:17px;padding:22px;min-height:300px;box-shadow:0 6px 25px #12442a0b}
+.workflowOverviewHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;font-size:14px}
+.workflowOverviewHead>span{font-size:11px;color:#8aa192}
+.workflowGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.workflowItem{border:1px solid #e0ece5;border-radius:14px;margin:0;padding:18px;box-shadow:0 7px 25px #184c280b}
+.workflowItemTop{display:flex;align-items:center;justify-content:space-between}
+.workflowItemTop>span{display:grid;place-items:center;width:38px;height:38px;background:#e9f8ef;border-radius:11px;color:#0e8955;font-size:23px}
+.workflowItemTop em{font-style:normal;font-size:10px;border-radius:20px;padding:6px 9px}
+.workflowItemTop em.on{background:#e2f7e8;color:#087b50}
+.workflowItemTop em.off{background:#f2f3f1;color:#718078}
+.workflowItem h3{margin:15px 0 8px;font-size:16px;color:#204734}
+.workflowItem p{font-size:11px;color:#85988d;line-height:1.55;margin:5px 0;overflow-wrap:anywhere}
+.workflowItemFoot{margin-top:16px;padding-top:14px;border-top:1px solid #edf2ef;display:grid;gap:10px}
+.workflowItemFoot>span{font-size:10px;color:#809488}
+.workflowItemFoot>div{display:flex;gap:8px;flex-wrap:wrap}
+.workflowItemFoot button{font-size:11px;padding:8px 11px;color:#0b7650;border:1px solid #cce4d4;border-radius:8px;background:#fff}
+.workflowItemFoot button:disabled{opacity:.55}
+.workflowEmpty{grid-column:1/-1;text-align:center;padding:50px 20px}
+.workflowEmpty>span{font-size:35px;color:#2a9e65}
+.workflowEmpty h3{font-size:19px;margin:12px 0}
+.workflowEmpty p{font-size:12px;color:#85968a;margin-bottom:18px}
+.workflowEmpty button{border-radius:10px;padding:12px 18px}
+.workflowModalOverlay{position:fixed;inset:0;display:flex;justify-content:center;align-items:center;background:#12271e89;backdrop-filter:blur(4px);z-index:120;padding:18px}
+.workflowCreateModal{display:grid;width:min(520px,100%);max-height:calc(100dvh - 36px);overflow:auto;background:#fff;border:1px solid #e5ebe6;box-shadow:0 20px 75px #102c2029;border-radius:18px}
+.workflowModalTitle,.workflowModalFoot{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:18px 22px;border-bottom:1px solid #e8eee9}
+.workflowModalTitle h2{font-size:21px;margin:0;letter-spacing:-.035em;color:#214331}
+.workflowModalTitle button{border:1px solid #dde9df;border-radius:10px;padding:6px 11px;font-size:22px;background:#fff;color:#668575}
+.workflowModalFields{display:grid;gap:18px;padding:23px}
+.workflowModalFields label,.flowWorkflowSettings label,.flowDetailsFields label{display:grid;gap:8px;font-size:12px;font-weight:750;color:#4d6859}
+.workflowModalFields input,.workflowModalFields select,.flowWorkflowSettings input,.flowWorkflowSettings select,.flowDetailsFields input,.flowDetailsFields select,.flowDetailsFields textarea{width:100%;min-width:0;outline:0;border:1px solid #dce8e0;border-radius:10px;background:#fff;color:#234731;padding:11px 12px;font-size:13px}
+.workflowModalFields input:focus,.workflowModalFields select:focus,.flowWorkflowSettings input:focus,.flowWorkflowSettings select:focus,.flowDetailsFields input:focus,.flowDetailsFields select:focus,.flowDetailsFields textarea:focus{border-color:#11a16a;box-shadow:0 0 0 3px #20bd7e19}
+.workflowModalFields p{font-size:11px;color:#8a9b91;line-height:1.6;margin:0}
+.workflowModalFoot{border-top:1px solid #e8eee9;border-bottom:0;padding:16px 22px}
+.workflowModalFoot button{background:white;border:1px solid #e1e9e3;color:#476554;border-radius:10px;padding:12px 16px;font-weight:800;font-size:12px}
+.flowVisualEditor{border:1px solid #e0e9e3;background:#fff;border-radius:17px;overflow:hidden;box-shadow:0 8px 30px #183f250f}
+.flowEditorHeading{padding:17px 20px;display:flex;align-items:center;justify-content:space-between;gap:15px}
+.flowEditorHeading small{font-size:10px;font-weight:850;letter-spacing:.12em;color:#15945f}
+.flowEditorHeading h2{margin:4px 0 5px;font-size:21px;letter-spacing:-.035em}
+.flowEditorHeading p{font-size:10px;color:#8ba093;line-height:1.5;margin:0}
+.flowEditorHeading>div:last-child{display:flex;gap:8px;flex-shrink:0}
+.flowEditorHeading button,.flowEditorFoot button{font-size:11px;font-weight:800;padding:10px 13px;border:1px solid #dceae1;border-radius:9px;background:white;color:#35634a}
+.flowWorkflowSettings{border-block:1px solid #e6eee8;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px 18px;background:#f9fcfa}
+.flowWorkflowSettings label{font-size:10px;gap:6px}
+.flowWorkflowSettings input,.flowWorkflowSettings select{font-size:12px;padding:9px 10px;min-height:38px}
+.flowWorkflowSettings .flowEnable{display:flex;align-items:center;gap:8px}
+.flowWorkflowSettings .flowEnable input{width:auto;min-height:auto;accent-color:#0a905b}
+.flowBuilderColumns{display:grid;grid-template-columns:190px minmax(0,1fr) 250px;min-height:540px}
+.flowPalette,.flowDetails{min-width:0;background:#fff;max-height:680px;overflow:auto}
+.flowPalette{border-right:1px solid #e3eee6}
+.flowDetails{border-left:1px solid #e3eee6}
+.flowPanelTitle{position:sticky;top:0;z-index:4;display:flex;align-items:center;justify-content:space-between;padding:14px 13px;border-bottom:1px solid #e4eee6;background:#fff;gap:8px}
+.flowPanelTitle b{font-size:10px;color:#74917b;letter-spacing:.09em}
+.flowPanelTitle button{background:#f2f8f4;border:1px solid #d9e9df;border-radius:7px;padding:3px 8px;color:#2a8153}
+.flowPanelTitle span{font-size:10px;color:#88a08e}
+.flowPaletteGroup{padding:13px 10px 4px}
+.flowPaletteGroup h4{margin:0 0 9px;font-size:10px;letter-spacing:.13em;color:#94a49b;font-weight:850}
+.flowPaletteGroup>button{display:flex;align-items:center;gap:8px;width:100%;border:1px solid #e6eee8;background:#fcfefd;padding:10px 9px;border-radius:9px;margin-bottom:7px;text-align:left;color:#436953}
+.flowPaletteGroup>button>span{font-size:16px;color:#0e9061;width:18px}
+.flowPaletteGroup>button>b{font-size:11px;font-weight:700;flex:1;line-height:1.3}
+.flowPaletteGroup>button>em{font-style:normal;font-size:17px;color:#088b58}
+.flowPaletteGroup>button:disabled{opacity:.46;background:#f7f8f7;cursor:not-allowed}
+.flowPaletteGroup>button>small{font-size:9px;color:#8e9c90}
+.flowPaletteGroup>button:not(:disabled):hover{background:#eaf9f0;border-color:#b5ddc4}
+.flowCanvasShell{min-width:0;background:#e9f2eb;display:flex;flex-direction:column}
+.flowCanvasBar{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:55px;background:#f7faf8;border-bottom:1px solid #dbe9df;padding:8px 13px}
+.flowCanvasBar>div:first-child{display:grid;gap:3px}
+.flowCanvasBar b{font-size:12px;color:#2b583c}
+.flowCanvasBar small{font-size:10px;color:#8ba294;line-height:1.3}
+.flowZoomControls{display:flex;align-items:center;gap:3px;flex-shrink:0}
+.flowZoomControls button{border:1px solid #dde9e0;background:#fff;padding:6px 9px;border-radius:6px;color:#377c52;font-weight:800}
+.flowZoomControls span{font-size:10px;width:36px;text-align:center;color:#5f8069}
+.flowCanvasViewport{flex:1;overflow:auto;max-height:620px;background:radial-gradient(circle at center,#d1e2d5 1px,transparent 1.5px) 0 0/19px 19px,linear-gradient(150deg,#f6faf7,#e9f4ea)}
+.flowCanvasScaled{position:relative}
+.flowCanvasSurface{position:relative;transform-origin:top left}
+.flowStartPin{position:absolute;top:19px;left:39px;z-index:2;border:1px solid #badcc7;background:#fff;padding:12px;border-radius:10px;display:grid;gap:4px;min-width:172px;max-width:210px;box-shadow:0 9px 25px #26623c10}
+.flowStartPin span{color:#16975e;font-size:19px}
+.flowStartPin b{font-size:10px;color:#128454;letter-spacing:.1em}
+.flowStartPin small{font-size:11px;color:#698673}
+.flowWires{position:absolute;inset:0;pointer-events:none;z-index:1}
+.flowCanvasNode{position:absolute;z-index:2;width:200px;background:#fff;border:1px solid #cce2d3;border-radius:13px;box-shadow:0 9px 25px #17382619}
+.flowCanvasNode.selected{outline:3px solid #1d9a6a;outline-offset:2px}
+.flowNodeDrag{touch-action:none;cursor:grab;display:flex;align-items:center;gap:7px;background:linear-gradient(120deg,#edf8f0,#f8fbf9);border-bottom:1px solid #e1ede5;padding:11px;border-radius:12px 12px 0 0;color:#137950;font-size:10px;user-select:none}
+.flowNodeDrag:active{cursor:grabbing}
+.flowNodeDrag span{font-size:17px}
+.flowNodeDrag b{flex:1;font-size:11px}
+.flowNodeDrag small{color:#8f9e95}
+.flowNodeBody{text-align:left;border:0;background:transparent;display:grid;gap:8px;padding:11px;width:100%;min-height:61px}
+.flowNodeBody strong{color:#466b54;font-size:11px;line-height:1.5;font-weight:650}
+.flowNodeBody small{font-size:9px;color:#8aa296}
+.flowPort{position:absolute;width:10px;height:10px;border:2px solid #16975d;border-radius:50%;background:white;left:calc(50% - 5px)}
+.flowPort.in{top:-5px}.flowPort.out{bottom:-5px}
+.flowCanvasTip{position:absolute;top:340px;left:220px;font-size:12px;color:#86a38f}
+.flowDetailsFields{display:grid;gap:14px;padding:13px}
+.flowDetailsFields label{gap:6px;font-size:11px}
+.flowDetailsFields input,.flowDetailsFields select,.flowDetailsFields textarea{padding:9px 10px;font-size:12px}
+.flowDetailsName{display:flex;align-items:center;gap:10px}
+.flowDetailsName>span{display:grid;place-items:center;width:33px;height:33px;background:#e6f7ec;color:#098858;border-radius:9px;font-size:19px}
+.flowDetailsName>div{display:grid;gap:4px}
+.flowDetailsName b{font-size:13px}
+.flowDetailsName small{font-size:9px;color:#9baea0}
+.flowDetailsButtons h4{margin:0 0 12px;font-size:12px}
+.flowDetailsChoice{padding:10px;display:grid;gap:11px;border:1px solid #e6eee8;background:#f7faf8;border-radius:10px;margin-bottom:11px}
+.flowDetailsChoice button,.flowDetailsButtons>button{justify-self:start;background:#fff;border:1px solid #cee8d5;color:#1f8257;padding:7px 10px;border-radius:8px;font-size:10px}
+.flowAttributeHint{padding:12px;background:#f2f8f5;border-radius:8px;font-size:10px;color:#6e8c77;line-height:1.6}
+.flowAttributeHint code{background:#dff1e6;color:#22704c;border-radius:3px;padding:2px 4px}
+.flowRemoveNode{background:#fff6f4;border:1px solid #f4e0dc;color:#b26b5d;border-radius:8px;padding:10px;font-size:11px;font-weight:750}
+.flowRemoveNode:disabled{opacity:.45}
+.flowEditorFoot{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 18px;border-top:1px solid #e7efe9}
+.flowEditorFoot small{font-size:10px;line-height:1.6;color:#8ca092;max-width:660px}
+.attributePage{border:1px solid #e2eee5;background:#fff;border-radius:17px;padding:22px;box-shadow:0 8px 30px #1238270b}
+.attributeGuide{background:linear-gradient(125deg,#e7faee,#f3fff7);border:1px solid #ccead8;border-radius:12px;padding:18px 20px;margin-bottom:20px}
+.attributeGuide b{color:#17895d;font-size:16px}
+.attributeGuide p{font-size:12px;line-height:1.9;color:#547363;margin:12px 0 0}
+.attributeGuide code{background:#ddf1e5;padding:2px 5px;border-radius:4px;color:#16794c}
+.attributeToolbar{display:grid;grid-template-columns:minmax(150px,1fr) 170px 170px;gap:10px;margin-bottom:15px}
+.attributeToolbar label{position:relative}
+.attributeToolbar label span{position:absolute;top:8px;left:12px;color:#829b8a;font-size:22px}
+.attributeToolbar input,.attributeToolbar select,.attributeEditForm input,.attributeEditForm textarea,.attributeContactValues input,.attributeContactValues select{width:100%;border:1px solid #dbe9df;background:#fff;border-radius:10px;padding:12px;font-size:12px;color:#315843}
+.attributeToolbar input{padding-left:35px}
+.attributeToolbar .attributeAdd{background:#158c55;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:800;font-size:12px}
+.attributeToolbar .attributeAdd:disabled{opacity:.55}
+.attributeTable{border:1px solid #e7eee9;border-radius:11px;overflow:hidden}
+.attributeRow{display:grid;grid-template-columns:55px minmax(180px,1.5fr) 90px 115px;gap:12px;align-items:center;padding:13px 15px;border-bottom:1px solid #e8efe9;font-size:11px}
+.attributeRow:last-child{border:0}
+.attributeRow:nth-child(2n){background:#fcfdfc}
+.attributeRow>span:nth-child(2){display:grid;gap:5px;min-width:0}
+.attributeRow b{color:#315a42;font-size:12px}
+.attributeRow small{font-size:10px;line-height:1.4;color:#91a498;overflow-wrap:anywhere}
+.attributeRow code{font-size:10px;color:#178654;overflow-wrap:anywhere}
+.attributeTableHead{background:#f8faf8;font-weight:800;color:#8c9e91;letter-spacing:.04em;text-transform:uppercase;font-size:10px}
+.attributeActive{color:#13935d}
+.attributeDisabled{color:#929a96}
+.attributeActions{display:flex;gap:5px;flex-wrap:wrap}
+.attributeActions button{border:1px solid #dceae2;background:#fff;padding:8px;font-size:10px;border-radius:7px;color:#287250}
+.attributeActions button:last-child{color:#b36a60}
+.attributeEmpty{padding:70px 15px;text-align:center;color:#899a90;font-size:12px}
+.attributeCount{font-size:10px;text-align:right;color:#8fa197;margin-top:11px}
+.attributeEditForm{background:#f8fcf9;border:1px solid #dcebe2;border-radius:11px;padding:17px;display:grid;gap:13px;margin-bottom:18px}
+.attributeEditForm h3{font-size:14px;margin:0}
+.attributeEditForm label,.attributeContactValues label{display:grid;gap:7px;color:#4b7058;font-size:12px;font-weight:750}
+.attributeEditForm .sectionHead button{border:0;background:#fff;color:#5f8c70}
+.attributeChecks{display:flex;align-items:center;flex-wrap:wrap;gap:16px}
+.attributeChecks label{display:flex;align-items:center;gap:7px}
+.attributeChecks input{width:auto!important;accent-color:#138854}
+.attributeEditForm .flowFooter{display:flex;justify-content:flex-end;gap:8px}
+.attributeEditForm .flowFooter button{border:1px solid #d8e7dd;border-radius:8px;padding:9px 13px;background:#fff}
+.attributeContactValues{padding:19px;margin-top:23px;background:#fefefe}
+.attributeContactValues h3{font-size:15px;margin:0 0 8px}
+.attributeContactValues p{font-size:11px;color:#89a091;line-height:1.6;margin:0 0 13px}
+.attributeContactValues>select{margin-bottom:14px}
+.attributeContactValues form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.attributeContactValues form>button{grid-column:1/-1;justify-self:start;border-radius:9px;padding:10px 15px}
+.attributeContactValues code{font-size:10px;color:#268157}
+.attributeBuiltins{display:grid;gap:10px;margin-top:24px;font-size:12px}
+.attributeBuiltins>div{display:flex;gap:8px;flex-wrap:wrap}
+.attributeBuiltins span{background:#eef8f0;border:1px solid #dcebe0;padding:9px;border-radius:8px;font-size:10px;color:#578068;display:grid;gap:5px}
+.attributeBuiltins code{font-size:10px;color:#0b8554}
+@media(max-width:1250px){
+  .flowBuilderColumns{grid-template-columns:165px minmax(0,1fr) 215px}
+  .flowWorkflowSettings{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .workflowGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:1030px){
+  .flowBuilderColumns{grid-template-columns:1fr}
+  .flowPalette,.flowDetails{max-height:none}
+  .flowPalette{border:0;border-bottom:1px solid #e2ece5}
+  .flowDetails{border:0;border-top:1px solid #e2ece5}
+  .flowPaletteGroup{display:inline-block;vertical-align:top;width:49%;padding:10px}
+  .flowCanvasViewport{max-height:470px;min-height:360px}
+  .flowDetailsFields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .flowDetailsName,.flowAttributeHint,.flowDetailsButtons{grid-column:1/-1}
+}
+@media(max-width:760px){
+  .flowStudioHeading{flex-wrap:wrap;align-items:flex-start;gap:12px}
+  .flowStudioHeading>button{width:100%}
+  .flowStudioTabs{padding:0 5px;gap:1px;margin-bottom:13px}
+  .flowStudioTabs button{font-size:11px;padding:11px 4px;min-height:52px}
+  .workflowOverview{padding:12px}
+  .workflowGrid{grid-template-columns:1fr}
+  .workflowEmpty{padding:37px 10px}
+  .flowEditorHeading{align-items:flex-start;flex-direction:column}
+  .flowEditorHeading>div:last-child{width:100%}
+  .flowEditorHeading button{flex:1}
+  .flowWorkflowSettings{grid-template-columns:repeat(2,minmax(0,1fr));padding:11px;gap:10px}
+  .flowWorkflowSettings label{font-size:10px}
+  .flowPaletteGroup{width:49%}
+  .flowCanvasBar{flex-wrap:wrap}
+  .flowCanvasBar>div:first-child{width:100%}
+  .flowDetailsFields{grid-template-columns:1fr}
+  .flowEditorFoot{flex-direction:column;align-items:stretch}
+  .attributePage{padding:12px;border-radius:12px}
+  .attributeGuide{padding:15px}
+  .attributeGuide p{font-size:11px}
+  .attributeToolbar{grid-template-columns:1fr}
+  .attributeRow{grid-template-columns:28px minmax(0,1fr) 62px;gap:9px;padding:12px 10px}
+  .attributeRow>span:nth-child(4){grid-column:2/-1}
+  .attributeTableHead>span:nth-child(4){display:none}
+  .attributeContactValues form{grid-template-columns:1fr}
+  .workflowModalOverlay{padding:0;align-items:end}
+  .workflowCreateModal{max-height:calc(100dvh - env(safe-area-inset-top));border-radius:18px 18px 0 0;width:100%;padding-bottom:env(safe-area-inset-bottom)}
+}
