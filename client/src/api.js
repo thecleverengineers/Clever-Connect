@@ -41,9 +41,19 @@ export async function api(path,opts={}){
     }
     const type=res.headers.get('content-type')||'';
     const data=type.includes('json')?await res.json():await res.text();
-    if(res.status===401&&typeof window!=='undefined') window.dispatchEvent(new Event('wa:unauthorized'));
+    if(res.status===401&&typeof window!=='undefined'){
+      // Never reuse protected endpoint cache after a genuine session failure.
+      invalidateCache();
+      window.dispatchEvent(new Event('wa:unauthorized'));
+    }
     if(res.status===402&&typeof window!=='undefined') window.dispatchEvent(new CustomEvent('wa:subscription-required',{detail:data}));
-    if(!res.ok) throw new Error(data?.message||('Request failed ('+res.status+')'));
+    if(!res.ok){
+      const error=new Error(data?.message||('Request failed ('+res.status+')'));
+      error.status=res.status;
+      error.code=data?.code||'';
+      error.action=data?.action||'';
+      throw error;
+    }
     if(cacheable)return remember(path,data);
     if(!isGet)invalidateCache();
     return data;
