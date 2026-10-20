@@ -6,6 +6,7 @@ import {requireAuth} from '../middleware/auth.js';
 import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
 import {refreshWorkspaceAccess,metaEntitlements,requireMetaSenderEntitlement} from '../plan.js';
 import {getMetaConfig,getMetaConfigPublic} from '../metaConfig.js';
+import {verifyExistingCloudApiNumber} from '../services/existingMetaNumber.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -252,6 +253,15 @@ r.post('/whatsapp-connections',async(req,res)=>{
     const phoneNumberId=String(req.body.phoneNumberId||'').trim();
     const accessToken=String(req.body.accessToken||'').trim();
     if(!name||!phoneNumberId||!accessToken)return res.status(400).json({message:'Connection name, Phone Number ID and access token are required'});
+    const wabaId=String(req.body.businessAccountId||'').trim();
+    const existingCloud=req.body.connectionIntent==='existing_cloud_api';
+    const version=/^v\d+\.\d+$/.test(String(req.body.graphVersion||''))?String(req.body.graphVersion):'v23.0';
+    let verified=null;
+    if(existingCloud){
+      try{verified=await verifyExistingCloudApiNumber({
+        phoneNumberId,businessAccountId:wabaId,accessToken,graphVersion:version
+      })}catch(e){return res.status(422).json({message:'Unable to link existing Cloud API number: '+e.message})}
+    }
     if(await Integration.exists({provider:'meta',phoneNumberId}))
       return res.status(409).json({message:'This Meta WhatsApp phone number is already connected to your workspace'});
     if(await Integration.exists({workspaceId:req.workspaceId,name}))return res.status(409).json({message:'A connection with this name already exists'});
@@ -262,9 +272,10 @@ r.post('/whatsapp-connections',async(req,res)=>{
       enabled:true,
       isDefault:false,
       phoneNumberId,
-      businessAccountId:String(req.body.businessAccountId||'').trim(),
+      businessAccountId:wabaId,
+      displayPhoneNumber:verified?.displayPhoneNumber||'',
       accessTokenEncrypted:encrypt(accessToken),
-      graphVersion:/^v\d+\.\d+$/.test(String(req.body.graphVersion||''))?String(req.body.graphVersion):'v23.0',
+      graphVersion:version,
       otpTemplateName:String(req.body.otpTemplateName||'').trim(),
       otpTemplateLanguage:String(req.body.otpTemplateLanguage||'en_US').trim(),
       connectionStatus:'connected',
