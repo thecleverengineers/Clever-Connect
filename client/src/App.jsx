@@ -144,7 +144,7 @@ function Shell({session,onLogout,onSessionUpdate}){
     setPage(next);
     if(window.location.hash!==workspacePageHash(next))window.location.hash=workspacePageHash(next);
     setOpen(false);setProfileOpen(false);
-    window.scrollTo({top:0,left:0,behavior:'instant'});
+    window.scrollTo({top:0,left:0,behavior:'auto'});
   };
   useEffect(()=>{
     const syncFromBrowser=()=>{
@@ -239,7 +239,7 @@ function Shell({session,onLogout,onSessionUpdate}){
       </header>
       {!access.allowed&&page!=='subscription'&&page!=='admin'&&<div className="accessBanner"><b>7-day trial ended.</b> Subscribe to a WA SANTA plan to restore workspace access.</div>}
       <Page key={page} id={page} session={session} go={changePage} onSessionUpdate={onSessionUpdate}/>
-      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['bulk','Bulk WA','◈'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} aria-current={page===id?'page':undefined} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
+      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['bulk','Bulk WA','◈'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
     </main>
   </div>
 }
