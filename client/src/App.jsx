@@ -8,6 +8,7 @@ import {Inbox} from './ConversationSuite.jsx';
 import FlowStudio from './FlowStudio.jsx';
 import AICopilot from './AICopilot.jsx';
 import './premium.css';
+import {allowedWorkspacePage,resolveWorkspacePage,workspacePageHash} from './workspaceRouting.js';
 import {BUSINESS_TYPES,BUSINESS_GOALS,BRAND_TONES,LANGUAGES} from './business.js';
 
 const nav=[
@@ -119,10 +120,10 @@ function Auth({onAuth}){
 
 function Shell({session,onLogout,onSessionUpdate}){
   const access=session.workspace?.access||{allowed:true,state:'active'};
-  const[page,setPage]=useState(access.allowed?'overview':'subscription');
+  const[page,setPage]=useState(()=>resolveWorkspacePage(window.location.hash,{allowed:access.allowed,isSuperAdmin:!!session.user.isSuperAdmin}));
   const[open,setOpen]=useState(false);
   const[profileOpen,setProfileOpen]=useState(false);
-  const[managerExpanded,setManagerExpanded]=useState(true);
+  const[managerExpanded,setManagerExpanded]=useState(()=>window.localStorage.getItem('wa:manager-expanded')!=='false');
   const[managerCounts,setManagerCounts]=useState({numbers:null,templates:null});
   useEffect(()=>{
     if(!access.allowed)return;
@@ -137,22 +138,45 @@ function Shell({session,onLogout,onSessionUpdate}){
     return()=>{live=false};
   },[access.allowed,open,managerExpanded]);
   const menu=session.user.isSuperAdmin?[...nav,['admin','Super Admin','★']]:nav;
+  const locked=id=>!access.allowed&&!['subscription','profile','edit-profile','admin'].includes(id);
+  const changePage=id=>{
+    const next=allowedWorkspacePage(id,{allowed:access.allowed,isSuperAdmin:!!session.user.isSuperAdmin});
+    setPage(next);
+    if(window.location.hash!==workspacePageHash(next))window.location.hash=workspacePageHash(next);
+    setOpen(false);setProfileOpen(false);
+    window.scrollTo({top:0,left:0,behavior:'instant'});
+  };
+  useEffect(()=>{
+    const syncFromBrowser=()=>{
+      const next=resolveWorkspacePage(window.location.hash,{allowed:access.allowed,isSuperAdmin:!!session.user.isSuperAdmin});
+      // Canonicalize unsupported/locked routes without another history entry.
+      if(window.location.hash!==workspacePageHash(next))
+        window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search+workspacePageHash(next));
+      setPage(next);
+      if(['whatsapp-api','templates'].includes(next))setManagerExpanded(true);
+    };
+    window.addEventListener('hashchange',syncFromBrowser);
+    window.addEventListener('popstate',syncFromBrowser);
+    syncFromBrowser();
+    return()=>{
+      window.removeEventListener('hashchange',syncFromBrowser);
+      window.removeEventListener('popstate',syncFromBrowser);
+    };
+  },[access.allowed,session.user.isSuperAdmin]);
+  useEffect(()=>{
+    window.localStorage.setItem('wa:manager-expanded',String(managerExpanded));
+  },[managerExpanded]);
   useEffect(()=>{
     const close=e=>{if(!e.target.closest?.('.profileMenu'))setProfileOpen(false)};
-    const subscribe=()=>setPage('subscription');
+    const subscribe=()=>changePage('subscription');
     document.addEventListener('pointerdown',close);
     window.addEventListener('wa:subscription-required',subscribe);
     return()=>{document.removeEventListener('pointerdown',close);window.removeEventListener('wa:subscription-required',subscribe)};
-  },[]);
+  },[access.allowed,session.user.isSuperAdmin]);
   const pageTitle=page==='profile'?'Profile':page==='edit-profile'?'Edit profile':menu.find(x=>x[0]===page)?.[1];
-  const locked=id=>!access.allowed&&!['subscription','profile','edit-profile','admin'].includes(id);
-  const changePage=id=>{
-    setPage(locked(id)?'subscription':id);
-    setOpen(false);setProfileOpen(false);
-  };
   return <div className="shell">
     {open&&<button type="button" className="sidebarScrim" aria-label="Close navigation menu" onClick={()=>setOpen(false)}/>}
-    <aside className={open?'open':''}>
+    <aside id="workspace-sidebar" className={open?'open':''}>
       <div className="sideLogo"><span>WA</span> SANTA<small>WHATSAPP WORKSPACE</small></div>
       <div className="workspace">
         <div className="avatar">{session.workspace.name[0]?.toUpperCase()}</div>
@@ -165,7 +189,7 @@ function Shell({session,onLogout,onSessionUpdate}){
             const item=menu.find(x=>x[0]===id);
             if(!item)return null;
             const [,label,ic]=item;
-            return <button type="button" key={id} className={page===id?'active':''} onClick={()=>changePage(id)}>
+            return <button type="button" key={id} className={page===id?'active':''} aria-current={page===id?'page':undefined} onClick={()=>changePage(id)}>
               <i aria-hidden="true">{ic}</i><span>{id==='inbox'?'Live Chat (Inbox)':id==='chatbot'?'Chat Automation':id==='reports'?'Delivery Report':label}</span>
               {locked(id)&&<small className="navLock">• locked</small>}
             </button>;
@@ -191,10 +215,10 @@ function Shell({session,onLogout,onSessionUpdate}){
     </aside>
     <main>
       <header>
-        <button className="hamb" onClick={()=>setOpen(!open)}>☰</button>
+        <button type="button" className="hamb" aria-label={open?'Close navigation':'Open navigation'} aria-expanded={open} aria-controls="workspace-sidebar" onClick={()=>setOpen(!open)}>☰</button>
         <div><small>WA SANTA</small><b>{pageTitle}</b></div>
         <div className="headRight">
-          {access.state==='trialing'?<button className="trialPill" onClick={()=>setPage('subscription')}>Trial · {access.daysRemaining} day(s) left</button>:access.allowed?<span className="pill">● Subscribed</span>:<button className="expiredPill" onClick={()=>setPage('subscription')}>Subscription required</button>}
+          {access.state==='trialing'?<button className="trialPill" onClick={()=>changePage('subscription')}>Trial · {access.daysRemaining} day(s) left</button>:access.allowed?<span className="pill">● Subscribed</span>:<button className="expiredPill" onClick={()=>changePage('subscription')}>Subscription required</button>}
           <div className="profileMenu">
             <button className="profileTrigger" aria-label="Open profile menu" aria-expanded={profileOpen} onClick={e=>{e.stopPropagation();setProfileOpen(v=>!v)}}>
               <Avatar user={session.user} className="miniAvatar"/>
@@ -214,8 +238,8 @@ function Shell({session,onLogout,onSessionUpdate}){
         </div>
       </header>
       {!access.allowed&&page!=='subscription'&&page!=='admin'&&<div className="accessBanner"><b>7-day trial ended.</b> Subscribe to a WA SANTA plan to restore workspace access.</div>}
-      <Page id={page} session={session} go={changePage} onSessionUpdate={onSessionUpdate}/>
-      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['bulk','Bulk WA','◈'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
+      <Page key={page} id={page} session={session} go={changePage} onSessionUpdate={onSessionUpdate}/>
+      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['bulk','Bulk WA','◈'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} aria-current={page===id?'page':undefined} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
     </main>
   </div>
 }
@@ -1826,6 +1850,7 @@ export default function App(){
   async function logout(){
     try{await api('/auth/logout',{method:'POST'})}catch{}
     setSession(null);
+    window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search+'#/overview');
   }
   if(session===undefined)return <Loading/>;
   return session?<Shell session={session} onLogout={logout} onSessionUpdate={setSession}/>:<Auth onAuth={x=>{setSession(x);warmWorkspace(!!x.user?.isSuperAdmin)}}/>;
