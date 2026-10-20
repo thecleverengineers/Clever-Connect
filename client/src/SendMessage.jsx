@@ -28,6 +28,10 @@ export default function SendMessage({go}){
   const [error,setError]=useState('');
   const [success,setSuccess]=useState('');
   const [uncertain,setUncertain]=useState(false);
+  const [checkingSender,setCheckingSender]=useState(false);
+  const [senderIssue,setSenderIssue]=useState('');
+  const [authBlocked,setAuthBlocked]=useState(false);
+  const [messagingPermission,setMessagingPermission]=useState('');
 
   useEffect(()=>{
     let active=true;
@@ -49,7 +53,7 @@ export default function SendMessage({go}){
   },[]);
 
   const sender=profiles.find(x=>x.id===senderId);
-  const senderReady=!!sender&&sender.enabled&&sender.connectionStatus==='connected'&&sender.planAllowed!==false&&subscription?.access?.allowed;
+  const senderReady=!!sender&&sender.enabled&&sender.connectionStatus==='connected'&&sender.planAllowed!==false&&subscription?.access?.allowed&&!checkingSender&&!authBlocked;
   const opted=contacts.filter(x=>x.consentStatus==='opted_in'&&!x.suppressed);
   const recipient=recipientMode==='contact'?opted.find(x=>x._id===contactId):null;
   const recipientDetails={
@@ -68,11 +72,53 @@ export default function SendMessage({go}){
   const canSend=senderReady&&!busy&&!uncertain&&(recipientMode==='contact'?!!recipient:phone.trim().length>=8&&consent)&&
     (tab==='freeform'?message.trim().length>0&&message.trim().length<=4096:!!chosen&&Array.from({length:variableCount},(_,i)=>params[i]).every(x=>String(x||'').trim()));
 
+
+  // Validate the sender's current Meta authorization on page entry and when
+  // switching numbers. The previous saved 'connected' flag can be stale.
+  async function checkSender(id){
+    if(!id)return;
+    setCheckingSender(true);
+    setSenderIssue('');
+    setMessagingPermission('');
+    try{
+      const result=await api('/integrations/whatsapp-connections/'+id+'/test',{method:'POST'});
+      const latest=await api('/integrations/whatsapp-connections',{fresh:true});
+      setProfiles((latest.connections||[]).filter(x=>x.provider==='meta'));
+      setSubscription(latest.subscription||null);
+      setMessagingPermission(result.messagingPermission||'unavailable');
+      setAuthBlocked(false);
+    }catch(e){
+      if(e.status===401)return; // Global session handler routes to login.
+      setSenderIssue(e.message||'Meta sender authorization check failed.');
+      setAuthBlocked(true);
+      setProfiles(old=>old.map(x=>x.id===id?{...x,connectionStatus:'error'}:x));
+    }finally{setCheckingSender(false)}
+  }
+  useEffect(()=>{
+    if(!senderId||!subscription?.access?.allowed)return;
+    const profile=profiles.find(x=>x.id===senderId);
+    if(!profile||!profile.enabled||profile.planAllowed===false)return;
+    // Keep an already rejected profile blocked until the owner updates
+    // its token instead of overwriting provider send-auth failures with
+    // a weaker read-only phone lookup.
+    if(profile.connectionStatus==='error'){
+      setSenderIssue(profile.lastError||'Meta rejected this sender. Renew its token and test the connection.');
+      setAuthBlocked(true);
+      return;
+    }
+    checkSender(senderId);
+  },[senderId]);
+
+  function editSender(){
+    if(senderId)sessionStorage.setItem('wa:edit-sender',senderId);
+    go('whatsapp-api');
+  }
+
   function switchTab(next){
     setTab(next);setError('');setSuccess('');
   }
   function senderChange(id){
-    setSenderId(id);setTemplateId('');setParams([]);setError('');setSuccess('');
+    setSenderId(id);setTemplateId('');setParams([]);setError('');setSuccess('');setAuthBlocked(false);setSenderIssue('');setMessagingPermission('');
   }
   async function submit(e){
     e.preventDefault();
@@ -93,8 +139,12 @@ export default function SendMessage({go}){
       else setParams([]);
     }catch(err){
       const detail=err.message||'Unable to send';
-      if(/acceptance is uncertain|may have been sent/i.test(detail))setUncertain(true);
-      setError(detail);
+      if(err.code==='META_ACCEPTANCE_UNKNOWN'||/acceptance is uncertain|may have been sent/i.test(detail))setUncertain(true);
+      if(err.code==='META_SENDER_AUTH_REQUIRED'){
+        setAuthBlocked(true);
+        setSenderIssue(detail);
+        setProfiles(old=>old.map(x=>x.id===senderId?{...x,connectionStatus:'error'}:x));
+      }else if(err.status!==401)setError(detail);
     }finally{setBusy(false)}
   }
 
@@ -112,6 +162,13 @@ export default function SendMessage({go}){
         <span aria-hidden="true">▤</span><span><b>Meta Approved Template</b><small>Approved business-initiated messages</small></span>
       </button>
     </div>
+    {(senderIssue||authBlocked)&&<div className="singleSendAlert error singleSendAuthFix" role="alert">
+      <b>WhatsApp sender needs authorization</b>
+      <p>{senderIssue||'The selected sender could not be authenticated by Meta.'}</p>
+      <div className="singleSendAuthActions"><button type="button" onClick={editSender}>Update access token →</button>
+        <button type="button" onClick={()=>checkSender(senderId)} disabled={!senderId||checkingSender}>{checkingSender?'Checking…':'Test again'}</button></div>
+      <small>Your Clever Connect login is separate from Meta's sender authorization. Reconnect this WhatsApp number using a valid system-user token with messaging permission.</small>
+    </div>}
     {error&&<div className="singleSendAlert error" role="alert">{error}</div>}
     {success&&<div className="singleSendAlert success" role="status">{success}</div>}
     {uncertain&&<div className="singleSendAlert caution">Meta may already have accepted this message. Sending is disabled for this draft to prevent accidental duplicates. Review provider logs before another attempt.</div>}
@@ -127,9 +184,11 @@ export default function SendMessage({go}){
             </option>)}
           </select>
           <div className="singleSendSubline">
-            <span className={senderReady?'singleSendReady':'singleSendMuted'}>● {senderReady?'Ready to send':'Select an active, plan-entitled number'}</span>
-            <button type="button" onClick={()=>go('whatsapp-api')}>Manage Numbers →</button>
+            <span className={senderReady?'singleSendReady':'singleSendMuted'}>● {checkingSender?'Checking Meta connection…':senderReady?'Meta API connected':authBlocked?'Authorization required':'Select an active, plan-entitled number'}</span>
+            <div className="singleSendHealthActions"><button type="button" disabled={!senderId||checkingSender} onClick={()=>checkSender(senderId)}>Test / Sync</button>
+              <button type="button" onClick={editSender}>Manage Numbers →</button></div>
           </div>
+          {messagingPermission==='unavailable'&&senderReady&&<small className="singleSendScopeNotice">Meta confirmed access to this number; messaging permission could not be independently verified. Sending still requires the correct token scopes.</small>}
         </section>
         <section className="singleSendCard">
           <div className="singleSendCardHeader"><span className="singleSendStep">02</span><div><h2>Recipient</h2><p>Choose an opted-in contact or enter a number.</p></div></div>
