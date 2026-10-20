@@ -548,10 +548,11 @@ function Templates(){
   const[selectedProfile,setSelectedProfile]=useState(()=>localStorage.getItem('wa:template-profile')||'');
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
+  const[syncing,setSyncing]=useState(false);
 
   async function load(){
     try{
-      const [templates,conn]=await Promise.all([api('/templates'),api('/integrations/whatsapp-connections')]);
+      const [templates,conn]=await Promise.all([api('/templates',{fresh:true}),api('/integrations/whatsapp-connections',{fresh:true})]);
       setRows(templates);
       const meta=(conn.connections||[]).filter(x=>x.provider==='meta');
       setConnections(meta);
@@ -583,12 +584,23 @@ function Templates(){
   }
 
   async function syncProfile(id){
-    setErr('');setMsg('');
+    if(syncing)return;
+    setSyncing(true);setErr('');setMsg('');
     try{
       const x=await api('/templates/meta/'+id+'/sync',{method:'POST'});
-      setMsg('Synced '+x.synced+' template(s) from Meta.');
+      // Sync can partially succeed. Display an honest summary without
+      // dumping internal MongoDB index errors into the customer UI.
+      setRows(x.templates||[]);
+      if(x.failed) setErr('Synced '+x.synced+' template(s), but '+x.failed+
+        ' could not be reconciled. '+(x.warnings||[]).join(' '));
+      else setMsg('All '+x.synced+' Meta template(s) synchronized successfully.');
       await load();
-    }catch(e){setErr(e.message)}
+    }catch(e){
+      if(e.status===401)return;
+      setErr(/duplicate key|E11000|Plan executor/i.test(e.message||'')
+        ?'Meta template synchronization encountered a conflict. Please retry once; existing approved templates are preserved.'
+        :e.message);
+    }finally{setSyncing(false)}
   }
 
   async function remove(x){
@@ -625,7 +637,7 @@ function Templates(){
           {connections.map(x=><option value={x.id} key={x.id}>{x.name}{x.displayPhoneNumber?' · '+x.displayPhoneNumber:''}</option>)}
         </select>
       </div>
-      {selectedProfile&&<div className="rowActions"><button onClick={()=>syncProfile(selectedProfile)}>↻ Sync from Meta</button><button className="primary" onClick={()=>openNew('meta',selectedProfile)}>+ Create for {selected?.name||'profile'}</button></div>}
+      {selectedProfile&&<div className="rowActions"><button disabled={syncing} onClick={()=>syncProfile(selectedProfile)}>{syncing?'Synchronizing…':'↻ Sync from Meta'}</button><button className="primary" onClick={()=>openNew('meta',selectedProfile)}>+ Create for {selected?.name||'profile'}</button></div>}
     </section>
 
     {!connections.length&&<Notice type="bad">Connect a Meta WhatsApp API profile first to create Meta-approved templates.</Notice>}
