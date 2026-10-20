@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import {Integration,Workspace,User} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
 import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
-import {planLimitsForWorkspace,refreshWorkspaceAccess} from '../plan.js';
+import {refreshWorkspaceAccess,metaEntitlements} from '../plan.js';
 import {getMetaConfig,getMetaConfigPublic} from '../metaConfig.js';
 
 const r=express.Router();
@@ -35,12 +35,12 @@ const view=x=>({
 async function limits(workspaceId){
   const refreshed=await refreshWorkspaceAccess(workspaceId);
   const w=refreshed?.workspace?.toObject?.()||refreshed?.workspace||await Workspace.findById(workspaceId).lean();
-  const max=(await planLimitsForWorkspace(w)).metaConnections;
-  const used=await Integration.countDocuments({workspaceId,provider:'meta'});
+  const {max,used,allowedIds}=await metaEntitlements(w);
   return {
     plan:w?.plan||'trial',
     max,
     used,
+    allowedIds,
     access:{
       allowed:!!refreshed?.access?.allowed,
       state:refreshed?.access?.state||w?.subscriptionStatus||'expired',
@@ -182,7 +182,7 @@ r.post('/embedded-signup/complete',async(req,res)=>{
       registrationPinEncrypted:coexistence?'':encrypt(pin),
       connectMethod:'embedded',
       graphVersion,
-      connectionStatus:registrationStatus==='registered'?'connected':'error',
+      connectionStatus:registrationStatus==='needs_attention'?'error':'connected',
       connectedAt:new Date(),
       lastCheckedAt:new Date(),
       lastError:registrationWarning
@@ -211,7 +211,7 @@ r.get('/whatsapp-connections',async(req,res)=>{
     Integration.find({workspaceId:req.workspaceId}).sort({isDefault:-1,createdAt:1}).lean(),
     limits(req.workspaceId)
   ]);
-  res.json({connections:rows.map(view),subscription:usage});
+  res.json({connections:rows.map(x=>({...view(x),planAllowed:x.provider!=='meta'||usage.allowedIds.includes(String(x._id))})),subscription:usage});
 });
 
 r.post('/whatsapp-connections',async(req,res)=>{
@@ -344,6 +344,12 @@ r.put('/whatsapp',async(req,res)=>{
   if(!x)x=await Integration.findOne({workspaceId:req.workspaceId});
   if(!x)x=new Integration({workspaceId:req.workspaceId,name:'Demo provider',provider:'demo',isDefault:true});
   const provider=req.body.provider==='meta'?'meta':'demo';
+  if(provider==='meta'){
+    const usage=await requireMessagingAccess(req.workspaceId,res);
+    if(!usage)return;
+    if(x.provider!=='meta'&&usage.used>=usage.max)return res.status(409).json({message:'WhatsApp number limit reached for your plan'});
+    if(x.provider==='meta'&&!usage.allowedIds.includes(String(x._id)))return res.status(409).json({message:'This WhatsApp number exceeds your plan limit'});
+  }
   x.provider=provider;
   x.enabled=req.body.enabled!==false;
   if(req.body.phoneNumberId!==undefined)x.phoneNumberId=String(req.body.phoneNumberId||'').trim();
