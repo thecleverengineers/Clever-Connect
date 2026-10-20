@@ -224,6 +224,9 @@ const integrationSchema = new Schema({
   lastError: { type:String, default:'' }
 }, opts);
 integrationSchema.index({workspaceId:1,name:1},{unique:true});
+// One Meta phone number must belong to exactly one workspace. Webhooks route
+// solely by Meta phone_number_id; duplication would leak conversations.
+integrationSchema.index({provider:1,phoneNumberId:1},{unique:true,partialFilterExpression:{provider:'meta',phoneNumberId:{$gt:''}}});
 
 const adminAuditSchema=new Schema({
  actorId:{type:Schema.Types.ObjectId,ref:'User',required:true,index:true},
