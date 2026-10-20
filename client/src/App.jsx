@@ -4,6 +4,7 @@ import Payments from './Payments.jsx';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
 import BulkWhatsApp from './BulkWhatsApp.jsx';
 import SendMessage from './SendMessage.jsx';
+import MetaTemplateManager from './MetaTemplateManager.jsx';
 import DropFileInput from './DropFileInput.jsx';
 import {Inbox} from './ConversationSuite.jsx';
 import FlowStudio from './FlowStudio.jsx';
@@ -536,128 +537,6 @@ function Schedule(){
     <Title title="Schedule" sub="Manage upcoming automated WhatsApp campaigns."/>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
     <div className="cards">{rows.map(c=><article key={c._id}><div className="cardTop"><div><small>SCHEDULED</small><h3>{c.name}</h3></div><em className="status scheduled">scheduled</em></div><p>{c.message||c.templateId?.name||'Template campaign'}</p><div className="scheduleBox"><b>{fmt(c.scheduledAt)}</b><input id={'reschedule-'+c._id} type="datetime-local" value={times[c._id]||''} onChange={e=>setTimes({...times,[c._id]:e.target.value})}/></div><footer><span>{c.audienceType==='list'?(c.listId?.name||'List'):'Opted-in audience'}</span><div className="rowActions"><button onClick={()=>reschedule(c)}>Reschedule</button><button onClick={()=>send(c)}>Send now</button><button className="danger" onClick={()=>cancel(c)}>Cancel</button></div></footer></article>)}{!rows.length&&<Empty text="No scheduled campaigns."/>}</div>
-  </div>
-}
-
-function Templates(){
-  const[rows,setRows]=useState(()=>getCached('/templates')||[]);
-  const[connections,setConnections]=useState(()=>getCached('/integrations/whatsapp-connections')?.connections||[]);
-  const[show,setShow]=useState(false);
-  const[editing,setEditing]=useState(null);
-  const[mode,setMode]=useState('local');
-  const[selectedProfile,setSelectedProfile]=useState(()=>localStorage.getItem('wa:template-profile')||'');
-  const[msg,setMsg]=useState('');
-  const[err,setErr]=useState('');
-
-  async function load(){
-    try{
-      const [templates,conn]=await Promise.all([api('/templates'),api('/integrations/whatsapp-connections')]);
-      setRows(templates);
-      const meta=(conn.connections||[]).filter(x=>x.provider==='meta');
-      setConnections(meta);
-      if(selectedProfile&&!meta.some(x=>x.id===selectedProfile))setSelectedProfile('');
-    }catch(e){setErr(e.message)}
-  }
-  useEffect(()=>{load()},[]);
-
-  async function save(e){
-    e.preventDefault();setErr('');setMsg('');
-    const fd=new FormData(e.currentTarget);
-    const o=Object.fromEntries(fd);
-    try{
-      if(mode==='meta'){
-        if(!selectedProfile)return setErr('Choose a connected Meta WhatsApp profile');
-        o.metaTemplateName=o.metaTemplateName||o.name;
-        o.bodyExamples=String(o.bodyExamples||'').split(',').map(x=>x.trim()).filter(Boolean);
-        await api('/templates/meta/'+selectedProfile,{method:'POST',body:JSON.stringify(o)});
-        setMsg('Template submitted to Meta for review.');
-      }else if(editing){
-        await api('/templates/'+editing._id,{method:'PUT',body:JSON.stringify(o)});
-        setMsg('Local template updated.');
-      }else{
-        await api('/templates',{method:'POST',body:JSON.stringify(o)});
-        setMsg('Local template created.');
-      }
-      setShow(false);setEditing(null);await load();
-    }catch(e){setErr(e.message)}
-  }
-
-  async function syncProfile(id){
-    setErr('');setMsg('');
-    try{
-      const x=await api('/templates/meta/'+id+'/sync',{method:'POST'});
-      setMsg('Synced '+x.synced+' template(s) from Meta.');
-      await load();
-    }catch(e){setErr(e.message)}
-  }
-
-  async function remove(x){
-    if(x.metaTemplateId){
-      if(!confirm('Delete "'+x.metaTemplateName+'" from Meta and WA SANTA?'))return;
-      try{await api('/templates/meta/'+x._id,{method:'DELETE'});setMsg('Meta template deleted.');await load()}catch(e){setErr(e.message)}
-      return;
-    }
-    if(!confirm('Delete template "'+x.name+'"?'))return;
-    try{await api('/templates/'+x._id,{method:'DELETE'});setMsg('Template deleted.');await load()}catch(e){setErr(e.message)}
-  }
-
-  function openNew(kind,profileId=''){
-    setEditing(null);setMode(kind);
-    if(profileId){setSelectedProfile(profileId);localStorage.setItem('wa:template-profile',profileId)}
-    setShow(true);
-  }
-
-  const selected=connections.find(x=>x.id===selectedProfile);
-  const filtered=selectedProfile?rows.filter(x=>(x.integrationId?._id||x.integrationId)===selectedProfile):rows;
-
-  return <div className="page">
-    <div className="title">
-      <div><span>WA SANTA</span><h1>Templates</h1><p>Create local reusable copy or submit templates directly to a connected Meta WhatsApp profile.</p></div>
-      <div className="rowActions"><button onClick={()=>openNew('local')}>+ Local template</button><button className="primary" disabled={!connections.length} onClick={()=>openNew('meta',selectedProfile||connections[0]?.id)}>+ Meta template</button></div>
-    </div>
-    <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
-
-    <section className="templateProfileBar">
-      <div>
-        <small>META PROFILE</small>
-        <select value={selectedProfile} onChange={e=>{setSelectedProfile(e.target.value);if(e.target.value)localStorage.setItem('wa:template-profile',e.target.value);else localStorage.removeItem('wa:template-profile')}}>
-          <option value="">All templates / profiles</option>
-          {connections.map(x=><option value={x.id} key={x.id}>{x.name}{x.displayPhoneNumber?' · '+x.displayPhoneNumber:''}</option>)}
-        </select>
-      </div>
-      {selectedProfile&&<div className="rowActions"><button onClick={()=>syncProfile(selectedProfile)}>↻ Sync from Meta</button><button className="primary" onClick={()=>openNew('meta',selectedProfile)}>+ Create for {selected?.name||'profile'}</button></div>}
-    </section>
-
-    {!connections.length&&<Notice type="bad">Connect a Meta WhatsApp API profile first to create Meta-approved templates.</Notice>}
-
-    {show&&<div className="panel">
-      <div className="sectionHead"><div><h2>{mode==='meta'?'Create Meta template':editing?'Edit local template':'Create local template'}</h2><p>{mode==='meta'?'The template will be submitted to Meta and usually starts as PENDING.':'Reusable copy stored only inside WA SANTA.'}</p></div></div>
-      <form key={(editing?editing._id:'new')+'-'+mode} className="formGrid" onSubmit={save}>
-        {mode==='meta'&&<label className="full">Connected Meta profile<select value={selectedProfile} onChange={e=>setSelectedProfile(e.target.value)} required><option value="">Choose Meta profile</option>{connections.map(x=><option value={x.id} key={x.id}>{x.name}{x.displayPhoneNumber?' · '+x.displayPhoneNumber:''}</option>)}</select></label>}
-        <label>Display name<input name="name" required defaultValue={editing?.name||''} placeholder="Order confirmation"/></label>
-        {mode==='meta'&&<label>Meta template name<input name="metaTemplateName" required placeholder="order_confirmation"/></label>}
-        <label>Language<input name="language" defaultValue={editing?.language||'en_US'}/></label>
-        <label>Category<select name="category" defaultValue={editing?.category||'MARKETING'}><option>MARKETING</option><option>UTILITY</option><option>AUTHENTICATION</option></select></label>
-        <label className="full">Message body<textarea rows="5" name="body" required={mode!=='meta'} defaultValue={editing?.body||''} placeholder={mode==='meta'?'For MARKETING/UTILITY use Meta variables like {{1}}, {{2}}. Authentication templates use Meta OTP format automatically.':'Write reusable message text…'}/></label>
-        {mode==='meta'&&<label className="full">Variable examples<input name="bodyExamples" placeholder="Example for {{1}}, Example for {{2}}"/><small>Required when the body contains positional Meta variables.</small></label>}
-        <div className="actions full"><button type="button" onClick={()=>{setShow(false);setEditing(null)}}>Cancel</button><button className="primary">{mode==='meta'?'Submit to Meta':'Save template'}</button></div>
-      </form>
-    </div>}
-
-    <div className="cards templateCards">{filtered.map(x=><article key={x._id}>
-      <div className="cardTop"><div><small>{x.category} · {x.language}</small><h3>{x.name}</h3></div><em className={'status '+(x.metaStatus==='APPROVED'?'completed':x.metaStatus==='REJECTED'?'failed':x.metaStatus==='PENDING'?'scheduled':'cancelled')}>{x.metaStatus||'LOCAL'}</em></div>
-      <p>{x.body}</p>
-      <div className="templateMetaInfo">
-        <span><small>Profile</small><b>{x.integrationId?.name||'Local only'}</b></span>
-        <span><small>Meta name</small><b>{x.metaTemplateName||'—'}</b></span>
-        <span><small>Meta ID</small><b>{x.metaTemplateId||'—'}</b></span>
-      </div>
-      {x.metaRejectedReason&&<Notice type="bad">{x.metaRejectedReason}</Notice>}
-      <footer><span>{x.metaLastSyncedAt?'Synced '+fmt(x.metaLastSyncedAt):'Local template'}</span><div className="rowActions">
-        {!x.metaTemplateId&&<button onClick={()=>{setEditing(x);setMode('local');setShow(true)}}>Edit</button>}
-        <button className="danger" onClick={()=>remove(x)}>{x.metaTemplateId?'Delete from Meta':'Delete'}</button>
-      </div></footer>
-    </article>)}{!filtered.length&&<Empty text="No templates for this selection."/>}</div>
   </div>
 }
 
@@ -1791,7 +1670,7 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='campaigns')return <Campaigns/>;
   if(id==='contacts')return <Contacts/>;
   if(id==='schedule')return <Schedule/>;
-  if(id==='templates')return <Templates/>;
+  if(id==='templates')return <MetaTemplateManager/>;
   if(id==='reports')return <Reports go={go}/>;
   if(id==='inbox')return <Inbox/>;
   if(id==='chatbot')return <FlowStudio session={session}/>;
