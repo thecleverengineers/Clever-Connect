@@ -374,6 +374,11 @@ function Campaigns(){
   return <div className="page">
     <Title title="Campaigns" sub="Create, schedule, send, retry and audit WhatsApp campaigns with native text formatting and image carousels." action="New campaign" onAction={()=>{setEditing(null);setDraft(blankCampaignDraft());setShow(true)}}/>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
+    {senderNeedsAuthorization&&<section className="metaTemplateSenderAlert">
+      <b>WhatsApp message sending needs authorization</b>
+      <p>You can synchronize approved templates using Meta management access even when this number cannot send messages. The selected sender needs a valid authorized token with <code>whatsapp_business_messaging</code>. Renew the token under WhatsApp Manager → Numbers, then test the sender.</p>
+      <button type="button" onClick={()=>go('whatsapp-api')}>Manage WhatsApp sender →</button>
+    </section>
     {show&&<div className="panel"><form key={editing?editing._id:'new'} className="formGrid" onSubmit={save}>
       <label htmlFor="campaign-name">Campaign name<input id="campaign-name" name="name" required defaultValue={editing?.name||''}/></label>
       <label htmlFor="campaign-audience">Audience<select id="campaign-audience" name="audienceType" defaultValue={editing?.audienceType||'all'}><option value="all">All opted-in contacts</option><option value="list">Contact list</option><option value="contacts">Specific contacts</option></select></label>
@@ -539,7 +544,7 @@ function Schedule(){
   </div>
 }
 
-function Templates(){
+function Templates({go}){
   const[rows,setRows]=useState(()=>getCached('/templates')||[]);
   const[connections,setConnections]=useState(()=>getCached('/integrations/whatsapp-connections')?.connections||[]);
   const[show,setShow]=useState(false);
@@ -621,6 +626,7 @@ function Templates(){
 
   const selected=connections.find(x=>x.id===selectedProfile);
   const filtered=selectedProfile?rows.filter(x=>(x.integrationId?._id||x.integrationId)===selectedProfile):rows;
+  const senderNeedsAuthorization=selected?.enabled&&selected?.connectionStatus==='error';
 
   return <div className="page">
     <div className="title">
@@ -1803,7 +1809,7 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='campaigns')return <Campaigns/>;
   if(id==='contacts')return <Contacts/>;
   if(id==='schedule')return <Schedule/>;
-  if(id==='templates')return <Templates/>;
+  if(id==='templates')return <Templates go={go}/>;
   if(id==='reports')return <Reports go={go}/>;
   if(id==='inbox')return <Inbox/>;
   if(id==='chatbot')return <FlowStudio session={session}/>;
