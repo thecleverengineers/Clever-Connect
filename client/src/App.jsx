@@ -2,6 +2,7 @@ import React,{useEffect,useMemo,useState}from'react';
 import{api,BASE,getCached,warmWorkspace}from'./api.js';
 import Payments from './Payments.jsx';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
+import BulkWhatsApp from './BulkWhatsApp.jsx';
 import DropFileInput from './DropFileInput.jsx';
 import {Inbox,FlowBuilder} from './ConversationSuite.jsx';
 import AICopilot from './AICopilot.jsx';
@@ -12,6 +13,7 @@ const nav=[
   ['overview','Overview','⌂'],
   ['ai','AI Copilot','✦'],
   ['send','Send message','➤'],
+  ['bulk','Bulk WhatsApp','◈'],
   ['campaigns','Campaigns','✦'],
   ['contacts','Contacts','◎'],
   ['schedule','Schedule','◷'],
@@ -158,7 +160,7 @@ function Shell({session,onLogout,onSessionUpdate}){
       </header>
       {!access.allowed&&page!=='subscription'&&page!=='admin'&&<div className="accessBanner"><b>7-day trial ended.</b> Subscribe to a WA SANTA plan to restore workspace access.</div>}
       <Page id={page} session={session} go={changePage} onSessionUpdate={onSessionUpdate}/>
-      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['reports','Reports','▥'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
+      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['bulk','Bulk WA','◈'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
     </main>
   </div>
 }
@@ -216,6 +218,7 @@ function Overview({go}){
       <div className="eyebrow">QUICK ACTIONS</div><h2>Your next connection starts here.</h2>
       <div className="quick">
         <button onClick={()=>go('contacts')}><span>⇧</span><b>Import contacts</b><small>Excel or CSV with consent controls</small></button>
+        <button onClick={()=>go('bulk')}><span>◈</span><b>Bulk WhatsApp</b><small>Approved templates, address book or CSV</small></button>
         <button onClick={()=>go('send')}><span>➤</span><b>Send a personal message</b><small>One recipient, instantly</small></button>
         <button onClick={()=>go('templates')}><span>＋</span><b>Create a template</b><small>Reusable WhatsApp copy</small></button>
       </div>
@@ -1581,6 +1584,7 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='overview')return <Overview go={go}/>;
   if(id==='ai')return <AICopilot go={go} session={session}/>;
   if(id==='send')return <SingleSend/>;
+  if(id==='bulk')return <BulkWhatsApp go={go}/>;
   if(id==='campaigns')return <Campaigns/>;
   if(id==='contacts')return <Contacts/>;
   if(id==='schedule')return <Schedule/>;
