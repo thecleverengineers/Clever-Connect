@@ -14,12 +14,12 @@ export function publicAttribute(a){
   };
 }
 export function renderFlowText(template,{contact={},globals=[],values={}}={}){
-  const builtins={
+  const builtins=Object.assign(Object.create(null),{
     customer_name:String(contact.name||''),
     customer_mobile:String(contact.phone||''),
     customer_email:String(contact.email||''),
     catalog:''
-  };
+  });
   for(const a of globals){
     if(a.scope==='global'&&a.enabled!==false&&!a.isSecret){
       builtins[String(a.key)]=String(a.value||'');
