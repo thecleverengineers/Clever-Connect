@@ -2,6 +2,7 @@ import { Integration,Workspace,Delivery } from '../models.js';
 import {InboundWindow} from '../paymentModels.js';
 import {buildCarouselPayload} from './carousel.js';
 import { decrypt } from '../utils/crypto.js';
+import {classifyMetaSendError} from './metaSendErrors.js';
 import {accessForWorkspace,planLimitsForWorkspace,requireMetaSenderEntitlement} from '../plan.js';
 
 const normalizePhone=(phone='')=>String(phone).replace(/[^0-9]/g,'');
@@ -147,13 +148,23 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
     throw unknown;
   }
   if(!response.ok){
-    const message=data?.error?.message||'WhatsApp Cloud API rejected the message';
-    const rejected=new Error(message);
-    rejected.providerErrorCode=String(data?.error?.code||'');
-    // A provider-side failure is not proof that a request was never accepted.
-    // Keep 5xx outcomes conservative; explicit client and rate-limit
-    // rejections are confirmed unsuccessful and suitable for operator review.
+    const classified=classifyMetaSendError({httpStatus:response.status,error:data?.error||{}});
+    const rejected=new Error(classified.message);
+    rejected.providerErrorCode=classified.metaCode;
+    rejected.code=classified.code;
+    rejected.senderAuthFailure=classified.senderAuthFailure;
+    // 5xx responses can follow an accepted request. Never automatically
+    // resend when Meta acceptance cannot be established.
     rejected.submissionUnknown=response.status>=500;
+    if(rejected.senderAuthFailure&&!rejected.submissionUnknown){
+      // The profile may have passed a read-only connection test previously
+      // but lacks actual messaging authorization. Do not keep showing Ready.
+      await Integration.updateOne(
+        {_id:integration._id,workspaceId,provider:'meta'},
+        {$set:{connectionStatus:'error',lastCheckedAt:new Date(),
+          lastError:'Meta sender authorization failed. Replace/reauthorize access token and check whatsapp_business_messaging permission.'}}
+      ).catch(e=>console.error('Could not update Meta sender health:',e));
+    }
     throw rejected;
   }
   const id=data.messages?.[0]?.id;
