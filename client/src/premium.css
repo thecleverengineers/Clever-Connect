@@ -281,3 +281,10 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .metaWebhookFields button:disabled{opacity:.4}
 .metaWebhookInstruction{color:#6d8776;font-size:11px;line-height:1.7;margin:13px 0 0}
 @media(max-width:700px){.metaWebhookHelp{padding:15px 13px}.metaWebhookTitle{flex-direction:column}.metaWebhookFields>div{grid-template-columns:1fr}.metaWebhookFields button{justify-self:start}}
+
+/* Meta management/sync access and WhatsApp sender messaging are separate capabilities. */
+.metaTemplateSenderAlert{margin:16px 0;border:1px solid #efdac0;background:#fff9f0;border-left:4px solid #d19a54;border-radius:12px;padding:15px 17px;color:#825e31}
+.metaTemplateSenderAlert>b{font-size:13px}
+.metaTemplateSenderAlert p{font-size:11px;line-height:1.7;margin:8px 0 10px;max-width:960px}
+.metaTemplateSenderAlert code{font-family:ui-monospace,monospace;background:#fff1db;padding:2px 4px;border-radius:3px;overflow-wrap:anywhere}
+.metaTemplateSenderAlert button{background:#fff;border:1px solid #e5cfb3;color:#805b32;border-radius:9px;padding:9px 12px;font-size:11px;font-weight:800}
