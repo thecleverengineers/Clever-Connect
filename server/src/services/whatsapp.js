@@ -2,7 +2,7 @@ import { Integration,Workspace,Delivery } from '../models.js';
 import {InboundWindow} from '../paymentModels.js';
 import {buildCarouselPayload} from './carousel.js';
 import { decrypt } from '../utils/crypto.js';
-import {accessForWorkspace,planLimitsForWorkspace} from '../plan.js';
+import {accessForWorkspace,planLimitsForWorkspace,requireMetaSenderEntitlement} from '../plan.js';
 
 const normalizePhone=(phone='')=>String(phone).replace(/[^0-9]/g,'');
 
@@ -47,6 +47,9 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
   if((carousel||buttons)&&(!integration||integration.provider!=='meta')){
     throw new Error('Image carousel messages require an active Meta WhatsApp Cloud API profile');
   }
+  // Recheck entitlement at dispatch time; saved profiles above a downgraded plan stay intact but cannot send.
+  if(integration?.provider==='meta')await requireMetaSenderEntitlement(workspaceId,integration._id);
+
   if(!integration||integration.provider==='demo'){
     return {
       provider:'demo',
