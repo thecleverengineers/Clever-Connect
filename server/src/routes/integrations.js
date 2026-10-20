@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import {Integration,Workspace,User} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
 import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
-import {refreshWorkspaceAccess,metaEntitlements} from '../plan.js';
+import {refreshWorkspaceAccess,metaEntitlements,requireMetaSenderEntitlement} from '../plan.js';
 import {getMetaConfig,getMetaConfigPublic} from '../metaConfig.js';
 
 const r=express.Router();
@@ -252,6 +252,8 @@ r.post('/whatsapp-connections',async(req,res)=>{
     const phoneNumberId=String(req.body.phoneNumberId||'').trim();
     const accessToken=String(req.body.accessToken||'').trim();
     if(!name||!phoneNumberId||!accessToken)return res.status(400).json({message:'Connection name, Phone Number ID and access token are required'});
+    if(await Integration.exists({workspaceId:req.workspaceId,provider:'meta',phoneNumberId}))
+      return res.status(409).json({message:'This Meta WhatsApp phone number is already connected to your workspace'});
     if(await Integration.exists({workspaceId:req.workspaceId,name}))return res.status(409).json({message:'A connection with this name already exists'});
     const row=await Integration.create({
       workspaceId:req.workspaceId,
@@ -303,7 +305,13 @@ r.put('/whatsapp-connections/:id',async(req,res)=>{
   if(!row)return res.sendStatus(404);
   if(row.provider==='demo')return res.status(409).json({message:'The demo provider cannot be converted into Meta. Add a new Meta connection instead'});
   if(req.body.name!==undefined)row.name=String(req.body.name||'').trim();
-  if(req.body.phoneNumberId!==undefined)row.phoneNumberId=String(req.body.phoneNumberId||'').trim();
+  if(req.body.phoneNumberId!==undefined){
+    const nextId=String(req.body.phoneNumberId||'').trim();
+    if(!nextId)return res.status(400).json({message:'Phone Number ID cannot be empty'});
+    const duplicate=await Integration.exists({workspaceId:req.workspaceId,provider:'meta',phoneNumberId:nextId,_id:{$ne:row._id}});
+    if(duplicate)return res.status(409).json({message:'This Meta number is already connected'});
+    row.phoneNumberId=nextId;
+  }
   if(req.body.businessAccountId!==undefined)row.businessAccountId=String(req.body.businessAccountId||'').trim();
   if(req.body.graphVersion!==undefined&&/^v\d+\.\d+$/.test(String(req.body.graphVersion)))row.graphVersion=String(req.body.graphVersion);
   if(req.body.otpTemplateName!==undefined)row.otpTemplateName=String(req.body.otpTemplateName||'').trim();
@@ -319,8 +327,10 @@ r.put('/whatsapp-connections/:id',async(req,res)=>{
 
 r.post('/whatsapp-connections/:id/test',async(req,res)=>{
   if(!await requireMessagingAccess(req.workspaceId,res))return;
-  const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId}).lean();
+  if(!mongoose.isValidObjectId(req.params.id))return res.sendStatus(404);
+  const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId,provider:'meta'}).lean();
   if(!x)return res.sendStatus(404);
+  if(!x.enabled)return res.status(409).json({message:'Enable this WhatsApp number before syncing its Meta connection details'});
   try{
     const result=await testConnection(x);
     await Integration.updateOne({_id:x._id},{$set:{
@@ -342,8 +352,11 @@ r.post('/whatsapp-connections/:id/test',async(req,res)=>{
 
 r.post('/whatsapp-connections/:id/default',async(req,res)=>{
   if(!await requireMessagingAccess(req.workspaceId,res))return;
-  const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId,enabled:true});
-  if(!x)return res.status(404).json({message:'Connection not found or disabled'});
+  if(!mongoose.isValidObjectId(req.params.id))return res.sendStatus(404);
+  const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId,provider:'meta',enabled:true});
+  if(!x)return res.status(404).json({message:'Meta connection not found or disabled'});
+  try{await requireMetaSenderEntitlement(req.workspaceId,x._id)}
+  catch(e){return res.status(409).json({message:e.message})}
   await Integration.updateMany({workspaceId:req.workspaceId},{$set:{isDefault:false}});
   x.isDefault=true;await x.save();
   res.json(view(x));
