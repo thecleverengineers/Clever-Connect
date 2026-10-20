@@ -28,6 +28,8 @@ r.post('/',async(req,res)=>{
     if(!label)return res.status(400).json({message:'Attribute label is required'});
     const count=await ChatAttribute.countDocuments({workspaceId:req.workspaceId,scope});
     if(count>=50)return res.status(409).json({message:'Maximum 50 '+scope+' attributes per workspace'});
+    if(await ChatAttribute.exists({workspaceId:req.workspaceId,key}))
+      return res.status(409).json({message:'Attribute keys must be unique across Global and User attributes'});
     const isSecret=scope==='global'&&req.body.isSecret===true;
     const value=scope==='global'?cleanValue(req.body.value):'';
     const item=await ChatAttribute.create({
@@ -98,6 +100,7 @@ r.put('/user-values/:contactId',async(req,res)=>{
   if(attrs.length!==keys.length)return res.status(400).json({message:'One or more attributes are unavailable'});
   const contact=await Contact.findOne({_id:req.params.contactId,workspaceId:req.workspaceId});
   if(!contact)return res.sendStatus(404);
+  if(!contact.custom)contact.custom=new Map();
   for(const key of keys){
     const raw=String(values[key]??'');
     if(raw.length>2000)return res.status(400).json({message:key+' exceeds 2,000 characters'});
