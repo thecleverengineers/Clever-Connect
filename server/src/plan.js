@@ -1,4 +1,4 @@
-import {SubscriptionPlan,Workspace} from './models.js';
+import {SubscriptionPlan,Workspace,Integration} from './models.js';
 
 export const TRIAL_LIMITS={metaConnections:1,teamMembers:3,monthlyMessages:1000};
 
@@ -50,4 +50,36 @@ export async function refreshWorkspaceAccess(workspaceId){
     access.state='expired';
   }
   return {workspace,access};
+}
+
+/**
+ * Slots are assigned deterministically: oldest connected Meta profiles first.
+ * Downgrading never deletes credentials or history. Disabled profiles still
+ * occupy a slot until the tenant disconnects them.
+ */
+export function entitledMetaIds(profiles,maxConnections){
+  const count=Math.max(0,Math.floor(Number(maxConnections)||0));
+  return [...profiles].sort((a,b)=>{
+    const timeA=Date.parse(a.createdAt||0)||0;
+    const timeB=Date.parse(b.createdAt||0)||0;
+    return timeA-timeB||String(a._id).localeCompare(String(b._id));
+  }).slice(0,count).map(x=>String(x._id));
+}
+
+export async function metaEntitlements(workspace){
+  const {metaConnections}=await planLimitsForWorkspace(workspace);
+  const profiles=await Integration.find({workspaceId:workspace._id,provider:'meta'})
+    .select('_id createdAt').lean();
+  const allowedIds=entitledMetaIds(profiles,metaConnections);
+  return {max:metaConnections,used:profiles.length,allowedIds};
+}
+
+export async function requireMetaSenderEntitlement(workspaceId,profileId){
+  const workspace=await Workspace.findById(workspaceId).lean();
+  if(!accessForWorkspace(workspace).allowed)throw new Error('An active subscription is required to send WhatsApp messages');
+  const entitled=await metaEntitlements(workspace);
+  if(!entitled.allowedIds.includes(String(profileId))){
+    throw new Error('This WhatsApp number is beyond your subscription connection limit. Upgrade or disconnect another number.');
+  }
+  return entitled;
 }
