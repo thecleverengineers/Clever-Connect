@@ -3,6 +3,7 @@ import{api,BASE,getCached,warmWorkspace}from'./api.js';
 import Payments from './Payments.jsx';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
 import BulkWhatsApp from './BulkWhatsApp.jsx';
+import SendMessage from './SendMessage.jsx';
 import DropFileInput from './DropFileInput.jsx';
 import {Inbox} from './ConversationSuite.jsx';
 import FlowStudio from './FlowStudio.jsx';
@@ -320,52 +321,6 @@ function CampaignTable({rows,go,onOpen}){
       </div>):<Empty text="No campaigns yet."/>}
     </div>
   </section>
-}
-
-function SingleSend(){
-  const[contacts,setContacts]=useState(()=>getCached('/contacts')||[]);
-  const[templates,setTemplates]=useState(()=>getCached('/templates')||[]);
-  const[msg,setMsg]=useState('');
-  const[err,setErr]=useState('');
-  const[busy,setBusy]=useState(false);
-  const[direct,setDirect]=useState(false);
-  useEffect(()=>{Promise.all([api('/contacts'),api('/templates')]).then(([a,b])=>{setContacts(a);setTemplates(b)}).catch(e=>setErr(e.message))},[]);
-  async function submit(e){
-    e.preventDefault();setBusy(true);setErr('');setMsg('');
-    const fd=new FormData(e.currentTarget);
-    const o=Object.fromEntries(fd);
-    if(direct){delete o.contactId;o.consentConfirmed=fd.get('consentConfirmed')==='true'}else delete o.phone;
-    try{
-      const d=await api('/campaigns/single/send',{method:'POST',body:JSON.stringify(o)});
-      setMsg('Message accepted. Delivery status: '+statusLabel(d.status)+'.');
-      e.currentTarget.reset();
-    }catch(e){setErr(e.message)}finally{setBusy(false)}
-  }
-  const opted=contacts.filter(x=>x.consentStatus==='opted_in'&&!x.suppressed);
-  return <div className="page">
-    <Title title="Send message" sub="Send an individual WhatsApp message using an opted-in contact or a direct number."/>
-    <div className="settingsGrid">
-      <section>
-        <div className="segmented"><button className={!direct?'active':''} onClick={()=>setDirect(false)}>Saved contact</button><button className={direct?'active':''} onClick={()=>setDirect(true)}>Direct number</button></div>
-        <form className="formGrid" onSubmit={submit}>
-          {!direct?<label className="full">Recipient<select name="contactId" required defaultValue=""><option value="">Choose opted-in contact</option>{opted.map(x=><option value={x._id} key={x._id}>{x.name||'Unnamed'} · {x.phone}</option>)}</select></label>:<>
-            <label className="full">Phone number<input name="phone" placeholder="+919876543210" required/></label>
-            <label className="check full"><input type="checkbox" name="consentConfirmed" value="true" required/> I confirm this recipient has explicitly opted in to receive WhatsApp messages.</label>
-          </>}
-          <label>Template<select name="templateId" defaultValue=""><option value="">Freeform message</option>{templates.map(x=><option value={x._id} key={x._id}>{x.name}</option>)}</select></label>
-          <label>Delivery mode<input value="Send immediately" readOnly/></label>
-          <label className="full">Message<textarea name="message" rows="6" placeholder="Write a personal message…"/></label>
-          <div className="actions full"><button className="primary" disabled={busy}>{busy?'Sending…':'Send message'}</button></div>
-        </form>
-        <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
-      </section>
-      <section>
-        <h2>Safe sending</h2>
-        <p>Saved contacts must be opted in and not suppressed. For direct numbers, confirmation is required before sending.</p>
-        <div className="miniStats"><span><b>{opted.length}</b> ready contacts</span><span><b>{contacts.length-opted.length}</b> pending / suppressed</span></div>
-      </section>
-    </div>
-  </div>
 }
 
 function Campaigns(){
@@ -1821,7 +1776,7 @@ function SuperAdmin(){
 function Page({id,go,session,onSessionUpdate}){
   if(id==='overview')return <Overview go={go}/>;
   if(id==='ai')return <AICopilot go={go} session={session}/>;
-  if(id==='send')return <SingleSend/>;
+  if(id==='send')return <SendMessage go={go}/>;
   if(id==='bulk')return <BulkWhatsApp go={go}/>;
   if(id==='campaigns')return <Campaigns/>;
   if(id==='contacts')return <Contacts/>;
