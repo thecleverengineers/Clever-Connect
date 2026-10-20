@@ -2,7 +2,6 @@ import React,{useEffect,useMemo,useState} from 'react';
 import {api} from './api.js';
 import './sendMessage.css';
 
-const emptyOption=(name,value)=><option value={value||''}>{name}</option>;
 const numberedVariables=body=>{
   const numbers=[...String(body||'').matchAll(/{{\s*(\d+)\s*}}/g)].map(m=>Number(m[1]));
   return Math.min(20,Math.max(0,...numbers));
@@ -54,7 +53,7 @@ export default function SendMessage({go}){
   const opted=contacts.filter(x=>x.consentStatus==='opted_in'&&!x.suppressed);
   const recipient=recipientMode==='contact'?opted.find(x=>x._id===contactId):null;
   const recipientDetails={
-    name:recipient?.name||'Customer',
+    name:recipient?.name||'',
     phone:recipient?.phone||phone.trim()||'+91 ••••• •••••',
     email:recipient?.email||''
   };
@@ -70,10 +69,10 @@ export default function SendMessage({go}){
     (tab==='freeform'?message.trim().length>0&&message.trim().length<=4096:!!chosen&&Array.from({length:variableCount},(_,i)=>params[i]).every(x=>String(x||'').trim()));
 
   function switchTab(next){
-    setTab(next);setError('');setSuccess('');setUncertain(false);
+    setTab(next);setError('');setSuccess('');
   }
   function senderChange(id){
-    setSenderId(id);setTemplateId('');setParams([]);setError('');setSuccess('');setUncertain(false);
+    setSenderId(id);setTemplateId('');setParams([]);setError('');setSuccess('');
   }
   async function submit(e){
     e.preventDefault();
