@@ -4,6 +4,7 @@ import {Template,Integration} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
 import {decrypt} from '../utils/crypto.js';
 import {refreshWorkspaceAccess} from '../plan.js';
+import {upsertRemoteMetaTemplate} from '../services/metaTemplateSync.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -76,26 +77,6 @@ async function graph(connection,path,{method='GET',body}={}){
   return data;
 }
 
-async function upsertRemote(workspaceId,integrationId,row){
-  const bodyComp=(row.components||[]).find(x=>x.type==='BODY');
-  const local=await Template.findOneAndUpdate(
-    {workspaceId,integrationId,metaTemplateId:String(row.id||'')},
-    {$set:{
-      name:row.name||'meta_template',
-      body:bodyComp?.text||row.name||'Meta template',
-      metaTemplateName:row.name||'',
-      metaTemplateId:String(row.id||''),
-      metaStatus:String(row.status||'UNKNOWN').toUpperCase(),
-      metaRejectedReason:row.rejected_reason||'',
-      metaQualityScore:row.quality_score?.score||row.quality_score||'',
-      metaLastSyncedAt:new Date(),
-      language:row.language||'en_US',
-      category:String(row.category||'MARKETING').toUpperCase()
-    }},
-    {new:true,upsert:true,setDefaultsOnInsert:true}
-  );
-  return local;
-}
 
 r.get('/',async(req,res)=>{
   const q={workspaceId:req.workspaceId};
@@ -121,19 +102,17 @@ r.post('/meta/:integrationId',async(req,res)=>{
     if(!data.name||(!data.body&&data.category!=='AUTHENTICATION'))return res.status(400).json({message:'Template name and body are required'});
     const payload=metaPayload(data,req.body.bodyExamples);
     const remote=await graph(connection,connection.businessAccountId+'/message_templates',{method:'POST',body:payload});
-    const row=await Template.create({
-      workspaceId:req.workspaceId,
-      integrationId:connection._id,
-      name:data.name,
-      body:data.category==='AUTHENTICATION'?'Authentication OTP':data.body,
-      metaTemplateName:payload.name,
-      metaTemplateId:String(remote.id||''),
-      metaStatus:String(remote.status||'PENDING').toUpperCase(),
-      metaLastSyncedAt:new Date(),
-      language:data.language,
-      category:data.category
+    // Reconcile by Meta name+language, not only ID: a previously synced
+    // copy may already exist when Meta returns the submission response.
+    const local=await upsertRemoteMetaTemplate(Template,req.workspaceId,connection._id,{
+      id:String(remote.id||''),
+      name:payload.name,language:data.language,
+      status:remote.status||'PENDING',category:data.category,
+      components:[{type:'BODY',text:data.category==='AUTHENTICATION'?'Authentication OTP':data.body}]
     });
-    res.status(201).json(await row.populate('integrationId','name displayPhoneNumber phoneNumberId'));
+    await Template.updateOne({_id:local._id,workspaceId:req.workspaceId},{$set:{name:data.name}});
+    const row=await Template.findById(local._id).populate('integrationId','name displayPhoneNumber phoneNumberId');
+    res.status(201).json(row);
   }catch(e){res.status(502).json({message:e.code===11000?'This Meta template already exists for the selected profile':e.message})}
 });
 
@@ -143,9 +122,25 @@ r.post('/meta/:integrationId/sync',async(req,res)=>{
     const connection=await metaConnection(req.workspaceId,req.params.integrationId);
     if(!connection)return res.status(404).json({message:'Meta WhatsApp profile not found'});
     const data=await graph(connection,connection.businessAccountId+'/message_templates?fields=id,name,language,status,category,rejected_reason,quality_score,components&limit=250');
-    const synced=[];
-    for(const row of data.data||[])synced.push(await upsertRemote(req.workspaceId,connection._id,row));
-    res.json({synced:synced.length,templates:await Template.find({workspaceId:req.workspaceId,integrationId:connection._id}).populate('integrationId','name displayPhoneNumber phoneNumberId').lean()});
+    let synced=0;
+    const warnings=[];
+    for(const row of data.data||[]){
+      try{
+        await upsertRemoteMetaTemplate(Template,req.workspaceId,connection._id,row);
+        synced++;
+      }catch(e){
+        console.error('Meta template sync entry failed', {
+          workspaceId:String(req.workspaceId),integrationId:String(connection._id),
+          templateName:String(row.name||'').slice(0,100),error:e.message
+        });
+        warnings.push('Could not reconcile '+String(row.name||'unknown template').slice(0,80)+
+          ' ('+String(row.language||'en_US').slice(0,15)+').');
+      }
+    }
+    res.json({
+      synced,failed:warnings.length,warnings,
+      templates:await Template.find({workspaceId:req.workspaceId,integrationId:connection._id}).populate('integrationId','name displayPhoneNumber phoneNumberId').lean()
+    });
   }catch(e){res.status(502).json({message:e.message})}
 });
 
