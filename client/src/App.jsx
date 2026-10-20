@@ -21,10 +21,20 @@ const nav=[
   ['reports','Delivery reports','▥'],
   ['inbox','Live chat','◉'],
   ['chatbot','Chatbot & Flows','◇'],
-  ['whatsapp-api','Meta WhatsApp API','☏'],
+  ['whatsapp-api','Numbers','☏'],
   ['payments','WhatsApp Payments','₹'],
   ['subscription','Subscription','₹'],
   ['settings','Settings','⚙']
+];
+
+// Menu groups follow the familiar WhatsApp → Manager → Reports → Utility
+// hierarchy without presenting unsupported endpoints as working modules.
+const workspaceMenu=[
+  {heading:'WORKSPACE',ids:['overview','ai']},
+  {heading:'WHATSAPP',ids:['bulk','inbox','chatbot'],manager:true},
+  {heading:'CAMPAIGNS',ids:['campaigns','schedule','send','contacts']},
+  {heading:'REPORTS',ids:['reports','payments']},
+  {heading:'UTILITY',ids:['settings','subscription']}
 ];
 
 const fmt=d=>d?new Date(d).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'—';
@@ -111,6 +121,20 @@ function Shell({session,onLogout,onSessionUpdate}){
   const[page,setPage]=useState(access.allowed?'overview':'subscription');
   const[open,setOpen]=useState(false);
   const[profileOpen,setProfileOpen]=useState(false);
+  const[managerExpanded,setManagerExpanded]=useState(true);
+  const[managerCounts,setManagerCounts]=useState({numbers:null,templates:null});
+  useEffect(()=>{
+    if(!access.allowed)return;
+    let live=true;
+    Promise.allSettled([api('/integrations/whatsapp-connections'),api('/templates')]).then(results=>{
+      if(!live)return;
+      setManagerCounts({
+        numbers:results[0].status==='fulfilled'?(results[0].value.connections||[]).filter(x=>x.provider==='meta').length:null,
+        templates:results[1].status==='fulfilled'?(results[1].value||[]).filter(x=>x.metaStatus==='APPROVED').length:null
+      });
+    });
+    return()=>{live=false};
+  },[access.allowed,open,managerExpanded]);
   const menu=session.user.isSuperAdmin?[...nav,['admin','Super Admin','★']]:nav;
   useEffect(()=>{
     const close=e=>{if(!e.target.closest?.('.profileMenu'))setProfileOpen(false)};
@@ -126,13 +150,43 @@ function Shell({session,onLogout,onSessionUpdate}){
     setOpen(false);setProfileOpen(false);
   };
   return <div className="shell">
+    {open&&<button type="button" className="sidebarScrim" aria-label="Close navigation menu" onClick={()=>setOpen(false)}/>}
     <aside className={open?'open':''}>
       <div className="sideLogo"><span>WA</span> SANTA<small>WHATSAPP WORKSPACE</small></div>
       <div className="workspace">
         <div className="avatar">{session.workspace.name[0]?.toUpperCase()}</div>
         <div><b>{session.workspace.name}</b><small>{access.state==='trialing'?'trial · '+(access.daysRemaining||0)+' day(s) left':session.user.role+' workspace'}</small></div>
       </div>
-      <nav>{menu.map(([id,label,ic])=><button key={id} className={page===id?'active':''} onClick={()=>changePage(id)}><i>{ic}</i>{label}{locked(id)&&<small className="navLock">• locked</small>}</button>)}</nav>
+      <nav className="sidebarGroups" aria-label="Main navigation">
+        {workspaceMenu.map(group=><div className="sidebarGroup" key={group.heading}>
+          <div className="sidebarGroupTitle">{group.heading}</div>
+          {group.ids.map(id=>{
+            const item=menu.find(x=>x[0]===id);
+            if(!item)return null;
+            const [,label,ic]=item;
+            return <button type="button" key={id} className={page===id?'active':''} onClick={()=>changePage(id)}>
+              <i aria-hidden="true">{ic}</i><span>{id==='inbox'?'Live Chat (Inbox)':id==='chatbot'?'Chat Automation':id==='reports'?'Delivery Report':label}</span>
+              {locked(id)&&<small className="navLock">• locked</small>}
+            </button>;
+          })}
+          {group.manager&&<div className="sidebarManager">
+            <button type="button" className={'sidebarManagerToggle '+(['whatsapp-api','templates'].includes(page)?'active':'')} aria-expanded={managerExpanded}
+              onClick={()=>setManagerExpanded(x=>!x)}>
+              <i aria-hidden="true">☏</i><span>WhatsApp Manager</span><b aria-hidden="true">{managerExpanded?'⌄':'›'}</b>
+            </button>
+            {managerExpanded&&<div className="sidebarSubmenu">
+              {[['whatsapp-api','Numbers',managerCounts.numbers],['templates','Templates',managerCounts.templates]].map(([id,label,count])=>
+                <button type="button" key={id} className={page===id?'active':''} aria-current={page===id?'page':undefined} onClick={()=>changePage(id)}>
+                  <span>{label}</span>{count!==null&&<b>{count}</b>}
+                </button>)}
+            </div>}
+          </div>}
+        </div>)}
+        {session.user.isSuperAdmin&&<div className="sidebarGroup">
+          <div className="sidebarGroupTitle">ADMINISTRATION</div>
+          <button type="button" className={page==='admin'?'active':''} onClick={()=>changePage('admin')}><i>★</i><span>Super Admin</span></button>
+        </div>}
+      </nav>
     </aside>
     <main>
       <header>
