@@ -167,7 +167,7 @@ r.post('/embedded-signup/complete',async(req,res)=>{
     }
     if(!phoneNumberId)return res.status(400).json({message:'No WhatsApp phone number was returned by Meta'});
 
-    if(await Integration.exists({workspaceId:req.workspaceId,phoneNumberId})){
+    if(await Integration.exists({provider:'meta',phoneNumberId})){
       return res.status(409).json({message:'This WhatsApp phone number is already connected'});
     }
 
@@ -252,7 +252,7 @@ r.post('/whatsapp-connections',async(req,res)=>{
     const phoneNumberId=String(req.body.phoneNumberId||'').trim();
     const accessToken=String(req.body.accessToken||'').trim();
     if(!name||!phoneNumberId||!accessToken)return res.status(400).json({message:'Connection name, Phone Number ID and access token are required'});
-    if(await Integration.exists({workspaceId:req.workspaceId,provider:'meta',phoneNumberId}))
+    if(await Integration.exists({provider:'meta',phoneNumberId}))
       return res.status(409).json({message:'This Meta WhatsApp phone number is already connected to your workspace'});
     if(await Integration.exists({workspaceId:req.workspaceId,name}))return res.status(409).json({message:'A connection with this name already exists'});
     const row=await Integration.create({
@@ -308,7 +308,7 @@ r.put('/whatsapp-connections/:id',async(req,res)=>{
   if(req.body.phoneNumberId!==undefined){
     const nextId=String(req.body.phoneNumberId||'').trim();
     if(!nextId)return res.status(400).json({message:'Phone Number ID cannot be empty'});
-    const duplicate=await Integration.exists({workspaceId:req.workspaceId,provider:'meta',phoneNumberId:nextId,_id:{$ne:row._id}});
+    const duplicate=await Integration.exists({provider:'meta',phoneNumberId:nextId,_id:{$ne:row._id}});
     if(duplicate)return res.status(409).json({message:'This Meta number is already connected'});
     row.phoneNumberId=nextId;
   }
