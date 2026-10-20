@@ -130,7 +130,7 @@ const campaignSchema = new Schema({
   audienceSnapshottedAt:Date,
   dispatchFinishedAt:Date,
   totals: {
-    audience:{type:Number,default:0},eligible:{type:Number,default:0},skipped:{type:Number,default:0},pending:{type:Number,default:0},
+    audience:{type:Number,default:0},eligible:{type:Number,default:0},skipped:{type:Number,default:0},pending:{type:Number,default:0},unknown:{type:Number,default:0},
     deliveredPct:{type:Number,default:0},failedPct:{type:Number,default:0},readPct:{type:Number,default:0},audienceDeliveryPct:{type:Number,default:0},replied:{type:Number,default:0},
     submitted: { type: Number, default: 0 },
     delivered: { type: Number, default: 0 },
