@@ -2,7 +2,6 @@ import { Integration,Workspace,Delivery } from '../models.js';
 import {InboundWindow} from '../paymentModels.js';
 import {buildCarouselPayload} from './carousel.js';
 import { decrypt } from '../utils/crypto.js';
-import {classifyMetaSendError} from './metaSendErrors.js';
 import {accessForWorkspace,planLimitsForWorkspace,requireMetaSenderEntitlement} from '../plan.js';
 
 const normalizePhone=(phone='')=>String(phone).replace(/[^0-9]/g,'');
@@ -65,13 +64,16 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
 
   const token=decrypt(integration.accessTokenEncrypted);
   if(template){
-    if(integration.provider!=='meta'||!template.metaTemplateName||template.metaStatus!=='APPROVED'){
+    if(integration.provider!=='meta'||!template.metaTemplateId||!template.metaTemplateName||template.metaStatus!=='APPROVED'){
       throw new Error('Template sending requires an APPROVED template and an active Meta WhatsApp profile');
     }
     if(!template.integrationId||String(template.integrationId)!==String(integration._id)){
       throw new Error('Template must be sent using its approved Meta profile');
     }
     if(template.category==='AUTHENTICATION')throw new Error('Use the secure OTP flow for authentication templates');
+    if(['IMAGE','VIDEO','DOCUMENT'].includes(template.headerFormat)&&!template.headerMediaUrl){
+      throw new Error('Approved media template requires a public HTTPS media URL before sending');
+    }
     const required=[...String(template.body||'').matchAll(/{{\s*(\d+)\s*}}/g)]
       .map(x=>Number(x[1])).reduce((max,num)=>Math.max(max,num),0);
     if(templateParams.length!==required||templateParams.some(x=>!String(x||'').trim())){
@@ -99,7 +101,17 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
         type:'template',
         template:{
           name:template.metaTemplateName,language:{code:template.language||'en_US'},
-          ...(templateParams.length?{components:[{type:'body',parameters:templateParams.map(x=>({type:'text',text:String(x)}))}]}:{})
+          ...(templateParams.length||['IMAGE','VIDEO','DOCUMENT'].includes(template.headerFormat)?{
+            components:[
+              ...(['IMAGE','VIDEO','DOCUMENT'].includes(template.headerFormat)?[{
+                type:'header',
+                parameters:[{type:template.headerFormat.toLowerCase(),[template.headerFormat.toLowerCase()]:{
+                  link:String(template.headerMediaUrl)
+                }}]
+              }]:[]),
+              ...(templateParams.length?[{type:'body',parameters:templateParams.map(x=>({type:'text',text:String(x)}))}]:[])
+            ]
+          }:{})
         }
       }
     : {
@@ -148,23 +160,13 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
     throw unknown;
   }
   if(!response.ok){
-    const classified=classifyMetaSendError({httpStatus:response.status,error:data?.error||{}});
-    const rejected=new Error(classified.message);
-    rejected.providerErrorCode=classified.metaCode;
-    rejected.code=classified.code;
-    rejected.senderAuthFailure=classified.senderAuthFailure;
-    // 5xx responses can follow an accepted request. Never automatically
-    // resend when Meta acceptance cannot be established.
+    const message=data?.error?.message||'WhatsApp Cloud API rejected the message';
+    const rejected=new Error(message);
+    rejected.providerErrorCode=String(data?.error?.code||'');
+    // A provider-side failure is not proof that a request was never accepted.
+    // Keep 5xx outcomes conservative; explicit client and rate-limit
+    // rejections are confirmed unsuccessful and suitable for operator review.
     rejected.submissionUnknown=response.status>=500;
-    if(rejected.senderAuthFailure&&!rejected.submissionUnknown){
-      // The profile may have passed a read-only connection test previously
-      // but lacks actual messaging authorization. Do not keep showing Ready.
-      await Integration.updateOne(
-        {_id:integration._id,workspaceId,provider:'meta'},
-        {$set:{connectionStatus:'error',lastCheckedAt:new Date(),
-          lastError:'Meta sender authorization failed. Replace/reauthorize access token and check whatsapp_business_messaging permission.'}}
-      ).catch(e=>console.error('Could not update Meta sender health:',e));
-    }
     throw rejected;
   }
   const id=data.messages?.[0]?.id;
