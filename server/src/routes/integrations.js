@@ -152,7 +152,12 @@ r.post('/embedded-signup/diagnostic',async(req,res)=>{
 
 r.get('/embedded-signup/config',async(req,res)=>{
   const [cfg,usage]=await Promise.all([getMetaConfigPublic(),limits(req.workspaceId)]);
-  res.json({...cfg,subscription:usage});
+  // This value is exactly what /api/webhooks/meta validates on GET.
+  // The webhook must be configured before the first number can connect,
+  // so expose it to authenticated workspace members without requiring
+  // an existing Integration record.
+  res.set('Cache-Control','no-store');
+  res.json({...cfg,subscription:usage,webhookVerifyToken:webhookVerifyToken()});
 });
 
 r.post('/embedded-signup/complete',async(req,res)=>{

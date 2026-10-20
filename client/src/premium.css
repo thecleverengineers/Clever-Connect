@@ -265,3 +265,19 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .metaAppNumberInput small{color:#889c90;font-size:10px;font-weight:500;line-height:1.5}
 .metaPickerSourceNote{font-size:10px;color:#859e8c;line-height:1.7}
 @media(max-width:700px){.metaPortfolioResults{padding:12px}.metaPickerActions{align-items:stretch;flex-direction:column}.metaPickerActions .facebookButton{width:100%}.metaPhoneRow{align-items:flex-start;flex-direction:column}.metaPhoneRow>button{width:100%}}
+
+/* Meta webhook verification details available before connecting first number */
+.metaWebhookHelp{background:#fff;border:1px solid #dbeae0;border-radius:16px;padding:20px 23px;margin:14px 0 18px;box-shadow:0 6px 22px #123d250a}
+.metaWebhookTitle{display:flex;align-items:flex-start;justify-content:space-between;gap:13px;margin-bottom:15px}
+.metaWebhookTitle small{font-size:10px;letter-spacing:.1em;font-weight:850;color:#1a8e5e}
+.metaWebhookTitle h2{font-size:18px;letter-spacing:-.025em;color:#254b37;margin:6px 0}
+.metaWebhookTitle p{font-size:11px;line-height:1.7;color:#798e7e;margin:0}
+.metaWebhookReady{font-size:10px;font-weight:750;border-radius:22px;background:#e8f8ed;color:#15834e;padding:8px 11px;white-space:nowrap}
+.metaWebhookFields{display:grid;gap:11px}
+.metaWebhookFields>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:7px;border:1px solid #e5eee6;background:#f9fcfa;border-radius:10px;padding:12px 14px}
+.metaWebhookFields>div>span{grid-column:1/-1;font-size:11px;color:#617e6c;font-weight:750}
+.metaWebhookFields code{font-family:ui-monospace,monospace;color:#315944;font-size:11px;overflow-wrap:anywhere;min-width:0}
+.metaWebhookFields button{border:1px solid #bbddc7;background:#e8f8ef;border-radius:7px;color:#116f47;font-size:11px;font-weight:800;padding:8px 10px}
+.metaWebhookFields button:disabled{opacity:.4}
+.metaWebhookInstruction{color:#6d8776;font-size:11px;line-height:1.7;margin:13px 0 0}
+@media(max-width:700px){.metaWebhookHelp{padding:15px 13px}.metaWebhookTitle{flex-direction:column}.metaWebhookFields>div{grid-template-columns:1fr}.metaWebhookFields button{justify-self:start}}

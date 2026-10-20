@@ -1078,7 +1078,7 @@ function WhatsAppApi({go}){
 
   const allowed=subscription?.access?.allowed!==false;
   const canAdd=allowed&&subscription&&subscription.used<subscription.max;
-  const verifyToken=connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
+  const verifyToken=embedded?.webhookVerifyToken||connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
   const webhook=BASE.replace(/\/api$/,'')+'/api/webhooks/meta';
 
   // Meta requires the business owner to authorize portfolio enumeration.
@@ -1287,6 +1287,18 @@ function WhatsAppApi({go}){
     </section>
 
 
+    <section className="metaWebhookHelp" aria-label="Meta webhook configuration">
+      <div className="metaWebhookTitle">
+        <div><small>STEP 1 · META DEVELOPER CONFIGURATION</small><h2>WhatsApp webhook verification</h2><p>Configure this in Meta for Developers → WhatsApp → Configuration → Webhook. Meta verifies the URL and token before your first phone number is connected.</p></div>
+        <span className="metaWebhookReady">{verifyToken?'● Token ready':'◷ Loading'}</span>
+      </div>
+      <div className="metaWebhookFields">
+        <div><span>Callback URL</span><code>{webhook}</code><button type="button" onClick={()=>navigator.clipboard?.writeText(webhook)}>Copy URL</button></div>
+        <div><span>Exact Verify Token</span><code>{verifyToken||'Loading server verification token…'}</code><button type="button" disabled={!verifyToken} onClick={()=>navigator.clipboard?.writeText(verifyToken)}>Copy token</button></div>
+      </div>
+      <p className="metaWebhookInstruction">Use <strong>Copy token</strong> and paste it into Meta. Do not invent a token or use your App Secret, access token, or token from another application. Keep the backend awake during verification; a Free Render service may take a minute to wake up.</p>
+    </section>
+
     <section className="numberManagerPanel" aria-label="WhatsApp numbers">
       <div className="numberControlBar">
         <label className="numberSearch"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search by business name or phone number" aria-label="Search WhatsApp numbers" value={numberSearch} onChange={e=>setNumberSearch(e.target.value)}/></label>
@@ -1421,13 +1433,7 @@ function WhatsAppApi({go}){
       </div>
     </section>
     {showSetup&&<div className="accountGrid metaSetupGrid">
-      <section>
-        <h2>Meta webhook setup</h2>
-        <p>Embedded Signup automatically subscribes each selected WABA to your app. Keep this callback configured in your Meta app.</p>
-        <label className="copyLabel">Callback URL<code>{webhook}</code></label>
-        <label className="copyLabel">Verify token<code>{verifyToken||'Available after a provider is initialized'}</code></label>
-        <div className="rowActions"><button onClick={()=>navigator.clipboard?.writeText(webhook)}>Copy callback URL</button>{verifyToken&&<button onClick={()=>navigator.clipboard?.writeText(verifyToken)}>Copy verify token</button>}</div>
-      </section>
+
       <section>
         <h2>Facebook Embedded Signup requirements</h2>
         <div className="setupChecklist">
