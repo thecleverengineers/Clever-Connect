@@ -1121,7 +1121,11 @@ function WhatsAppApi({go}){
         return;
       }
       if(name==='ERROR'){
-        cleanup();setFbBusy(false);setErr(data.data?.error_message||'Meta Embedded Signup reported an error.');
+        const explanation=String(data.data?.error_message||data.data?.error||'Meta Embedded Signup reported an error.').slice(0,300);
+        api('/integrations/embedded-signup/diagnostic',{
+          method:'POST',body:JSON.stringify({event:name,status:'error',detail:explanation})
+        }).catch(()=>{});
+        cleanup();setFbBusy(false);setErr(explanation);
         return;
       }
       if(['FINISH','FINISH_ONLY_WABA','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(name)){
@@ -1250,7 +1254,7 @@ function WhatsAppApi({go}){
         <section className="facebookConnectHero">
       <div className="facebookConnectCopy">
         <span className="facebookLogo">f</span>
-        <div><small>RECOMMENDED</small><h2>Connect with Facebook</h2><p>Sign in to Meta, choose your Business Portfolio, WhatsApp Business Account and phone number. WA SANTA securely completes the API connection for you.</p></div>
+        <div><small>RECOMMENDED</small><h2>Connect with Facebook</h2><p>Sign in to Meta, choose your Business Portfolio, WhatsApp Business Account and phone number. WA SANTA securely completes the API connection for you.</p><p className="metaPortfolioGuide">Existing portfolio unavailable? Meta determines portfolio eligibility. Confirm full admin control, no account restrictions, and an up-to-date Embedded Signup v4 configuration. A portfolio that owns the developer app may be ineligible for customer onboarding; you may instead connect its existing Cloud API number manually with an authorized system-user token.</p></div>
       </div>
       <div className="facebookConnectAction">
         <label className="coexistenceChoice"><input type="checkbox" checked={coexistence} onChange={e=>setCoexistence(e.target.checked)}/><span><b>Use existing WhatsApp Business App number</b><small>Enable only for Coexistence onboarding. Leave off for normal Cloud API signup.</small></span></label>

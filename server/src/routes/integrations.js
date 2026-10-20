@@ -91,7 +91,7 @@ async function exchangeEmbeddedCode(code){
   if(!cfg.enabled)throw new Error('Facebook Embedded Signup is not configured by Super Admin');
   const params=new URLSearchParams({
     client_id:cfg.appId,
-    client_secret:process.env.META_APP_SECRET,
+    client_secret:cfg.appSecret,
     code:String(code||'')
   });
   const response=await fetch('https://graph.facebook.com/'+cfg.graphVersion+'/oauth/access_token?'+params.toString(),{
