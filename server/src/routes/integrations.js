@@ -7,6 +7,7 @@ import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
 import {refreshWorkspaceAccess,metaEntitlements,requireMetaSenderEntitlement} from '../plan.js';
 import {getMetaConfig,getMetaConfigPublic} from '../metaConfig.js';
 import {verifyExistingCloudApiNumber} from '../services/existingMetaNumber.js';
+import {discoverMetaPortfolios} from '../services/metaPortfolioDiscovery.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -117,6 +118,25 @@ async function testConnection(x){
   return {ok:true,provider:'meta',displayPhoneNumber:data.display_phone_number||'',verifiedName:data.verified_name||''};
 }
 
+
+// Discover assets only after the customer signs into Facebook and explicitly
+// grants access. The temporary user token is never saved or returned.
+r.post('/meta-portfolios/discover',async(req,res)=>{
+  if(!await requireMessagingAccess(req.workspaceId,res))return;
+  const token=String(req.body?.accessToken||'').trim();
+  if(!token||token.length>3500)return res.status(400).json({message:'Meta account authorization is required'});
+  const config=await getMetaConfig();
+  if(!config.enabled)return res.status(409).json({message:'Meta Facebook Login is not configured'});
+  try{
+    const results=await discoverMetaPortfolios({
+      accessToken:token,appId:config.appId,appSecret:config.appSecret,graphVersion:config.graphVersion
+    });
+    res.set('Cache-Control','no-store');
+    return res.json(results);
+  }catch(e){
+    return res.status(422).json({message:String(e.message||'Could not list Meta assets').slice(0,260)});
+  }
+});
 
 r.post('/embedded-signup/diagnostic',async(req,res)=>{
   const status=String(req.body.status||'').slice(0,80);
