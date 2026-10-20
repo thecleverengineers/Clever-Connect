@@ -6,6 +6,7 @@ import {requireAuth} from '../middleware/auth.js';
 import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
 import {refreshWorkspaceAccess,metaEntitlements,requireMetaSenderEntitlement} from '../plan.js';
 import {getMetaConfig,getMetaConfigPublic} from '../metaConfig.js';
+import {verifyMessagingPermissionDebug} from '../services/metaTokenDiagnostics.js';
 import {verifyExistingCloudApiNumber} from '../services/existingMetaNumber.js';
 import {discoverMetaPortfolios} from '../services/metaPortfolioDiscovery.js';
 
@@ -113,9 +114,32 @@ async function testConnection(x){
     headers:{Authorization:'Bearer '+token},
     signal:AbortSignal.timeout(12000)
   });
-  const data=await response.json();
-  if(!response.ok) throw new Error(data?.error?.message||'Meta connection test failed');
-  return {ok:true,provider:'meta',displayPhoneNumber:data.display_phone_number||'',verifiedName:data.verified_name||''};
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(data?.error?.message||'Meta credentials cannot access this WhatsApp number');
+  // Optional read-only Graph introspection for Meta app-owned tokens. A
+  // successful phone GET alone does not prove messaging authorization.
+  let permissionCheck='unavailable';
+  const config=await getMetaConfig();
+  if(config.appId&&config.appSecret){
+    try{
+      const url='https://graph.facebook.com/'+config.graphVersion+
+        '/debug_token?input_token='+encodeURIComponent(token);
+      const debugResponse=await fetch(url,{
+        headers:{Authorization:'Bearer '+config.appId+'|'+config.appSecret},
+        signal:AbortSignal.timeout(12000)
+      });
+      if(debugResponse.ok){
+        const debug=await debugResponse.json().catch(()=>({}));
+        const verdict=verifyMessagingPermissionDebug(debug.data,config.appId);
+        if(verdict.checked)permissionCheck=verdict.messagingPermission?'granted':'not_confirmed';
+      }
+    }catch(e){
+      if(/expired|invalid|lacks whatsapp_business_messaging/i.test(e.message||''))throw e;
+      // Third-party provider tokens may not be inspectable by this Meta app.
+    }
+  }
+  return {ok:true,provider:'meta',displayPhoneNumber:data.display_phone_number||'',
+    verifiedName:data.verified_name||'',messagingPermission:permissionCheck};
 }
 
 
@@ -382,7 +406,12 @@ r.post('/whatsapp-connections/:id/test',async(req,res)=>{
       lastCheckedAt:new Date(),
       lastError:String(e.message||'Connection test failed').slice(0,500)
     }});
-    res.status(502).json({message:e.message,connectionPreserved:true});
+    res.status(409).json({
+      code:'META_SENDER_AUTH_REQUIRED',
+      message:'Meta WhatsApp connection needs attention: '+String(e.message||'Check token and permissions').slice(0,260)+
+        '. Renew the token under WhatsApp Manager → Numbers → Edit and run Test / Sync.',
+      connectionPreserved:true
+    });
   }
 });
 
