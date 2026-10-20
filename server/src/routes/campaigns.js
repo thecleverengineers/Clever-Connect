@@ -9,6 +9,7 @@ import {requireAuth} from '../middleware/auth.js';
 import {processCampaign} from '../services/scheduler.js';
 import {refreshCampaignTotals} from '../services/campaignTracking.js';
 import {sendWhatsApp} from '../services/whatsapp.js';
+import {requireMetaSenderEntitlement} from '../plan.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -50,6 +51,7 @@ async function normalizeCampaign(req, existing=null){
     if(template.category==='AUTHENTICATION')throw new Error('OTP/authentication templates need a dedicated verification flow');
     const profile=await Integration.findOne({_id:template.integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).lean();
     if(!profile)throw new Error('The selected template Meta WhatsApp connection is unavailable');
+    await requireMetaSenderEntitlement(req.workspaceId,profile._id);
     const nums=[...String(template.body||'').matchAll(/{{\s*(\d+)\s*}}/g)].map(m=>Number(m[1]));
     const required=nums.length?Math.max(...nums):0;
     if(required>20)throw new Error('Too many template variables for this campaign');
@@ -69,6 +71,7 @@ async function normalizeCampaign(req, existing=null){
       if(!merged.integrationId||!mongoose.isValidObjectId(merged.integrationId))throw new Error('Choose a Meta WhatsApp profile for the image carousel');
       const profile=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).lean();
       if(!profile)throw new Error('The selected Meta WhatsApp profile is unavailable');
+      await requireMetaSenderEntitlement(req.workspaceId,profile._id);
       const validated=validateCarousel({text:merged.message,cards:merged.carouselCards});
       for(let i=0;i<validated.cards.length;i++){
         const imageUrl=validated.cards[i].imageUrl;
@@ -92,8 +95,9 @@ async function normalizeCampaign(req, existing=null){
     }
     if(merged.integrationId){
       if(!mongoose.isValidObjectId(merged.integrationId))throw new Error('Invalid WhatsApp profile');
-      const connection=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,enabled:true}).select('_id').lean();
+      const connection=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,enabled:true}).select('_id provider').lean();
       if(!connection)throw new Error('Selected WhatsApp profile is unavailable');
+      if(connection.provider==='meta')await requireMetaSenderEntitlement(req.workspaceId,connection._id);
     }
   }
   data.sendMode=mode;
