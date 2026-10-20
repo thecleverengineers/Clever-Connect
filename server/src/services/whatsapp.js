@@ -131,13 +131,36 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
       signal:AbortSignal.timeout(15000)
     });
   }catch(e){
-    if(e.name==='TimeoutError') throw new Error('WhatsApp Cloud API timed out');
-    throw e;
+    // Transport failures after transmission cannot prove Meta did not accept
+    // the request. Mark these as UNKNOWN and never automatically resend.
+    const unknown=new Error(e?.name==='TimeoutError'?'WhatsApp Cloud API timed out — acceptance unknown':
+      'WhatsApp Cloud API transport error — acceptance unknown');
+    unknown.submissionUnknown=true;
+    unknown.cause=e;
+    throw unknown;
   }
 
-  const data=await response.json().catch(()=>({}));
-  if(!response.ok) throw new Error(data?.error?.message||'WhatsApp Cloud API rejected the message');
+  let data;
+  try{data=await response.json()}catch(e){
+    const unknown=new Error('WhatsApp Cloud API response was not readable — acceptance unknown');
+    unknown.submissionUnknown=true;unknown.cause=e;
+    throw unknown;
+  }
+  if(!response.ok){
+    const message=data?.error?.message||'WhatsApp Cloud API rejected the message';
+    const rejected=new Error(message);
+    rejected.providerErrorCode=String(data?.error?.code||'');
+    // A provider-side failure is not proof that a request was never accepted.
+    // Keep 5xx outcomes conservative; explicit client and rate-limit
+    // rejections are confirmed unsuccessful and suitable for operator review.
+    rejected.submissionUnknown=response.status>=500;
+    throw rejected;
+  }
   const id=data.messages?.[0]?.id;
-  if(!id) throw new Error('WhatsApp Cloud API did not return a message ID');
+  if(!id){
+    const unknown=new Error('WhatsApp Cloud API accepted the request but no message ID was returned');
+    unknown.submissionUnknown=true;
+    throw unknown;
+  }
   return {provider:'meta',id,status:'submitted',integrationId:integration._id};
 }
