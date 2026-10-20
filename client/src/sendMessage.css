@@ -73,3 +73,6 @@
 @media(max-width:1050px){.singleSendLayout{grid-template-columns:minmax(0,1.2fr) minmax(250px,.8fr);gap:12px}.singleSendCard{padding:18px}.singleSendAside{padding:14px}}
 @media(max-width:820px){.singleSendLayout{grid-template-columns:1fr}.singleSendAside{position:static}.singleSendCard{padding:20px}.singleSendPhone{max-width:100%}}
 @media(max-width:600px){.singleSendHeading{align-items:flex-start;flex-direction:column;gap:12px;margin-bottom:17px}.singleSendOutline{width:100%}.singleSendTabs{gap:8px}.singleSendTabs button{padding:12px 10px;gap:9px}.singleSendTabs button>span:first-child{width:29px;height:29px;font-size:18px}.singleSendTabs b{font-size:12px}.singleSendTabs small{font-size:10px}.singleSendCard{padding:16px 14px;border-radius:14px}.singleSendCardHeader{margin-bottom:17px}.singleSendCard input:not([type=checkbox]),.singleSendCard select,.singleSendCard textarea{font-size:16px}}
+
+.singleSendMediaHeader{background:#cfedda;color:#1a7b4d;border-radius:8px;text-align:center;font-size:11px;font-weight:800;padding:15px;margin-bottom:9px}
+.singleSendPreviewButton{border-top:1px solid #afdbbd;color:#118154;text-align:center;font-size:11px;font-weight:800;margin-top:8px;padding-top:9px}
