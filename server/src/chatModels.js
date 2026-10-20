@@ -45,7 +45,8 @@ const node=new Schema({
  type:{type:String,enum:['message','buttons','handoff','end'],required:true},
  text:{type:String,default:''},
  nextId:{type:String,default:''},
- choices:[{_id:false,id:String,label:String,nextId:String}]
+ choices:[{_id:false,id:String,label:String,nextId:String}],
+ position:{x:{type:Number,default:0},y:{type:Number,default:0}}
 },{_id:false});
 
 const chatFlow=new Schema({
