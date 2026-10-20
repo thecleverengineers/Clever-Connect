@@ -1,7 +1,7 @@
 /* Premium application shell: responsive, app-like mobile navigation */
 :root{--app-ink:#142a24;--app-muted:#72857b;--app-line:#e3ebe6;--app-green:#087b56;--app-surface:#fff;--app-bg:#f4f7f5}
 body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:transparent}
-.shell aside{background:#fff;box-shadow:3px 0 26px #1c44320a}
+.shell > aside{background:#fff;box-shadow:3px 0 26px #1c44320a}
 .shell header{backdrop-filter:blur(18px);background:#fffffff0}
 .mobileAppbar{display:none}
 .premiumFunnel{border:1px solid #dce9e2;border-radius:18px;padding:23px;background:linear-gradient(150deg,#fff,#fbfefc);box-shadow:0 12px 38px #0e3a2410}
@@ -52,7 +52,7 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
  .shell header{height:64px;top:0;padding:0 16px;padding-top:env(safe-area-inset-top);height:calc(64px + env(safe-area-inset-top));z-index:40}
  .shell main{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
  .shell .page{padding:18px 13px 23px}
- .shell aside{z-index:80;box-shadow:12px 0 45px #001d191f}
+ .shell > aside{z-index:80;box-shadow:12px 0 45px #001d191f}
  .mobileAppbar{display:grid!important;position:fixed;bottom:0;left:0;right:0;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;gap:2px;padding:7px 6px calc(9px + env(safe-area-inset-bottom));border-top:1px solid #e5ebe7;background:#ffffffee;backdrop-filter:blur(22px);box-shadow:0 -5px 28px #153d2618;z-index:50}
  .shell nav.mobileAppbar button{border:0;background:transparent;color:#7c9083;padding:9px 2px 6px;display:grid;justify-items:center;gap:5px;border-radius:12px;font-size:10px;min-height:49px}
  .mobileAppbar button span{font-size:20px;line-height:1}
@@ -126,7 +126,7 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 
 
 /* Sidebar information architecture: grouped WhatsApp/Manager navigation */
-.shell aside{overflow:hidden}
+.shell > aside{overflow:hidden}
 .shell nav.sidebarGroups{flex:1;overflow-y:auto;overflow-x:hidden;gap:17px;min-height:0;padding:2px 2px 30px;scrollbar-width:thin}
 .sidebarGroup{display:grid;gap:3px}
 .sidebarGroupTitle{padding:4px 12px 8px;font-size:10px;font-weight:850;color:#9aa8a0;letter-spacing:.14em}
@@ -195,7 +195,7 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 @media(max-width:1150px){.numberListLabels,.numberRow{grid-template-columns:35px minmax(160px,1.8fr) minmax(110px,1fr);gap:10px}.numberListLabels span:last-child{display:none}.numberRowActions{grid-column:2/-1}.numberRow{align-items:start}}
 @media(max-width:760px){
  .sidebarScrim{display:block;position:fixed;inset:0;background:#14241d77;backdrop-filter:blur(2px);border:0;padding:0;z-index:79}
- .shell aside{width:min(320px,84vw);z-index:80}
+ .shell > aside{width:min(320px,84vw);z-index:80}
  .shell nav.sidebarGroups{padding-bottom:calc(55px + env(safe-area-inset-bottom))}
  .numberManagerPanel{padding:13px;border-radius:14px}
  .numberControlBar{display:grid;grid-template-columns:1fr;gap:9px}
