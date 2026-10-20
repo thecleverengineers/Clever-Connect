@@ -34,7 +34,7 @@ function TemplatePreview({draft}){
     <small>Preview is illustrative. Meta reviews the template and may render its components differently.</small>
   </div>;
 }
-export default function MetaTemplateManager(){
+export default function MetaTemplateManager({go}){
   const [rows,setRows]=useState([]);
   const [profiles,setProfiles]=useState([]);
   const [profileId,setProfileId]=useState(()=>localStorage.getItem('wa:template-profile')||'');
@@ -63,6 +63,7 @@ export default function MetaTemplateManager(){
   },[]);
   const profile=profiles.find(x=>x.id===profileId);
   const entitled=profile?.enabled&&profile?.planAllowed!==false&&profile?.connectionStatus==='connected';
+  const senderNeedsAuthorization=profile?.enabled&&profile?.connectionStatus==='error';
   const filtered=useMemo(()=>rows.filter(t=>(!profileId||profileOf(t)===profileId)&&
     (statusFilter==='ALL'||String(t.metaStatus||'DRAFT')===statusFilter)&&
     (!search||[t.name,t.body,t.metaTemplateName,t.metaRejectedReason].some(x=>String(x||'').toLowerCase().includes(search.toLowerCase())))),[rows,profileId,statusFilter,search]);
@@ -111,13 +112,27 @@ export default function MetaTemplateManager(){
     const ids=id?[id]:profiles.filter(p=>p.enabled&&p.planAllowed!==false).map(p=>p.id);
     if(!ids.length)return setError('Connect a WhatsApp account first');
     setSyncing(id||'all');setError('');setMessage('');
-    const result=await Promise.allSettled(ids.map(x=>api('/templates/meta/'+x+'/sync',{method:'POST'})));
-    const succeeded=result.filter(x=>x.status==='fulfilled').reduce((n,x)=>n+x.value.synced,0);
-    const failed=result.filter(x=>x.status==='rejected').map(x=>x.reason.message);
-    setMessage(succeeded+' template(s) synchronized from Meta across '+(ids.length-failed.length)+' account(s).');
-    if(failed.length)setError(failed.join(' • '));
-    await load().catch(e=>setError(e.message));
-    setSyncing('');
+    try{
+      const result=await Promise.allSettled(ids.map(x=>api('/templates/meta/'+x+'/sync',{method:'POST'})));
+      let succeeded=0,completed=0;
+      const warnings=[];
+      for(const r of result){
+        if(r.status==='rejected'){
+          // Hide database internals and preserve a useful recovery path.
+          const message=r.reason?.message||'Meta synchronization failed.';
+          warnings.push(/E11000|duplicate key|Plan executor/i.test(message)
+            ?'A template synchronization conflict occurred. Please retry Sync once.'
+            :message);
+        }else{
+          succeeded+=r.value.synced||0;
+          completed++;
+          if(r.value.failed)warnings.push(...(r.value.warnings||['Some templates could not be synchronized.']));
+        }
+      }
+      setMessage(succeeded+' template(s) synchronized from Meta across '+completed+' account(s).');
+      if(warnings.length)setError(warnings.join(' • '));
+      await load().catch(e=>setError(e.message));
+    }finally{setSyncing('')}
   }
   async function remove(row){
     const remote=!!row.metaTemplateId;
@@ -164,6 +179,10 @@ export default function MetaTemplateManager(){
     </header>
     {error&&<div className="mtmNotice bad" role="alert">{error}</div>}
     {message&&<div className="mtmNotice" role="status">{message}</div>}
+    {senderNeedsAuthorization&&<div className="mtmNotice mtmSenderAuthNotice" role="status">
+      <b>WhatsApp sending needs authorization.</b> Template synchronization can work with Meta management permission while message sending fails. Renew the selected sender's token with <code>whatsapp_business_messaging</code>, then test it under Numbers.
+      <button type="button" onClick={()=>go('whatsapp-api')}>Manage sender →</button>
+    </div>}
     <div className="mtmToolbar">
       <label>WhatsApp account<select value={profileId} onChange={e=>{setProfileId(e.target.value);localStorage.setItem('wa:template-profile',e.target.value);setRecommendation(null)}}>
         <option value="">All accounts</option>{profiles.map(p=><option key={p.id} value={p.id}>{p.name} · {p.displayPhoneNumber||p.phoneNumberId}{p.planAllowed===false?' (plan limit)':''}</option>)}</select></label>

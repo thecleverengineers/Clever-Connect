@@ -1670,7 +1670,7 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='campaigns')return <Campaigns/>;
   if(id==='contacts')return <Contacts/>;
   if(id==='schedule')return <Schedule/>;
-  if(id==='templates')return <MetaTemplateManager/>;
+  if(id==='templates')return <MetaTemplateManager go={go}/>;
   if(id==='reports')return <Reports go={go}/>;
   if(id==='inbox')return <Inbox/>;
   if(id==='chatbot')return <FlowStudio session={session}/>;

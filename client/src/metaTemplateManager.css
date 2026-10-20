@@ -101,3 +101,8 @@
 .mtmEmpty{grid-column:1/-1;text-align:center;padding:50px 15px;color:#889b90;font-size:12px;line-height:1.7}
 @media(max-width:1100px){.mtmEditorGrid{grid-template-columns:1fr}.mtmPreview{position:static}.mtmCards{grid-template-columns:1fr}}
 @media(max-width:760px){.mtmHeading{align-items:stretch;flex-direction:column}.mtmHeading button{width:100%}.mtmToolbar{display:grid;padding:13px}.mtmToolbar button{width:100%}.mtmKpis{gap:7px;grid-template-columns:repeat(3,1fr)}.mtmKpis>div{padding:12px}.mtmKpis strong{font-size:22px}.mtmSuggestion,.mtmEditor,.mtmList{padding:14px;border-radius:13px}.mtmSuggestionInput{flex-direction:column}.mtmSuggestionResult>div{align-items:flex-start;flex-direction:column}.mtmPair{grid-template-columns:1fr}.mtmListHead{align-items:stretch;flex-direction:column}.mtmListHead>div:last-child{display:grid;grid-template-columns:1fr 1fr}.mtmCardMeta{grid-template-columns:repeat(2,minmax(0,1fr))}.mtmEditorActions button{flex:1;min-width:120px}.mtmEditorActions>small{text-align:left}}
+
+.mtmSenderAuthNotice{display:flex;align-items:center;flex-wrap:wrap;gap:8px;background:#fff8ec!important;color:#8a6233!important;border:1px solid #efdcbf!important;line-height:1.65}
+.mtmSenderAuthNotice>b{font-size:12px}
+.mtmSenderAuthNotice code{padding:2px 4px;border-radius:4px;background:#fff0d8;overflow-wrap:anywhere}
+.mtmSenderAuthNotice>button{margin-left:auto;min-width:max-content;padding:9px 11px;border:1px solid #e8c9a0;background:#fff;color:#84582b;border-radius:9px;font-size:11px;font-weight:800}

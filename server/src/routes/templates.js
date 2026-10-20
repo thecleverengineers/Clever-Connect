@@ -10,6 +10,7 @@ import {
   normalizeTemplate,createMetaTemplatePayload,remoteTemplateFields,
   recommendTemplate,draftRecommendation,isTemplateUsable
 } from '../services/metaTemplateManager.js';
+import {metaTemplateIdentity,reconcileMetaTemplate} from '../services/metaTemplateSync.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -48,18 +49,13 @@ async function graph(connection,path,{method='GET',body}={}){
 }
 const publicConnectionFields='name displayPhoneNumber phoneNumberId';
 async function upsertRemote(req,connection,row){
-  if(!row?.name||!row?.id||!row?.language)return null;
-  const key={workspaceId:req.workspaceId,integrationId:connection._id,
-    metaTemplateName:row.name,language:row.language};
-  const fields=remoteTemplateFields(row);
-  const matched=await Template.findOne(key);
-  // A draft with the same name/language becomes the synced submitted record.
-  const local=await Template.findOneAndUpdate(
-    matched?{_id:matched._id,workspaceId:req.workspaceId}:key,
-    {$set:{...fields,metaTemplateId:String(row.id)}},
-    {new:true,upsert:true,setDefaultsOnInsert:true}
-  );
-  return local;
+  const key=metaTemplateIdentity(req.workspaceId,connection._id,row);
+  if(!key)return null;
+  // Use exactly the compound key defined by the unique MongoDB index.
+  // Repeated and simultaneous sync calls now converge on one local row.
+  return reconcileMetaTemplate(Template,key,{
+    ...remoteTemplateFields(row),metaTemplateId:String(row.id)
+  });
 }
 
 r.get('/',async(req,res)=>{
@@ -203,22 +199,31 @@ r.post('/meta/:integrationId/sync',async(req,res)=>{
     if(!await requireAccess(req,res))return;
     const connection=await metaConnection(req,req.params.integrationId);
     if(!connection)return res.status(404).json({message:'Meta WhatsApp account unavailable'});
-    let after='',total=0;const synced=[];
+    let after='',total=0;const synced=[];const warnings=[];
     for(let page=0;page<30;page++){
       const path=connection.businessAccountId+
         '/message_templates?fields=id,name,language,status,category,rejected_reason,quality_score,components&limit=100'+
         (after?'&after='+encodeURIComponent(after):'');
       const data=await graph(connection,path);
       for(const remote of data.data||[]){
-        const x=await upsertRemote(req,connection,remote);
-        if(x){total++;synced.push(x._id)}
+        try{
+          const x=await upsertRemote(req,connection,remote);
+          if(x){total++;synced.push(x._id)}
+          else warnings.push('Meta returned an incomplete template record.');
+        }catch(e){
+          console.error('Template reconcile failed', {
+            workspaceId:String(req.workspaceId),senderId:String(connection._id),
+            metaName:String(remote?.name||'').slice(0,100),code:e?.code||'SYNC_ERROR'
+          });
+          warnings.push('Could not synchronize '+String(remote?.name||'a Meta template').slice(0,80)+'.');
+        }
       }
       const next=String(data.paging?.cursors?.after||'');
       if(!next||next===after)break;
       after=next;
       if(page===29)throw new Error('Meta account has more templates than could be synced in one request; contact support');
     }
-    res.json({synced:total,templateIds:synced});
+    res.json({synced:total,failed:warnings.length,warnings,templateIds:synced});
   }catch(e){res.status(502).json({message:cleanError(e)})}
 });
 
