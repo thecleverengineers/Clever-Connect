@@ -32,8 +32,8 @@ const nav=[
 // hierarchy without presenting unsupported endpoints as working modules.
 const workspaceMenu=[
   {heading:'WORKSPACE',ids:['overview','ai']},
-  {heading:'WHATSAPP',ids:['bulk','inbox','chatbot'],manager:true},
   {heading:'CAMPAIGNS',ids:['campaigns','schedule','send','contacts']},
+  {heading:'WHATSAPP',ids:['bulk','inbox','chatbot'],manager:true},
   {heading:'REPORTS',ids:['reports','payments']},
   {heading:'UTILITY',ids:['settings','subscription']}
 ];
