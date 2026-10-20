@@ -61,13 +61,14 @@ export default function SendMessage({go}){
     phone:recipient?.phone||phone.trim()||'+91 ••••• •••••',
     email:recipient?.email||''
   };
-  const approved=useMemo(()=>templates.filter(t=>t.metaStatus==='APPROVED'&&t.metaTemplateName&&
-    t.category!=='AUTHENTICATION'&&String(t.integrationId?._id||t.integrationId||'')===senderId),[templates,senderId]);
+  const approved=useMemo(()=>templates.filter(t=>t.metaStatus==='APPROVED'&&t.metaTemplateId&&t.metaTemplateName&&
+    t.category!=='AUTHENTICATION'&&String(t.integrationId?._id||t.integrationId||'')===senderId&&
+    (!['IMAGE','VIDEO','DOCUMENT'].includes(t.headerFormat)||!!t.headerMediaUrl)),[templates,senderId]);
   const chosen=approved.find(t=>t._id===templateId);
   const variableCount=chosen?numberedVariables(chosen.body):0;
   const personalParams=Array.from({length:variableCount},(_,i)=>substitute(params[i]||'',recipientDetails));
   const bodyText=tab==='template'
-    ?chosen?previewTemplate(chosen.body,personalParams,recipientDetails):'Choose a Meta-approved template to preview it.'
+    ?chosen?previewTemplate(chosen.body,personalParams,recipientDetails):'Choose an approved, currently usable Meta template to preview it.'
     :substitute(message,recipientDetails)||'Write a personal WhatsApp message to preview it here.';
   const canSend=senderReady&&!busy&&!uncertain&&(recipientMode==='contact'?!!recipient:phone.trim().length>=8&&consent)&&
     (tab==='freeform'?message.trim().length>0&&message.trim().length<=4096:!!chosen&&Array.from({length:variableCount},(_,i)=>params[i]).every(x=>String(x||'').trim()));
@@ -225,7 +226,7 @@ export default function SendMessage({go}){
             {senderReady&&!approved.length&&<div className="singleSendPolicy"><span>▤</span><div>
               <b>No approved templates for this sender</b><p>Templates must be submitted, approved by Meta, and synchronized for the chosen WhatsApp account.</p>
               <button type="button" onClick={()=>go('templates')}>Open Templates →</button></div></div>}
-            {chosen&&<><div className="singleSendTemplateMeta"><span>✓ Meta approved</span><span>{chosen.category} · {chosen.language}</span></div>
+            {chosen&&<><div className="singleSendTemplateMeta"><span>✓ Meta approved</span><span>{chosen.category} · {chosen.language} · Last synchronized {chosen.metaLastSyncedAt?new Date(chosen.metaLastSyncedAt).toLocaleDateString():'previously'}</span></div>
               {Array.from({length:variableCount},(_,i)=><div className="singleSendVariable" key={i}>
                 <label htmlFor={'singleVar'+i}>Variable {'{{'+(i+1)+'}}'}</label>
                 <input id={'singleVar'+i} maxLength={1024} value={params[i]||''} placeholder={i===0?'{{name}}':'Enter variable value'} onChange={e=>{setParams(old=>Array.from({length:variableCount},(_,j)=>i===j?e.target.value:old[j]||''));setUncertain(false)}}/>
@@ -245,7 +246,12 @@ export default function SendMessage({go}){
         <div className="singleSendPreviewHead"><span>MESSAGE PREVIEW</span><b>● WhatsApp</b></div>
         <div className="singleSendPhone">
           <div className="singleSendPhoneBar"><span className="singleSendAvatar">☏</span><div><b>{sender?.name||'Your WhatsApp Business'}</b><small>{sender?.displayPhoneNumber||'Choose sender number'}</small></div></div>
-          <div className="singleSendBubble">{bodyText.split('\n').map((line,i)=><React.Fragment key={i}>{i>0&&<br/>}{line||'\u00a0'}</React.Fragment>)}<small>Preview only</small></div>
+          <div className="singleSendBubble">{tab==='template'&&chosen?.headerFormat==='TEXT'&&chosen.headerText&&<div><b>{chosen.headerText}</b></div>}
+            {tab==='template'&&['IMAGE','VIDEO','DOCUMENT'].includes(chosen?.headerFormat)&&<div className="singleSendMediaHeader">{chosen.headerFormat} header · Linked media</div>}
+            {bodyText.split('\n').map((line,i)=><React.Fragment key={i}>{i>0&&<br/>}{line||'\u00a0'}</React.Fragment>)}
+            {tab==='template'&&chosen?.footerText&&<small>{chosen.footerText}</small>}
+            {tab==='template'&&(chosen?.buttons||[]).map((b,i)=><div className="singleSendPreviewButton" key={i}>{b.text}</div>)}
+            <small>Preview only</small></div>
           <div className="singleSendPreviewFooter">To: {recipient?.name||recipientDetails.phone}</div>
         </div>
         <div className="singleSendPreviewSummary">
