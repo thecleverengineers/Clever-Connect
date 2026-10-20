@@ -62,6 +62,7 @@ function Auth({onAuth}){
     e.preventDefault();setBusy(true);setErr('');
     try{
       const o=Object.fromEntries(new FormData(e.currentTarget));
+    if(!editing&&connectionMode==='cloud_api')o.connectionIntent='existing_cloud_api';
       const x=await api('/auth/'+mode,{method:'POST',body:JSON.stringify(o)});
       if(x.twoFactorRequired){setChallenge(x);return}
       onAuth(x);
@@ -1036,7 +1037,8 @@ function WhatsAppApi({go}){
   const[showForm,setShowForm]=useState(false);
   const[editing,setEditing]=useState(null);
   const[fbBusy,setFbBusy]=useState(false);
-  const[coexistence,setCoexistence]=useState(false);
+  const[connectionMode,setConnectionMode]=useState('new');
+  const coexistence=connectionMode==='business_app';
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
   const[numberSearch,setNumberSearch]=useState('');
@@ -1246,41 +1248,64 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={()=>{setEditing(null);setShowForm(false);setShowSetup(v=>!v)}}>{showSetup?'−  Close connection options':'+  Add New Number'}</button>
+        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={()=>{setEditing(null);setShowForm(false);setConnectionMode('new');setShowSetup(v=>!v)}}>{showSetup?'−  Close connection options':'+  Connect WhatsApp Number'}</button>
         {!canAdd&&<small>{!allowed?'Subscription inactive — activate a plan to connect numbers.':'Your plan connection limit has been reached.'}</small>}
       </div>
       {showSetup&&<div className="numbersSetup" id="numbersSetup">
-        <div className="numbersSetupIntro"><b>Connect a WhatsApp Business number</b><span>Facebook Embedded Signup is recommended. Advanced manual API configuration remains available.</span></div>
-        <section className="facebookConnectHero">
+        <div className="numbersSetupIntro"><b>Connect a WhatsApp Business number</b><span>Choose the correct path. New numbers, WhatsApp Business App numbers, and existing Cloud API numbers use different Meta procedures.</span></div>
+        {!editing&&<div className="metaConnectionModes" role="radiogroup" aria-label="WhatsApp number connection type">
+          {[
+            ['new','New number','Register a new WhatsApp Cloud API sender.'],
+            ['business_app','Existing Business App','Use Meta Coexistence with an eligible WhatsApp Business App number.'],
+            ['cloud_api','Existing Cloud API','Link an existing WABA number with an authorized Meta system-user token.']
+          ].map(([id,title,desc])=><button type="button" role="radio" aria-checked={connectionMode===id} key={id} className={connectionMode===id?'selected':''}
+            onClick={()=>{setConnectionMode(id);setShowForm(id==='cloud_api');setErr('')}}>
+            <strong>{connectionMode===id?'◉':'◯'} {title}</strong><small>{desc}</small>
+          </button>)}
+        </div>}
+        {connectionMode==='cloud_api'&&!editing&&<div className="metaExistingHint">
+          <b>Already registered with Fast2SMS or another provider?</b>
+          <p>Do not try registering the same number again. You need an authorized <strong>Phone Number ID</strong>, <strong>WABA ID</strong>, and <strong>system-user token</strong> with WhatsApp permissions. This does not transfer an account from another provider or create a second WABA. If access cannot be granted, coordinate a formal provider migration.</p>
+          <p><strong>Meta error #3441034:</strong> Meta says the number is not eligible to register or migrate. Inspect the current WABA and linked Business Suite/partner assets with its owner; do not delete or disconnect a working number without assessing the impact.</p>
+        </div>}
+        {connectionMode==='business_app'&&!editing&&<div className="metaExistingHint">
+          <b>WhatsApp Business App + Cloud API (Coexistence)</b>
+          <p>For eligible numbers used in the <strong>WhatsApp Business app</strong> on your phone, not a number already running solely through a Cloud API provider. Meta determines eligibility. Do not delete your phone account to force this process.</p>
+        </div>}
+        {connectionMode==='new'&&!editing&&<div className="metaExistingHint">
+          <b>Set up a new WhatsApp number</b>
+          <p>Choose a number that is not attached to another WABA. Meta handles business selection, number verification and registration.</p>
+        </div>}
+        {connectionMode!=='cloud_api'&&!editing&&<section className="facebookConnectHero">
       <div className="facebookConnectCopy">
         <span className="facebookLogo">f</span>
         <div><small>RECOMMENDED</small><h2>Connect with Facebook</h2><p>Sign in to Meta, choose your Business Portfolio, WhatsApp Business Account and phone number. WA SANTA securely completes the API connection for you.</p><p className="metaPortfolioGuide">Existing portfolio unavailable? Meta determines portfolio eligibility. Confirm full admin control, no account restrictions, and an up-to-date Embedded Signup v4 configuration. A portfolio that owns the developer app may be ineligible for customer onboarding; you may instead connect its existing Cloud API number manually with an authorized system-user token.</p></div>
       </div>
       <div className="facebookConnectAction">
-        <label className="coexistenceChoice"><input type="checkbox" checked={coexistence} onChange={e=>setCoexistence(e.target.checked)}/><span><b>Use existing WhatsApp Business App number</b><small>Enable only for Coexistence onboarding. Leave off for normal Cloud API signup.</small></span></label>
+        <p className="metaModeInfo">{coexistence?'Existing WhatsApp Business App Coexistence onboarding — Meta eligibility required.':'New WhatsApp Cloud API number onboarding.'}</p>
         <button className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled} onClick={connectWithFacebook}>{fbBusy?'Connecting with Meta…':'Continue with Facebook'}</button>
         {!embedded?.enabled&&embedded&&<small>Admin setup required: {embedded.missing?.join(', ')||'Meta Embedded Signup configuration'}</small>}
         {embedded?.enabled&&<small>Meta-hosted login · WA SANTA never sees your Facebook password</small>}
       </div>
-    </section>
-        <section className="manualConnectionBox">
+    </section>}
+        {(connectionMode==='cloud_api'||!!editing)&&<section className="manualConnectionBox">
       <div className="sectionHead">
-        <div><small>ADVANCED</small><h2>Manual Meta API connection</h2><p>Use this only if you already have a Phone Number ID, WABA ID and access token.</p></div>
-        {canAdd&&<button onClick={()=>{setEditing(null);setShowForm(!showForm)}}>{showForm?'Hide manual form':'Connect manually'}</button>}
+        <div><small>EXISTING CLOUD API</small><h2>Connect an existing API number</h2><p>Link only with authorized WABA access. Meta verifies the phone belongs to this account. No registration or provider migration occurs.</p></div>
+        {canAdd&&connectionMode==='cloud_api'&&!editing&&<button type="button" onClick={()=>setShowForm(v=>!v)}>{showForm?'Hide credentials':'Enter credentials'}</button>}
       </div>
-      {showForm&&<div className="panel metaConnectionForm">
+      {(showForm||connectionMode==='cloud_api')&&<div className="panel metaConnectionForm">
         <form key={editing?.id||'new-meta'} className="formGrid" onSubmit={save}>
           <label>Connection name<input name="name" defaultValue={editing?.name||''} placeholder="Sales WhatsApp" required/></label>
           <label>Graph API version<input name="graphVersion" defaultValue={editing?.graphVersion||'v23.0'} placeholder="v23.0"/></label>
           <label>Phone Number ID<input name="phoneNumberId" defaultValue={editing?.phoneNumberId||''} required/></label>
-          <label>WhatsApp Business Account ID<input name="businessAccountId" defaultValue={editing?.businessAccountId||''}/></label>
+          <label>WhatsApp Business Account (WABA) ID<input name="businessAccountId" defaultValue={editing?.businessAccountId||''} required={!editing} placeholder="Meta numeric WABA ID"/></label>
           <label className="full">Permanent/System-user access token<input type="password" name="accessToken" required={!editing} placeholder={editing?.hasAccessToken?'Saved securely — leave blank to keep current token':'Paste Meta access token'}/></label>
           <label>OTP authentication template<input name="otpTemplateName" defaultValue={editing?.otpTemplateName||''} placeholder="login_otp"/></label>
           <label>OTP template language<input name="otpTemplateLanguage" defaultValue={editing?.otpTemplateLanguage||'en_US'} placeholder="en_US"/></label>
-          <div className="actions full"><button type="button" onClick={()=>{setShowForm(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Save changes':'Connect & verify'}</button></div>
+          <div className="actions full"><button type="button" onClick={()=>{setShowForm(false);setEditing(null);setShowSetup(false)}}>Cancel</button><button className="primary">{editing?'Save changes':'Verify access & link number'}</button></div>
         </form>
       </div>}
-    </section>
+    </section>}
       </div>}
       <div className="numberListTitle"><div><h2>Connected WhatsApp numbers</h2><p>Only API connection status is shown here. Meta business verification is a separate process.</p></div><span>{shown.length} of {meta.length} shown</span></div>
       <div className="numberList" role="list">
@@ -1299,7 +1324,7 @@ function WhatsAppApi({go}){
           <div className="numberRowActions">
             <button type="button" onClick={()=>act(x,'test')} disabled={!x.enabled||!allowed}>Test / Sync</button>
             <button type="button" onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
-            <button type="button" onClick={()=>{setEditing(x);setShowSetup(true);setShowForm(true);requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}))}}>Edit</button>
+            <button type="button" onClick={()=>{setEditing(x);setConnectionMode('cloud_api');setShowSetup(true);setShowForm(true);requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}))}}>Edit</button>
             {!x.isDefault&&<button type="button" onClick={()=>act(x,'default')} disabled={x.planAllowed===false||!x.enabled}>Make default</button>}
             <button type="button" className="numberDanger" onClick={()=>act(x,'delete')}>Disconnect</button>
           </div>
