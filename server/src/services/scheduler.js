@@ -1,4 +1,5 @@
 import { Campaign, Contact, Delivery, Template, Workspace, Integration } from '../models.js';
+import {randomUUID} from 'node:crypto';
 import {recordOutbound} from './liveChat.js';
 import {accessForWorkspace} from '../plan.js';
 import { sendWhatsApp } from './whatsapp.js';
@@ -45,7 +46,7 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
     return null;
   }
   const c=await Campaign.findOneAndUpdate(
-    {_id:campaignId,status:{$in:['draft','scheduled','failed','partial','completed']}},
+    {_id:campaignId,status:{$in:['draft','scheduled']}},
     {$set:{status:'processing',startedAt:new Date(),lastError:''},$unset:{completedAt:1,dispatchFinishedAt:1}},
     {new:true}
   );
@@ -66,8 +67,17 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
 
   let attempted=0;
   for(const item of queued){
-    let delivery=await Delivery.findOne({_id:item._id,workspaceId:c.workspaceId});
-    if(!delivery||!['queued',...(retryFailedOnly?['failed']:[])].includes(delivery.status))continue;
+    // Atomically claim a recipient before any external API request. If the
+    // process crashes after a request is transmitted, no worker may blindly
+    // replay that attempt. Reconciliation is required.
+    let delivery=await Delivery.findOneAndUpdate({
+      _id:item._id,workspaceId:c.workspaceId,campaignId:c._id,
+      status:retryFailedOnly?'failed':'queued'
+    },{
+      $set:{status:'dispatching',dispatchClaimedAt:new Date(),dispatchAttemptId:randomUUID()},
+      $inc:{attemptCount:1}
+    },{new:true});
+    if(!delivery)continue;
     const contact={_id:delivery.contactId,name:delivery.recipientName,phone:delivery.phone,email:delivery.recipientEmail};
 
     attempted++;
@@ -104,11 +114,13 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
       delivery.status=result.status;
       delivery.sentAt=new Date();
       if(result.status==='delivered') delivery.deliveredAt=new Date();
-      delivery.error='';delivery.errorCode='';delivery.attemptCount=(delivery.attemptCount||0)+1;
+      delivery.error='';delivery.errorCode='';
     }catch(err){
-      delivery.status='failed';
+      delivery.status=err?.submissionUnknown?'acceptance_unknown':'failed';
       delivery.error=String(err.message||'Delivery failed').slice(0,500);
-      delivery.errorCode='DISPATCH_ERROR';delivery.attemptCount=(delivery.attemptCount||0)+1;
+      delivery.errorCode=err?.submissionUnknown?'ACCEPTANCE_UNKNOWN':String(err?.providerErrorCode||'DISPATCH_ERROR').slice(0,80);
+      // Never automatically retry an ambiguous submission; Meta may have
+      // received it even though its response did not reach us.
     }
     await delivery.save();
     await reconcileMetaReceipts(delivery);
@@ -133,6 +145,12 @@ export async function processCampaign(campaignId,{retryFailedOnly=false}={}){
 }
 
 export async function runDueCampaigns(){
+  // Abandoned claims are NOT returned to the queue; we cannot establish if
+  // Meta accepted the request before the worker exited. Flag for review.
+  await Delivery.updateMany({
+    status:'dispatching',dispatchClaimedAt:{$lt:new Date(Date.now()-2*60*1000)}
+  },{$set:{status:'acceptance_unknown',errorCode:'WORKER_INTERRUPTED',
+      error:'Worker interrupted during provider submission; verify acceptance before a new send'}});
   const due=await Campaign.find({status:'scheduled',scheduledAt:{$lte:new Date()}}).select('_id').lean();
   for(const c of due) await processCampaign(c._id);
   return due.length;
