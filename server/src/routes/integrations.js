@@ -376,11 +376,28 @@ r.put('/whatsapp-connections/:id',async(req,res)=>{
   if(req.body.graphVersion!==undefined&&/^v\d+\.\d+$/.test(String(req.body.graphVersion)))row.graphVersion=String(req.body.graphVersion);
   if(req.body.otpTemplateName!==undefined)row.otpTemplateName=String(req.body.otpTemplateName||'').trim();
   if(req.body.otpTemplateLanguage!==undefined)row.otpTemplateLanguage=String(req.body.otpTemplateLanguage||'en_US').trim();
-  if(req.body.accessToken)row.accessTokenEncrypted=encrypt(String(req.body.accessToken).trim());
-  if(req.body.enabled!==undefined){
-    row.enabled=!!req.body.enabled;
-    row.connectionStatus=row.enabled?(row.connectionStatus==='disabled'?'connected':row.connectionStatus):'disabled';
-  }
+  const tokenChanged=!!String(req.body.accessToken||'').trim();
+  const credentialsChanged=tokenChanged||
+    req.body.phoneNumberId!==undefined&&row.isModified('phoneNumberId')||
+    req.body.graphVersion!==undefined&&row.isModified('graphVersion');
+  if(tokenChanged)row.accessTokenEncrypted=encrypt(String(req.body.accessToken).trim());
+  if(req.body.enabled!==undefined)row.enabled=!!req.body.enabled;
+  if(credentialsChanged&&row.enabled){
+    try{
+      // Validate newly entered credentials BEFORE saving. If Meta rejects
+      // them, preserve the previously stored token and sender metadata.
+      const health=await testConnection(row.toObject());
+      row.connectionStatus='connected';
+      row.lastCheckedAt=new Date();
+      row.lastError='';
+      row.displayPhoneNumber=health.displayPhoneNumber||row.displayPhoneNumber;
+    }catch(e){
+      return res.status(422).json({
+        code:'META_SENDER_AUTH_REQUIRED',
+        message:'Meta rejected the replacement sender credentials. Nothing was changed. '+String(e.message||'Check the Phone Number ID and system-user token').slice(0,250)
+      });
+    }
+  }else if(!row.enabled)row.connectionStatus='disabled';
   await row.save();
   res.json(view(row));
 });
