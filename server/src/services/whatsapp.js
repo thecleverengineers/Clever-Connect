@@ -64,13 +64,16 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
 
   const token=decrypt(integration.accessTokenEncrypted);
   if(template){
-    if(integration.provider!=='meta'||!template.metaTemplateName||template.metaStatus!=='APPROVED'){
+    if(integration.provider!=='meta'||!template.metaTemplateId||!template.metaTemplateName||template.metaStatus!=='APPROVED'){
       throw new Error('Template sending requires an APPROVED template and an active Meta WhatsApp profile');
     }
     if(!template.integrationId||String(template.integrationId)!==String(integration._id)){
       throw new Error('Template must be sent using its approved Meta profile');
     }
     if(template.category==='AUTHENTICATION')throw new Error('Use the secure OTP flow for authentication templates');
+    if(['IMAGE','VIDEO','DOCUMENT'].includes(template.headerFormat)&&!template.headerMediaUrl){
+      throw new Error('Approved media template requires a public HTTPS media URL before sending');
+    }
     const required=[...String(template.body||'').matchAll(/{{\s*(\d+)\s*}}/g)]
       .map(x=>Number(x[1])).reduce((max,num)=>Math.max(max,num),0);
     if(templateParams.length!==required||templateParams.some(x=>!String(x||'').trim())){
@@ -98,7 +101,17 @@ export async function sendWhatsApp({workspaceId,phone,text,template,integrationI
         type:'template',
         template:{
           name:template.metaTemplateName,language:{code:template.language||'en_US'},
-          ...(templateParams.length?{components:[{type:'body',parameters:templateParams.map(x=>({type:'text',text:String(x)}))}]}:{})
+          ...(templateParams.length||['IMAGE','VIDEO','DOCUMENT'].includes(template.headerFormat)?{
+            components:[
+              ...(['IMAGE','VIDEO','DOCUMENT'].includes(template.headerFormat)?[{
+                type:'header',
+                parameters:[{type:template.headerFormat.toLowerCase(),[template.headerFormat.toLowerCase()]:{
+                  link:String(template.headerMediaUrl)
+                }}]
+              }]:[]),
+              ...(templateParams.length?[{type:'body',parameters:templateParams.map(x=>({type:'text',text:String(x)}))}]:[])
+            ]
+          }:{})
         }
       }
     : {
