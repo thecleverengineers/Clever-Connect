@@ -1,7 +1,8 @@
-import {ChatConversation,ChatMessage,ChatFlow} from '../chatModels.js';
+import {ChatConversation,ChatMessage,ChatFlow,ChatAttribute} from '../chatModels.js';
 import {Contact,Delivery} from '../models.js';
 import {refreshCampaignTotals} from './campaignTracking.js';
 import {sendWhatsApp} from './whatsapp.js';
+import {renderFlowText} from './flowAttributes.js';
 
 export const digits=v=>String(v||'').replace(/\D/g,'');
 export function inboundText(message){
@@ -130,7 +131,10 @@ export function validateFlow(body){
     }):[];
     if(type==='buttons'&&(choices.length<1||choices.length>3))throw new Error('Buttons nodes allow 1–3 replies');
     if(new Set(choices.map(x=>x.id)).size!==choices.length)throw new Error('Button IDs must be unique');
-    return {id,type,text,nextId,choices};
+    const proposedX=Number(n.position?.x),proposedY=Number(n.position?.y);
+    const position={x:Number.isFinite(proposedX)?Math.max(0,Math.min(4000,Math.round(proposedX))):120,
+      y:Number.isFinite(proposedY)?Math.max(0,Math.min(4000,Math.round(proposedY))):100+i*155};
+    return {id,type,text,nextId,choices,position};
   });
   const ids=new Set(nodes.map(n=>n.id));
   if(ids.size!==nodes.length)throw new Error('Node IDs must be unique');
@@ -145,13 +149,19 @@ export function validateFlow(body){
 
 async function sendNode(integration,convo,flow,node){
   if(!node)return;
+  const [contact,globals]=await Promise.all([
+    Contact.findOne({workspaceId:integration.workspaceId,phone:'+'+convo.phone}).select('name phone email custom').lean(),
+    ChatAttribute.find({workspaceId:integration.workspaceId,scope:'global',enabled:true,isSecret:false}).select('scope key value enabled isSecret').lean()
+  ]);
+  const userValues=contact?.custom instanceof Map?Object.fromEntries(contact.custom):contact?.custom||{};
+  const displayText=renderFlowText(node.text,{contact:contact||{phone:'+'+convo.phone},globals,values:userValues});
   if(node.type==='handoff'){
     if(node.text){
       try{
         const result=await sendWhatsApp({
-          workspaceId:integration.workspaceId,phone:convo.phone,text:node.text,integrationId:integration._id
+          workspaceId:integration.workspaceId,phone:convo.phone,text:displayText,integrationId:integration._id
         });
-        await recordOutbound({integration,phone:convo.phone,text:node.text,
+        await recordOutbound({integration,phone:convo.phone,text:displayText,
           providerMessageId:result.id,status:result.status,source:'chatbot'});
       }catch(e){console.error('Human handoff greeting failed',e.message)}
     }
@@ -163,10 +173,10 @@ async function sendNode(integration,convo,flow,node){
   }
   const buttons=node.type==='buttons'?node.choices.map(c=>({id:c.id,title:c.label})):null;
   const result=await sendWhatsApp({
-    workspaceId:integration.workspaceId,phone:convo.phone,text:node.text,integrationId:integration._id,
+    workspaceId:integration.workspaceId,phone:convo.phone,text:displayText,integrationId:integration._id,
     buttons
   });
-  await recordOutbound({integration,phone:convo.phone,text:node.text,
+  await recordOutbound({integration,phone:convo.phone,text:displayText,
     providerMessageId:result.id,status:result.status,source:'chatbot'});
   convo.activeFlowId=flow._id;
   convo.awaitingNodeId=node.id;
