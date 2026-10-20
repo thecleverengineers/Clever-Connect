@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import {Integration} from '../models.js';
 import {ChatFlow} from '../chatModels.js';
 import {validateFlow} from '../services/liveChat.js';
+import {requireMetaSenderEntitlement} from '../plan.js';
 
 const r=express.Router();
 r.get('/',async(req,res)=>{
@@ -20,6 +21,7 @@ async function write(req,res,flow=null){
     if(!mongoose.isValidObjectId(integrationId))return res.status(400).json({message:'Choose a Meta WhatsApp profile'});
     const i=await Integration.findOne({_id:integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).select('_id').lean();
     if(!i)return res.status(404).json({message:'Connected Meta WhatsApp profile not found'});
+    await requireMetaSenderEntitlement(req.workspaceId,i._id);
     if(flow){
       Object.assign(flow,{...normalized,integrationId:i._id});
       await flow.save();
