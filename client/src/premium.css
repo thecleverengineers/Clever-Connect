@@ -1,0 +1,217 @@
+/* Premium application shell: responsive, app-like mobile navigation */
+:root{--app-ink:#142a24;--app-muted:#72857b;--app-line:#e3ebe6;--app-green:#087b56;--app-surface:#fff;--app-bg:#f4f7f5}
+body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:transparent}
+.shell > aside{background:#fff;box-shadow:3px 0 26px #1c44320a}
+.shell header{backdrop-filter:blur(18px);background:#fffffff0}
+.mobileAppbar{display:none}
+.premiumFunnel{border:1px solid #dce9e2;border-radius:18px;padding:23px;background:linear-gradient(150deg,#fff,#fbfefc);box-shadow:0 12px 38px #0e3a2410}
+.funnelHeading{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.funnelHeading small,.adminOverline{font-size:10px;letter-spacing:.13em;font-weight:800;color:#168262}
+.funnelHeading h3{font-size:22px;letter-spacing:-.04em;margin:8px 0}
+.funnelHeading p,.funnelFine{font-size:12px;color:#81948b;line-height:1.6}
+.funnelMeta{border:1px solid #d3e8dd;background:#eef8f2;color:#087b56;border-radius:30px;padding:7px 12px;text-transform:capitalize;white-space:nowrap;font-size:11px;font-weight:700}
+.funnelCards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin:18px 0}
+.funnelCards article{margin:0;display:flex;flex-direction:column;gap:6px;border-radius:14px;padding:17px;background:#fff;box-shadow:0 4px 18px #073e2410}
+.funnelCards article small{font-size:11px;font-weight:650;color:#62786c}
+.funnelCards article strong{font-size:28px;letter-spacing:-.06em;line-height:1.15}
+.funnelCards article span{font-size:10px;color:#84958c}
+.funnelSegment{display:flex;height:12px;border-radius:20px;overflow:hidden;background:#ebf0ec;margin:15px 0}
+.funnelSegment span{display:block;height:100%;transition:width .3s}
+.funnelTools{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px}
+.funnelTools input{flex:1;min-width:180px}
+.funnelTools input,.funnelTools select,.funnelTools button,.adminDirectoryTools input,.adminDirectoryTools select{border:1px solid #dce6df;background:white;border-radius:10px;padding:11px 13px;color:#334b3d;font-size:12px}
+.funnelTools button{font-weight:700;border-color:#a7cfb7;color:#087b56}
+.funnelRecipientList{display:grid;gap:0;max-height:350px;overflow:auto;border:1px solid #e6eee9;border-radius:12px}
+.funnelRecipientList>div{padding:13px 16px;border-bottom:1px solid #edf1ee;display:grid;grid-template-columns:minmax(140px,1.3fr) auto minmax(160px,1fr) auto;gap:16px;align-items:center;font-size:12px}
+.funnelRecipientList>div:last-child{border-bottom:0}
+.funnelRecipientList>div>div b,.funnelRecipientList>div>div small{display:block}
+.funnelRecipientList>div>div small,.funnelRecipientList>div>small{color:#84958c;font-size:11px;overflow-wrap:anywhere}
+.funnelRecipientList button{border:1px solid #c9e0d2;border-radius:9px;padding:7px 10px;color:#087b56;background:#fff}
+.funnelReasons{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:18px;font-size:11px}
+.funnelReasons span{background:#fff5f3;border:1px solid #f1d8d3;border-radius:9px;padding:8px 11px;color:#9d5550}
+.funnelReasons strong{margin-left:6px}
+.adminEnterprise .adminHero{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:32px;margin-bottom:16px;border-radius:20px;background:radial-gradient(circle at 90% 12%,#2d9b7344,transparent 38%),linear-gradient(125deg,#102e25,#164633);color:#fff;box-shadow:0 18px 48px #143a2c26}
+.adminEnterprise .adminHero h1{font-size:clamp(26px,3vw,37px);margin:13px 0 10px;letter-spacing:-.05em;line-height:1.08}
+.adminEnterprise .adminHero p{font-size:13px;color:#cfdfd6;line-height:1.65;max-width:580px;margin:0}
+.adminOverline{color:#c4e9d8;display:inline-flex;align-items:center;gap:8px}
+.adminOverline i{background:#6ae0a4;width:7px;height:7px;border-radius:50%}
+.adminHeroActions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.adminHeroActions button{background:#ffffff12;color:white;border:1px solid #ffffff44;padding:10px 14px;border-radius:10px;font-weight:700;font-size:12px}
+.adminLiveBadge{color:#baedcc;font-size:11px;white-space:nowrap}
+.adminTabs{display:flex;align-items:center;gap:7px;padding:7px;background:#fff;border:1px solid #e2eae5;border-radius:13px;overflow-x:auto;margin-bottom:20px}
+.adminTabs button{white-space:nowrap;background:transparent;border:0;padding:12px 17px;border-radius:10px;color:#75867c;font-weight:650;font-size:12px;display:flex;align-items:center;gap:7px}
+.adminTabs button.active{background:#e8f5ec;color:#086d4a}
+.adminTabs b{font-size:10px;background:#fdebe7;color:#bb5d50;border-radius:50px;padding:2px 6px}
+.adminKpis .metric{box-shadow:0 6px 26px #152f2110;border-radius:15px;border-color:#e1ebe4}
+.adminEnterprise>section{box-shadow:0 5px 27px #0e412b08;border-radius:16px}
+.adminDirectoryTools{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:19px 0}
+.adminDirectoryTools input{flex:1;min-width:220px}
+.adminDirectoryTools small{color:#8a9a90;font-size:11px}
+@media(max-width:1050px){.funnelCards{grid-template-columns:repeat(3,minmax(0,1fr))}.adminEnterprise .adminHero{align-items:flex-start;flex-direction:column}}
+@media(max-width:760px){
+ .shell header{height:64px;top:0;padding:0 16px;padding-top:env(safe-area-inset-top);height:calc(64px + env(safe-area-inset-top));z-index:40}
+ .shell main{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+ .shell .page{padding:18px 13px 23px}
+ .shell > aside{z-index:80;box-shadow:12px 0 45px #001d191f}
+ .mobileAppbar{display:grid!important;position:fixed;bottom:0;left:0;right:0;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;gap:2px;padding:7px 6px calc(9px + env(safe-area-inset-bottom));border-top:1px solid #e5ebe7;background:#ffffffee;backdrop-filter:blur(22px);box-shadow:0 -5px 28px #153d2618;z-index:50}
+ .shell nav.mobileAppbar button{border:0;background:transparent;color:#7c9083;padding:9px 2px 6px;display:grid;justify-items:center;gap:5px;border-radius:12px;font-size:10px;min-height:49px}
+ .mobileAppbar button span{font-size:20px;line-height:1}
+ .mobileAppbar button small{font-size:10px;letter-spacing:0;font-weight:650}
+ .shell nav.mobileAppbar button.active{color:#057e50;background:#eaf7ef}
+ .premiumFunnel{padding:13px;border-radius:15px}
+ .funnelHeading h3{font-size:19px}
+ .funnelCards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .funnelCards article{padding:13px}
+ .funnelCards article strong{font-size:25px}
+ .funnelTools{display:grid;grid-template-columns:1fr 1fr}
+ .funnelTools input{grid-column:1/-1;min-width:0}
+ .funnelRecipientList>div{grid-template-columns:1fr auto;gap:7px}
+ .funnelRecipientList>div>small{grid-column:1/-1}
+ .funnelRecipientList button{grid-column:2;grid-row:2}
+ .adminEnterprise .adminHero{padding:24px 18px}
+ .adminHeroActions{justify-content:flex-start}
+ .adminTabs{gap:0;position:sticky;top:calc(64px + env(safe-area-inset-top));z-index:9}
+ .adminTabs button{padding:12px;font-size:11px}
+ .adminDirectoryTools{display:grid;grid-template-columns:1fr 1fr}
+ .adminDirectoryTools input{grid-column:1/-1;min-width:0}
+ .adminKpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .adminKpis .metric{padding:14px}
+ .adminKpis .metric strong{font-size:26px}
+ .reportModal{width:100vw!important;max-width:100vw!important;max-height:calc(100dvh - env(safe-area-inset-top))!important;border-radius:18px 18px 0 0!important;margin:0!important;align-self:end;padding-bottom:calc(22px + env(safe-area-inset-bottom))}
+}
+@media(max-width:380px){.funnelCards{grid-template-columns:1fr 1fr}.mobileAppbar button small{font-size:9px}.adminLiveBadge{display:none}}
+
+
+/* Conversational workspace refinements */
+.inboxFilterTabs{display:flex;gap:5px;overflow-x:auto;padding:11px 12px 4px;scrollbar-width:none}
+.inboxFilterTabs button{border:1px solid transparent;border-radius:8px;background:#f0f5f1;color:#617a69;font-size:11px;padding:9px 11px;white-space:nowrap;font-weight:700}
+.inboxFilterTabs button.active{border-color:#c5e4d0;background:#e4f4e9;color:#057e50}
+.windowOpen{color:#0d8758!important;font-weight:800}
+.windowClosed{color:#b16644!important;font-weight:800}
+.chatBubble .campaignContext{margin:8px 0;padding:8px 9px;background:#f4f9f6;border-left:3px solid #12845a;border-radius:6px;text-align:left;font-weight:650;color:#24694a}
+.chatWindow{box-shadow:0 10px 30px #183c2610}
+.chatThread.selected{background:linear-gradient(90deg,#e8f5ed,#f3faf6)}
+@media(max-width:680px){
+ .liveChatGrid{min-height:calc(100dvh - 220px);gap:10px}
+ .chatThreads{max-height:240px;border-radius:15px}
+ .chatWindow{min-height:420px;border-radius:15px}
+ .chatMessages{height:300px}
+ .chatReply{padding:10px}
+ .chatReply textarea{font-size:16px;border-radius:12px}
+ .chatTop{padding:12px}
+ .chatTop button{min-height:38px}
+ .inboxFilterTabs{padding:10px 8px 2px}
+}
+
+
+/* Platform intelligence and governance */
+.adminMiniInsights{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:22px}
+.adminMiniInsights>span{display:flex;flex-direction:column;gap:9px;background:#fff;border:1px solid #e2ebe5;border-radius:14px;padding:18px;box-shadow:0 5px 26px #0d33220b}
+.adminMiniInsights small{font-size:10px;letter-spacing:.1em;color:#829289;font-weight:750}
+.adminMiniInsights b{font-size:23px;letter-spacing:-.04em;color:#183a2a}
+.adminAudit .sectionHead>div>small{font-weight:750;font-size:10px;color:#0c8354;letter-spacing:.1em}
+.tr.adminAuditRow{grid-template-columns:minmax(200px,2fr) minmax(120px,1fr) minmax(150px,1.1fr) minmax(120px,.9fr);min-width:680px}
+.adminAuditRow b{color:#204437}
+.adminAuditRow>span{overflow-wrap:anywhere}
+@media(max-width:950px){.adminMiniInsights{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.adminMiniInsights{gap:8px}.adminMiniInsights>span{padding:14px}.adminMiniInsights b{font-size:20px}}
+
+
+.emojiPicker{position:relative;display:inline-flex}
+.emojiGrid{position:absolute;top:calc(100% + 8px);left:0;z-index:24;display:grid;grid-template-columns:repeat(4,34px);gap:5px;padding:10px;border-radius:14px;border:1px solid #dfeae3;background:#fff;box-shadow:0 14px 34px #12291b22}
+.emojiGrid button{font-size:18px;min-height:34px;border-radius:8px}
+.waFormatBar{position:relative;align-items:center;gap:4px}
+.waFormatBar>button[title^="Insert"]{color:#087b56;background:#eaf6ee;border-radius:8px;border:1px solid #d0e5d8;font-weight:700}
+@media(max-width:600px){.emojiGrid{left:auto;right:0}.waFormatBar{overflow:visible}.waFormatBar button{min-height:34px}}
+
+
+/* Sidebar information architecture: grouped WhatsApp/Manager navigation */
+.shell > aside{overflow:hidden}
+.shell nav.sidebarGroups{flex:1;overflow-y:auto;overflow-x:hidden;gap:17px;min-height:0;padding:2px 2px 30px;scrollbar-width:thin}
+.sidebarGroup{display:grid;gap:3px}
+.sidebarGroupTitle{padding:4px 12px 8px;font-size:10px;font-weight:850;color:#9aa8a0;letter-spacing:.14em}
+.shell nav.sidebarGroups button{width:100%;min-width:0;transition:background .15s;color:#64736a}
+.shell nav.sidebarGroups button>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell nav.sidebarGroups button:hover{background:#f0f8f3;color:#0e714d}
+.shell nav.sidebarGroups button.active{background:#e7f5ed;color:#087d53;font-weight:800}
+.shell nav.sidebarGroups .sidebarManagerToggle{background:linear-gradient(110deg,#e6f6ed,#f2faf5);color:#167a56;border:1px solid #d6e9da;font-weight:850;margin-top:3px}
+.shell nav.sidebarGroups .sidebarManagerToggle.active{background:linear-gradient(100deg,#137e51,#29965a);color:#fff}
+.sidebarManagerToggle b{font-size:20px;font-weight:600}
+.sidebarSubmenu{display:grid;gap:2px;border-left:2px solid #d4e9d9;margin:3px 0 0 23px;padding-left:9px}
+.shell nav.sidebarGroups .sidebarSubmenu button{font-size:12px;padding:9px 11px}
+.sidebarSubmenu button b{min-width:24px;text-align:center;padding:4px 7px;font-size:10px;border-radius:30px;background:#e7efe9;color:#688a74}
+.shell nav.sidebarGroups .sidebarSubmenu button.active b{background:#cae6d5;color:#087750}
+.sidebarScrim{display:none}
+.numbersHeading .numbersTopStat{border:1px solid #dbece0;background:#f0faf4;border-radius:13px;padding:13px 18px;display:flex;align-items:center;gap:10px}
+.numbersTopStat strong{font-size:27px;color:#078352;letter-spacing:-.05em}
+.numbersTopStat span{font-size:11px;color:#759584}
+.numberManagerPanel{padding:22px;margin:16px 0;border-radius:18px;box-shadow:0 8px 32px #0e45280c}
+.numberControlBar{display:flex;gap:10px;align-items:stretch}
+.numberSearch{position:relative;display:flex;flex:1;min-width:160px;align-items:center}
+.numberSearch>span{position:absolute;left:15px;font-size:28px;color:#8c9b93;line-height:1;pointer-events:none}
+.numberSearch input{width:100%;height:50px;border:1px solid #dde9df;border-radius:12px;background:#fff;outline:none;padding:12px 16px 12px 43px;font-size:13px;color:#345341}
+.numberSearch input:focus,.numberFilterSelect select:focus{border-color:#1f9966;box-shadow:0 0 0 3px #1ca46620}
+.numberFilterSelect{display:flex;align-items:center;gap:8px;border:1px solid #dde9df;border-radius:12px;padding:0 8px 0 14px;white-space:nowrap;font-size:11px;color:#7e9587}
+.numberFilterSelect select{border:0;outline:0;background:#fff;color:#436d52;min-width:145px;max-width:210px;height:46px;font-size:12px}
+.numbersActionStack{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 21px}
+.numbersActionStack button{padding:13px 18px;border-radius:11px;font-size:13px;font-weight:800;min-height:48px}
+.numbersActionStack button:disabled{opacity:.48;cursor:not-allowed}
+.numbersSync{background:#fff;border:1px solid #b7d6c3;color:#216e4b}
+.numbersAdd{background:#128b53;border:1px solid #128b53;color:#fff;box-shadow:0 8px 19px #147d4e21}
+.numbersActionStack>small{grid-column:1/-1;color:#a16b54;font-size:11px}
+.numbersSetup{background:#f8fbf9;border:1px solid #d8ebe0;border-radius:15px;padding:13px 17px;margin:15px 0 22px}
+.numbersSetupIntro{display:grid;gap:5px;margin:4px 0 12px}
+.numbersSetupIntro b{font-size:13px;color:#27553d}
+.numbersSetupIntro span{font-size:11px;color:#81958a;line-height:1.5}
+.numbersSetup>section{margin:12px 0}
+.numberListTitle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 13px}
+.numberListTitle h2{font-size:17px;font-weight:800;letter-spacing:-.02em;margin:0 0 5px}
+.numberListTitle p{font-size:11px;color:#889a90;line-height:1.5;margin:0}
+.numberListTitle>span{font-size:11px;font-weight:800;color:#638c72;white-space:nowrap}
+.numberList{border:1px solid #e5eae6;border-radius:14px;overflow:hidden}
+.numberListLabels{display:grid;grid-template-columns:55px minmax(185px,1.8fr) minmax(140px,1fr) minmax(180px,1fr);gap:13px;padding:13px 17px;background:#f7faf8;border-bottom:1px solid #e7eee9;font-size:10px;font-weight:800;color:#8c9f90;letter-spacing:.07em;text-transform:uppercase}
+.numberRow{display:grid;grid-template-columns:55px minmax(185px,1.8fr) minmax(140px,1fr) minmax(180px,1fr);gap:13px;align-items:center;padding:19px 17px;border:0;border-bottom:1px solid #e9efeb;border-radius:0;margin:0;background:#fff;min-width:0}
+.numberRow:nth-of-type(even){background:#fafcfb}
+.numberRow:last-child{border-bottom:0}
+.numberOrdinal{font-size:14px;color:#799184}
+.numberMainDetail{min-width:0;display:grid;gap:6px}
+.numberMainDetail>b{font-size:13px;color:#263f31;line-height:1.45;display:flex;gap:8px;align-items:flex-start;overflow-wrap:anywhere}
+.numberMetaSymbol{font-size:21px;line-height:14px;font-weight:800;color:#113d28}
+.numberMainDetail>.numberPhone{font-size:12px;font-weight:800;color:#157a4f;overflow-wrap:anywhere}
+.numberMainDetail small{color:#8a9b90;font-size:10px;line-height:1.45;overflow-wrap:anywhere}
+.numberStates{display:flex;align-items:flex-start;flex-wrap:wrap;gap:5px}
+.numberStatus{font-size:10px;font-weight:750;border-radius:20px;padding:6px 9px;background:#eef3f0;color:#5d7b68}
+.numberStatus.good{background:#e4f6e9;color:#087b50}
+.numberStatus.default{background:#e8ecfd;color:#5866a4}
+.numberStatus.warning{background:#fff0eb;color:#bb634c}
+.numberStatus.disabled{background:#ecefed;color:#74867a}
+.numberStatusError{width:100%;font-size:10px;color:#ad5549;line-height:1.45;overflow-wrap:anywhere}
+.numberRowActions{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.numberRowActions button{background:#fff;border:1px solid #dce9df;padding:7px 9px;color:#28654a;border-radius:8px;font-size:10px;font-weight:750}
+.numberRowActions button:hover{background:#f1faf3}
+.numberRowActions button:disabled{opacity:.45;cursor:not-allowed}
+.numberRowActions .numberDanger{color:#a95049;border-color:#f1dada}
+.numberEmpty{padding:32px 16px;text-align:center;color:#7f9989;font-size:12px;line-height:1.65}
+@media(max-width:1150px){.numberListLabels,.numberRow{grid-template-columns:35px minmax(160px,1.8fr) minmax(110px,1fr);gap:10px}.numberListLabels span:last-child{display:none}.numberRowActions{grid-column:2/-1}.numberRow{align-items:start}}
+@media(max-width:760px){
+ .sidebarScrim{display:block;position:fixed;inset:0;background:#14241d77;backdrop-filter:blur(2px);border:0;padding:0;z-index:79}
+ .shell > aside{width:min(320px,84vw);z-index:80}
+ .shell nav.sidebarGroups{padding-bottom:calc(55px + env(safe-area-inset-bottom))}
+ .numberManagerPanel{padding:13px;border-radius:14px}
+ .numberControlBar{display:grid;grid-template-columns:1fr;gap:9px}
+ .numberFilterSelect{min-height:43px}
+ .numberFilterSelect select{width:100%;max-width:none;flex:1}
+ .numbersActionStack{grid-template-columns:1fr;gap:8px;margin:10px 0 18px}
+ .numbersActionStack button{width:100%;padding:12px}
+ .numberListLabels{grid-template-columns:42px 1fr;gap:12px;padding:12px}
+ .numberListLabels span:nth-child(n+3){display:none}
+ .numberRow{grid-template-columns:33px minmax(0,1fr);gap:10px;padding:16px 12px}
+ .numberMainDetail{grid-column:2}
+ .numberStates{grid-column:2}
+ .numberRowActions{grid-column:2}
+ .numberListTitle{align-items:flex-start;flex-wrap:wrap}
+ .numbersHeading .numbersTopStat{padding:9px 12px}
+ .numbersTopStat strong{font-size:23px}
+ .numbersHeading .numbersTopStat span{font-size:10px}
+ .numbersSetup{padding:10px}
+}

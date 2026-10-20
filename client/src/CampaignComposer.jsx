@@ -44,6 +44,14 @@ function StyledText({text}){
 }
 
 function Toolbar({inputRef,value,onChange}){
+  const [emojiOpen,setEmojiOpen]=useState(false);
+  function insertToken(token){
+    const input=inputRef.current;
+    const a=input?.selectionStart??value.length;
+    const b=input?.selectionEnd??a;
+    onChange(value.slice(0,a)+token+value.slice(b));
+    requestAnimationFrame(()=>{input?.focus();input?.setSelectionRange(a+token.length,a+token.length)});
+  }
   const formats=[
     ['B','*','Bold'],['I','_','Italic'],['S','~','Strikethrough'],
     ['Mono','\x60\x60\x60','Monospace'],['•','- ','Bullet list'],
@@ -65,6 +73,12 @@ function Toolbar({inputRef,value,onChange}){
   }
   return <div className="waFormatBar" aria-label="WhatsApp formatting controls">
     {formats.map(([label,mark,title])=><button key={title} type="button" title={title} onClick={()=>apply(mark,title)}>{label}</button>)}
+    <button type="button" title="Insert customer name" onClick={()=>insertToken('{{name}}')}>+ Name</button>
+    <button type="button" title="Insert customer phone" onClick={()=>insertToken('{{phone}}')}>+ Phone</button>
+    <button type="button" title="Insert customer email" onClick={()=>insertToken('{{email}}')}>+ Email</button>
+    <div className="emojiPicker"><button type="button" aria-expanded={emojiOpen} aria-label="Choose emoji" onClick={()=>setEmojiOpen(x=>!x)}>😊 Emojis</button>
+      {emojiOpen&&<div className="emojiGrid">{['✅','🔥','👉','⭐','₹','😊','🎉','💬','❤️','🚀','📣','🎁'].map(emoji=><button key={emoji} type="button" aria-label={'Insert '+emoji} onClick={()=>{insertToken(emoji);setEmojiOpen(false)}}>{emoji}</button>)}</div>}
+    </div>
   </div>;
 }
 

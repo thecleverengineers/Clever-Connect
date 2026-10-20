@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import {SubscriptionPlan,SubscriptionRequest,Workspace,User} from '../models.js';
+import {SubscriptionPlan,SubscriptionRequest,Workspace,User,Campaign,Delivery,AdminAuditEvent} from '../models.js';
 import {requireAuth,requireSuperAdmin} from '../middleware/auth.js';
 import {accessForWorkspace} from '../plan.js';
 import {getMetaConfig,getMetaConfigPublic,saveMetaConfig,clearMetaAppSecret} from '../metaConfig.js';
@@ -8,6 +8,18 @@ import {getOpenAIConfig,getOpenAIConfigPublic,saveOpenAIConfig,clearOpenAIKey} f
 
 const r=express.Router();
 r.use(requireAuth,requireSuperAdmin);
+
+async function audit(req,action,targetType,targetId,description=''){
+  try{await AdminAuditEvent.create({actorId:req.user._id,action,targetType,targetId:String(targetId||''),description:String(description).slice(0,400)})}
+  catch(error){console.error('Admin audit persistence failed',error)}
+}
+
+r.get('/audit',async(req,res)=>{
+ const limit=Math.min(100,Math.max(1,Number(req.query.limit)||40));
+ const events=await AdminAuditEvent.find().sort({createdAt:-1}).limit(limit)
+   .populate('actorId','name email').lean();
+ res.json(events);
+});
 
 const cleanPlan=b=>({
   name:String(b.name||'').trim(),
@@ -32,8 +44,23 @@ r.get('/overview',async(req,res)=>{
   const workspaceIds=workspaces.map(x=>x._id);
   const owners=await User.find({workspaceId:{$in:workspaceIds},role:'owner'}).select('workspaceId name email').lean();
   const ownerMap=new Map(owners.map(x=>[String(x.workspaceId),x]));
+  const priceById=new Map(plans.map(p=>[String(p._id),p]));
+  const activeWorkspaces=workspaces.filter(w=>w.subscriptionStatus==='active'&&w.currentPeriodEnd&&new Date(w.currentPeriodEnd)>new Date());
+  const projectedMonthlyRevenue=activeWorkspaces.reduce((sum,w)=>sum+Number(priceById.get(String(w.subscriptionPlanId))?.priceMonthly||0),0);
+  const since=new Date(Date.now()-14*86400000);
+  const [totalUsers,totalCampaigns,deliveryBreakdown, recentAudit]=await Promise.all([
+    User.countDocuments(),Campaign.countDocuments(),
+    Delivery.aggregate([{$match:{createdAt:{$gte:since}}},{$group:{_id:'$status',count:{$sum:1}}}]),
+    AdminAuditEvent.find().sort({createdAt:-1}).limit(10).populate('actorId','name email').lean()
+  ]);
+  const deliveries=Object.fromEntries(deliveryBreakdown.map(x=>[x._id,x.count]));
+  const delivered=(deliveries.delivered||0)+(deliveries.read||0);
+  const dispatched=(deliveries.submitted||0)+(deliveries.sent||0)+delivered;
+  const insights={activeTenants:activeWorkspaces.length,totalUsers,totalCampaigns,projectedMonthlyRevenue,
+    currency:'INR',deliveredLast14Days:delivered,dispatchedLast14Days:dispatched,
+    deliveryRateLast14Days:dispatched?Math.round(delivered/dispatched*1000)/10:0};
   res.json({
-    plans,
+    plans,insights,recentAudit,
     pendingRequests:requests,
     workspaces:workspaces.map(w=>({
       ...w,
@@ -65,11 +92,13 @@ r.put('/meta-settings',async(req,res)=>{
     appSecret,
     updatedBy:req.user._id
   });
+  await audit(req,'meta.settings.updated','settings','meta','Meta connection configuration updated');
   res.json(await getMetaConfigPublic());
 });
 
 r.post('/meta-settings/clear-secret',async(req,res)=>{
   await clearMetaAppSecret(req.user._id);
+  await audit(req,'meta.secret.cleared','settings','meta','Meta App Secret cleared');
   res.json(await getMetaConfigPublic());
 });
 
@@ -117,12 +146,14 @@ r.put('/openai-settings',async(req,res)=>{
       enabled:req.body.enabled!==false,
       updatedBy:req.user._id
     });
+    await audit(req,'ai.settings.updated','settings','openai','AI configuration updated');
     res.json(await getOpenAIConfigPublic());
   }catch(e){res.status(400).json({message:e.message})}
 });
 
 r.post('/openai-settings/clear-key',async(req,res)=>{
   await clearOpenAIKey(req.user._id);
+  await audit(req,'ai.key.cleared','settings','openai','OpenAI API key cleared');
   res.json(await getOpenAIConfigPublic());
 });
 
@@ -143,7 +174,7 @@ r.post('/openai-settings/test',async(req,res)=>{
 r.post('/plans',async(req,res)=>{
   const data=cleanPlan(req.body);
   if(!data.name||!data.slug||!Number.isFinite(data.priceMonthly)||data.priceMonthly<0)return res.status(400).json({message:'Plan name, slug and valid monthly price are required'});
-  try{res.status(201).json(await SubscriptionPlan.create(data))}
+  try{const plan=await SubscriptionPlan.create(data);await audit(req,'plan.created','plan',plan._id,plan.name);res.status(201).json(plan)}
   catch(e){res.status(409).json({message:e.code===11000?'Plan slug already exists':e.message})}
 });
 
@@ -154,6 +185,7 @@ r.put('/plans/:id',async(req,res)=>{
   try{
     const x=await SubscriptionPlan.findByIdAndUpdate(req.params.id,{$set:data},{new:true,runValidators:true});
     if(!x)return res.sendStatus(404);
+    await audit(req,'plan.updated','plan',x._id,x.name);
     res.json(x);
   }catch(e){res.status(409).json({message:e.code===11000?'Plan slug already exists':e.message})}
 });
@@ -163,6 +195,7 @@ r.delete('/plans/:id',async(req,res)=>{
   const inUse=await Workspace.countDocuments({subscriptionPlanId:req.params.id,subscriptionStatus:'active'});
   if(inUse)return res.status(409).json({message:'This plan is assigned to active subscriptions. Disable it instead of deleting it'});
   await SubscriptionPlan.deleteOne({_id:req.params.id});
+  await audit(req,'plan.deleted','plan',req.params.id,'Unused subscription plan deleted');
   res.json({ok:true});
 });
 
@@ -186,6 +219,7 @@ r.post('/requests/:id/approve',async(req,res)=>{
   request.adminNote=String(req.body.adminNote||'').trim();
   await request.save();
   await SubscriptionRequest.updateMany({_id:{$ne:request._id},workspaceId:request.workspaceId,status:'pending'},{$set:{status:'cancelled'}});
+  await audit(req,'subscription.approved','subscription_request',request._id,'Subscription request approved');
   res.json({ok:true,request});
 });
 
@@ -196,6 +230,7 @@ r.post('/requests/:id/reject',async(req,res)=>{
     {new:true}
   );
   if(!request)return res.status(404).json({message:'Pending request not found'});
+  await audit(req,'subscription.rejected','subscription_request',request._id,'Subscription request rejected');
   res.json({ok:true,request});
 });
 
@@ -221,6 +256,7 @@ r.put('/workspaces/:id/subscription',async(req,res)=>{
   }
   const w=await Workspace.findByIdAndUpdate(req.params.id,{$set:update},{new:true});
   if(!w)return res.sendStatus(404);
+  await audit(req,'workspace.subscription.updated','workspace',w._id,'Subscription status: '+status);
   res.json(w);
 });
 

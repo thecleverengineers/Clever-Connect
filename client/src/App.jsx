@@ -2,15 +2,19 @@ import React,{useEffect,useMemo,useState}from'react';
 import{api,BASE,getCached,warmWorkspace}from'./api.js';
 import Payments from './Payments.jsx';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
+import BulkWhatsApp from './BulkWhatsApp.jsx';
 import DropFileInput from './DropFileInput.jsx';
-import {Inbox,FlowBuilder} from './ConversationSuite.jsx';
+import {Inbox} from './ConversationSuite.jsx';
+import FlowStudio from './FlowStudio.jsx';
 import AICopilot from './AICopilot.jsx';
+import './premium.css';
 import {BUSINESS_TYPES,BUSINESS_GOALS,BRAND_TONES,LANGUAGES} from './business.js';
 
 const nav=[
   ['overview','Overview','⌂'],
   ['ai','AI Copilot','✦'],
   ['send','Send message','➤'],
+  ['bulk','Bulk WhatsApp','◈'],
   ['campaigns','Campaigns','✦'],
   ['contacts','Contacts','◎'],
   ['schedule','Schedule','◷'],
@@ -18,10 +22,20 @@ const nav=[
   ['reports','Delivery reports','▥'],
   ['inbox','Live chat','◉'],
   ['chatbot','Chatbot & Flows','◇'],
-  ['whatsapp-api','Meta WhatsApp API','☏'],
+  ['whatsapp-api','Numbers','☏'],
   ['payments','WhatsApp Payments','₹'],
   ['subscription','Subscription','₹'],
   ['settings','Settings','⚙']
+];
+
+// Menu groups follow the familiar WhatsApp → Manager → Reports → Utility
+// hierarchy without presenting unsupported endpoints as working modules.
+const workspaceMenu=[
+  {heading:'WORKSPACE',ids:['overview','ai']},
+  {heading:'WHATSAPP',ids:['bulk','inbox','chatbot'],manager:true},
+  {heading:'CAMPAIGNS',ids:['campaigns','schedule','send','contacts']},
+  {heading:'REPORTS',ids:['reports','payments']},
+  {heading:'UTILITY',ids:['settings','subscription']}
 ];
 
 const fmt=d=>d?new Date(d).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'—';
@@ -108,6 +122,20 @@ function Shell({session,onLogout,onSessionUpdate}){
   const[page,setPage]=useState(access.allowed?'overview':'subscription');
   const[open,setOpen]=useState(false);
   const[profileOpen,setProfileOpen]=useState(false);
+  const[managerExpanded,setManagerExpanded]=useState(true);
+  const[managerCounts,setManagerCounts]=useState({numbers:null,templates:null});
+  useEffect(()=>{
+    if(!access.allowed)return;
+    let live=true;
+    Promise.allSettled([api('/integrations/whatsapp-connections'),api('/templates')]).then(results=>{
+      if(!live)return;
+      setManagerCounts({
+        numbers:results[0].status==='fulfilled'?(results[0].value.connections||[]).filter(x=>x.provider==='meta').length:null,
+        templates:results[1].status==='fulfilled'?(results[1].value||[]).filter(x=>x.metaStatus==='APPROVED').length:null
+      });
+    });
+    return()=>{live=false};
+  },[access.allowed,open,managerExpanded]);
   const menu=session.user.isSuperAdmin?[...nav,['admin','Super Admin','★']]:nav;
   useEffect(()=>{
     const close=e=>{if(!e.target.closest?.('.profileMenu'))setProfileOpen(false)};
@@ -123,13 +151,43 @@ function Shell({session,onLogout,onSessionUpdate}){
     setOpen(false);setProfileOpen(false);
   };
   return <div className="shell">
+    {open&&<button type="button" className="sidebarScrim" aria-label="Close navigation menu" onClick={()=>setOpen(false)}/>}
     <aside className={open?'open':''}>
       <div className="sideLogo"><span>WA</span> SANTA<small>WHATSAPP WORKSPACE</small></div>
       <div className="workspace">
         <div className="avatar">{session.workspace.name[0]?.toUpperCase()}</div>
         <div><b>{session.workspace.name}</b><small>{access.state==='trialing'?'trial · '+(access.daysRemaining||0)+' day(s) left':session.user.role+' workspace'}</small></div>
       </div>
-      <nav>{menu.map(([id,label,ic])=><button key={id} className={page===id?'active':''} onClick={()=>changePage(id)}><i>{ic}</i>{label}{locked(id)&&<small className="navLock">• locked</small>}</button>)}</nav>
+      <nav className="sidebarGroups" aria-label="Main navigation">
+        {workspaceMenu.map(group=><div className="sidebarGroup" key={group.heading}>
+          <div className="sidebarGroupTitle">{group.heading}</div>
+          {group.ids.map(id=>{
+            const item=menu.find(x=>x[0]===id);
+            if(!item)return null;
+            const [,label,ic]=item;
+            return <button type="button" key={id} className={page===id?'active':''} onClick={()=>changePage(id)}>
+              <i aria-hidden="true">{ic}</i><span>{id==='inbox'?'Live Chat (Inbox)':id==='chatbot'?'Chat Automation':id==='reports'?'Delivery Report':label}</span>
+              {locked(id)&&<small className="navLock">• locked</small>}
+            </button>;
+          })}
+          {group.manager&&<div className="sidebarManager">
+            <button type="button" className={'sidebarManagerToggle '+(['whatsapp-api','templates'].includes(page)?'active':'')} aria-expanded={managerExpanded}
+              onClick={()=>setManagerExpanded(x=>!x)}>
+              <i aria-hidden="true">☏</i><span>WhatsApp Manager</span><b aria-hidden="true">{managerExpanded?'⌄':'›'}</b>
+            </button>
+            {managerExpanded&&<div className="sidebarSubmenu">
+              {[['whatsapp-api','Numbers',managerCounts.numbers],['templates','Templates',managerCounts.templates]].map(([id,label,count])=>
+                <button type="button" key={id} className={page===id?'active':''} aria-current={page===id?'page':undefined} onClick={()=>changePage(id)}>
+                  <span>{label}</span>{count!==null&&<b>{count}</b>}
+                </button>)}
+            </div>}
+          </div>}
+        </div>)}
+        {session.user.isSuperAdmin&&<div className="sidebarGroup">
+          <div className="sidebarGroupTitle">ADMINISTRATION</div>
+          <button type="button" className={page==='admin'?'active':''} onClick={()=>changePage('admin')}><i>★</i><span>Super Admin</span></button>
+        </div>}
+      </nav>
     </aside>
     <main>
       <header>
@@ -157,6 +215,7 @@ function Shell({session,onLogout,onSessionUpdate}){
       </header>
       {!access.allowed&&page!=='subscription'&&page!=='admin'&&<div className="accessBanner"><b>7-day trial ended.</b> Subscribe to a WA SANTA plan to restore workspace access.</div>}
       <Page id={page} session={session} go={changePage} onSessionUpdate={onSessionUpdate}/>
+      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['bulk','Bulk WA','◈'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
     </main>
   </div>
 }
@@ -214,6 +273,7 @@ function Overview({go}){
       <div className="eyebrow">QUICK ACTIONS</div><h2>Your next connection starts here.</h2>
       <div className="quick">
         <button onClick={()=>go('contacts')}><span>⇧</span><b>Import contacts</b><small>Excel or CSV with consent controls</small></button>
+        <button onClick={()=>go('bulk')}><span>◈</span><b>Bulk WhatsApp</b><small>Approved templates, address book or CSV</small></button>
         <button onClick={()=>go('send')}><span>➤</span><b>Send a personal message</b><small>One recipient, instantly</small></button>
         <button onClick={()=>go('templates')}><span>＋</span><b>Create a template</b><small>Reusable WhatsApp copy</small></button>
       </div>
@@ -327,7 +387,10 @@ function Campaigns(){
     }catch(e){setErr(e.message)}
   }
   async function viewDeliveries(c){
-    try{const d=await api('/campaigns/'+c._id+'/deliveries');setDeliveries({campaign:c,rows:d})}catch(e){setErr(e.message)}
+    try{
+      const [rows,funnel]=await Promise.all([api('/campaigns/'+c._id+'/deliveries',{fresh:true}),api('/campaigns/'+c._id+'/funnel',{fresh:true})]);
+      setDeliveries({campaign:c,rows,funnel});
+    }catch(e){setErr(e.message)}
   }
   return <div className="page">
     <Title title="Campaigns" sub="Create, schedule, send, retry and audit WhatsApp campaigns with native text formatting and image carousels." action="New campaign" onAction={()=>{setEditing(null);setDraft(blankCampaignDraft());setShow(true)}}/>
@@ -619,6 +682,32 @@ function Templates(){
   </div>
 }
 
+function CampaignFunnel({detail,onChat}){
+  const [filter,setFilter]=useState('all');
+  const [query,setQuery]=useState('');
+  const t=detail.funnel?.totals||{};
+  const buckets=[['Audience',t.audience||0,'Selected contacts'],['Excluded',t.skipped||0,'Pre-send checks'],['Delivered',t.delivered||0,(t.deliveredPct||0)+'% of eligible'],['Non-delivered',t.failed||0,(t.failedPct||0)+'% of eligible'],['Pending',t.pending||0,'Awaiting receipt'],['Read',t.read||0,(t.readPct||0)+'% of delivered'],['Replied',t.replied||0,'Customer responses']];
+  const rows=detail.rows.filter(x=>(filter==='all'||(filter==='pending'?['queued','submitted','sent'].includes(x.status):filter==='non-delivered'?x.status==='failed':filter==='delivered'?['delivered','read'].includes(x.status):x.status===filter))&&
+    (!query||[x.recipientName,x.contactId?.name,x.phone,x.error,x.skipReason,x.errorCode].some(v=>String(v||'').toLowerCase().includes(query.toLowerCase()))));
+  function exportCsv(){
+    const csv=[['Name','Phone','Status','Reason','Error code','Provider message ID','Sent at','Delivered at','Read at'],...rows.map(x=>[
+      x.recipientName||x.contactId?.name||'',x.phone,x.status,x.skipReason||x.error||'',x.errorCode||'',x.providerMessageId||'',
+      x.sentAt||'',x.deliveredAt||'',x.readAt||''
+    ])].map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
+    const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+    const link=document.createElement('a');link.href=url;link.download='campaign-deliveries-'+detail.campaign._id+'.csv';link.click();URL.revokeObjectURL(url);
+  }
+  return <section className="premiumFunnel">
+    <div className="funnelHeading"><div><small>PERFORMANCE OVERVIEW</small><h3>Campaign delivery funnel</h3><p>Every selected contact is accounted for, with receipts and failure reasons.</p></div><span className="funnelMeta">{detail.funnel?.status||detail.campaign.status}</span></div>
+    <div className="funnelCards">{buckets.map(([name,value,sub])=><article key={name}><small>{name}</small><strong>{Number(value).toLocaleString()}</strong><span>{sub}</span></article>)}</div>
+    <div className="funnelSegment" aria-label="Exclusive audience buckets">{[['Excluded',t.skipped,'#94a3b8'],['Delivered',t.delivered,'#087b56'],['Non-delivered',t.failed,'#d86e69'],['Pending',t.pending,'#d9a441']].map(([name,value,color])=><span key={name} title={name+': '+(value||0)} style={{width:(t.audience?100*(value||0)/t.audience:0)+'%',background:color}} />)}</div>
+    <div className="funnelTools"><select aria-label="Filter campaign recipients" value={filter} onChange={e=>setFilter(e.target.value)}>{[['all','All recipients'],['skipped','Excluded'],['pending','Pending'],['submitted','Dispatched'],['sent','Sent'],['delivered','Delivered'],['read','Read'],['non-delivered','Non-delivered']].map(([id,label])=><option key={id} value={id}>{label}</option>)}</select><input aria-label="Search recipients" placeholder="Search name, phone or failure" value={query} onChange={e=>setQuery(e.target.value)}/><button type="button" onClick={exportCsv}>↓ Export CSV</button></div>
+    <p className="funnelFine">{rows.length} matching recipients · Read receipts are included within Delivered (never double-counted).</p>
+    <div className="funnelRecipientList">{rows.length?rows.map(x=><div key={x._id}><div><b>{x.recipientName||x.contactId?.name||x.phone}</b><small>{x.phone}</small></div><em className={'status '+(x.status==='failed'?'failed':x.status==='delivered'||x.status==='read'?'completed':'scheduled')}>{x.status}</em><small title={x.skipReason||x.error||''}>{x.skipReason||x.error||x.errorCode||'—'}</small>{onChat&&<button type="button" onClick={()=>onChat(x)}>Chat ↗</button>}</div>):<div className="empty">No recipients match this filter.</div>}</div>
+    {!!detail.funnel?.failures?.length&&<div className="funnelReasons"><b>Failure & exclusion reasons</b>{detail.funnel.failures.map((x,i)=><span key={i}>{x.status} · {x.code||'UNKNOWN'} <strong>{x.count}</strong></span>)}</div>}
+  </section>;
+}
+
 function DeliveryTable({rows,onChat}){
   return <div className="table">
     <div className="tr delivery th"><span>Recipient</span><span>Campaign</span><span>Status</span><span>Provider</span><span>Time</span><span>Error</span>{onChat&&<span>Chat</span>}</div>
@@ -643,8 +732,8 @@ function Reports({go}){
   async function openCampaign(c){
     setErr('');
     try{
-      const rows=await api('/campaigns/'+c._id+'/deliveries',{fresh:true});
-      setOpened({campaign:c,rows});
+      const [rows,funnel]=await Promise.all([api('/campaigns/'+c._id+'/deliveries',{fresh:true}),api('/campaigns/'+c._id+'/funnel',{fresh:true})]);
+      setOpened({campaign:c,rows,funnel});
     }catch(e){setErr(e.message)}
   }
   function openChat(x){
@@ -950,6 +1039,11 @@ function WhatsAppApi({go}){
   const[coexistence,setCoexistence]=useState(false);
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
+  const[numberSearch,setNumberSearch]=useState('');
+  const[numberFilter,setNumberFilter]=useState('all');
+  const[showSetup,setShowSetup]=useState(false);
+  const[syncing,setSyncing]=useState(false);
+
 
   async function load(){
     setErr('');
@@ -966,6 +1060,13 @@ function WhatsAppApi({go}){
   useEffect(()=>{load()},[]);
   const meta=connections.filter(x=>x.provider==='meta');
   const demo=connections.filter(x=>x.provider==='demo');
+  const shown=meta.filter(x=>{
+    const query=numberSearch.toLowerCase().trim();
+    const matches=!query||[x.name,x.displayPhoneNumber,x.phoneNumberId,x.businessAccountId].some(v=>String(v||'').toLowerCase().includes(query));
+    const health=x.enabled&&x.connectionStatus==='connected'&&x.planAllowed!==false;
+    return matches&&(numberFilter==='all'||(numberFilter==='ready'&&health)||(numberFilter==='attention'&&!health)||(numberFilter==='default'&&x.isDefault));
+  });
+
   const allowed=subscription?.access?.allowed!==false;
   const canAdd=allowed&&subscription&&subscription.used<subscription.max;
   const verifyToken=connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
@@ -1106,11 +1207,47 @@ function WhatsAppApi({go}){
     }catch(e){setErr(e.message)}
   }
 
+  async function syncDetails(){
+    if(syncing||!allowed||!meta.length)return;
+    setSyncing(true);setErr('');setMsg('');
+    let succeeded=0,failed=0;
+    for(const x of meta.filter(x=>x.enabled)){
+      try{await api('/integrations/whatsapp-connections/'+x.id+'/test',{method:'POST'});succeeded++}
+      catch{failed++}
+    }
+    try{await load()}catch(e){setErr(e.message)}
+    setMsg(succeeded+' account(s) synchronized with Meta'+(failed?', '+failed+' need attention.':'.'));
+    setSyncing(false);
+  }
+
   return <div className="page">
-    <div className="title"><div><span>WHATSAPP CLOUD API</span><h1>Meta WhatsApp API</h1><p>Connect Meta through Facebook Embedded Signup or use manual credentials as an advanced option.</p></div></div>
+    <div className="title numbersHeading"><div><span>WHATSAPP MANAGER</span><h1>Numbers</h1><p>Manage your Meta WhatsApp numbers in one place. Search, check connection health and connect more numbers within your subscription.</p></div><div className="numbersTopStat"><strong>{meta.length}</strong><span>connected profiles</span></div></div>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
 
-    <section className="facebookConnectHero">
+
+    <section className="whatsappApiHero">
+      <div><small>SUBSCRIPTION LIMIT</small><h2>{subscription?.used||0} of {subscription?.max||0} Meta connections used</h2><p>{subscription?.plan||'trial'} plan · {subscription?.access?.state||'loading'} access</p></div>
+      <div className="apiUsageMeter"><i style={{width:Math.min(100,((subscription?.used||0)/Math.max(1,subscription?.max||1))*100)+'%'}}></i></div>
+      {!allowed&&<Notice type="bad">Meta WhatsApp API management is locked until your subscription or trial is active.</Notice>}
+      {allowed&&subscription?.used>=subscription?.max&&<Notice type="bad">You have reached your plan limit. Upgrade your subscription to connect another WhatsApp number.</Notice>}
+    </section>
+
+
+    <section className="numberManagerPanel" aria-label="WhatsApp numbers">
+      <div className="numberControlBar">
+        <label className="numberSearch"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search by business name or phone number" aria-label="Search WhatsApp numbers" value={numberSearch} onChange={e=>setNumberSearch(e.target.value)}/></label>
+        <label className="numberFilterSelect"><span>Filter</span><select aria-label="Filter WhatsApp numbers" value={numberFilter} onChange={e=>setNumberFilter(e.target.value)}>
+          <option value="all">All numbers</option><option value="ready">Ready to send</option><option value="attention">Needs attention</option><option value="default">Default sender</option>
+        </select></label>
+      </div>
+      <div className="numbersActionStack">
+        <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
+        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={()=>{setEditing(null);setShowForm(false);setShowSetup(v=>!v)}}>{showSetup?'−  Close connection options':'+  Add New Number'}</button>
+        {!canAdd&&<small>{!allowed?'Subscription inactive — activate a plan to connect numbers.':'Your plan connection limit has been reached.'}</small>}
+      </div>
+      {showSetup&&<div className="numbersSetup" id="numbersSetup">
+        <div className="numbersSetupIntro"><b>Connect a WhatsApp Business number</b><span>Facebook Embedded Signup is recommended. Advanced manual API configuration remains available.</span></div>
+        <section className="facebookConnectHero">
       <div className="facebookConnectCopy">
         <span className="facebookLogo">f</span>
         <div><small>RECOMMENDED</small><h2>Connect with Facebook</h2><p>Sign in to Meta, choose your Business Portfolio, WhatsApp Business Account and phone number. WA SANTA securely completes the API connection for you.</p></div>
@@ -1122,15 +1259,7 @@ function WhatsAppApi({go}){
         {embedded?.enabled&&<small>Meta-hosted login · WA SANTA never sees your Facebook password</small>}
       </div>
     </section>
-
-    <section className="whatsappApiHero">
-      <div><small>SUBSCRIPTION LIMIT</small><h2>{subscription?.used||0} of {subscription?.max||0} Meta connections used</h2><p>{subscription?.plan||'trial'} plan · {subscription?.access?.state||'loading'} access</p></div>
-      <div className="apiUsageMeter"><i style={{width:Math.min(100,((subscription?.used||0)/Math.max(1,subscription?.max||1))*100)+'%'}}></i></div>
-      {!allowed&&<Notice type="bad">Meta WhatsApp API management is locked until your subscription or trial is active.</Notice>}
-      {allowed&&subscription?.used>=subscription?.max&&<Notice type="bad">You have reached your plan limit. Upgrade your subscription to connect another WhatsApp number.</Notice>}
-    </section>
-
-    <section className="manualConnectionBox">
+        <section className="manualConnectionBox">
       <div className="sectionHead">
         <div><small>ADVANCED</small><h2>Manual Meta API connection</h2><p>Use this only if you already have a Phone Number ID, WABA ID and access token.</p></div>
         {canAdd&&<button onClick={()=>{setEditing(null);setShowForm(!showForm)}}>{showForm?'Hide manual form':'Connect manually'}</button>}
@@ -1148,36 +1277,33 @@ function WhatsAppApi({go}){
         </form>
       </div>}
     </section>
-
-    <section>
-      <div className="sectionHead"><div><h2>Connected Meta WhatsApp profiles</h2><p>Connections remain saved until you explicitly disconnect them.</p></div></div>
-      <div className="connectionGrid whatsappConnectionGrid">
-        {meta.map(x=><article className={'connectionCard '+(x.isDefault?'defaultConnection':'')} key={x.id}>
-          <div className="cardTop"><div><small>{x.connectMethod==='embedded'?'FACEBOOK EMBEDDED SIGNUP':'META CLOUD API'}</small><h3>{x.name}</h3></div><div className="connectionBadges">{x.isDefault&&<em className="status completed">Default sender</em>}<em className={'status '+(x.connectionStatus==='error'?'failed':x.connectionStatus==='disabled'?'cancelled':'completed')}>{x.connectionStatus==='error'?'Needs attention':x.connectionStatus||'connected'}</em></div></div>
-          <div className="connectionPhone">{x.displayPhoneNumber||'Phone Number ID: '+x.phoneNumberId}</div>
-          <div className="connectionMeta">
-            <span>{x.connectMethod==='embedded'?'Connected via Facebook':'Manual connection'}</span>
-            <span>{x.enabled?'Enabled':'Disabled'}</span>
+      </div>}
+      <div className="numberListTitle"><div><h2>Connected WhatsApp numbers</h2><p>Only API connection status is shown here. Meta business verification is a separate process.</p></div><span>{shown.length} of {meta.length} shown</span></div>
+      <div className="numberList" role="list">
+        <div className="numberListLabels" aria-hidden="true"><span>S.No.</span><span>Business details</span><span>Connection status</span><span>Manage</span></div>
+        {shown.map((x,index)=><article className="numberRow" role="listitem" key={x.id}>
+          <span className="numberOrdinal">{String(index+1).padStart(2,'0')}</span>
+          <div className="numberMainDetail"><b><span aria-hidden="true" className="numberMetaSymbol">∞</span>{x.name}</b><span className="numberPhone">{x.displayPhoneNumber||'Phone Number ID: '+x.phoneNumberId}</span>
+            <small>Meta Cloud API · {x.connectMethod==='embedded'?'Connected with Facebook':'Manual setup'}</small>
+            <small>WABA: {x.businessAccountId||'Not provided'} · Last checked: {fmt(x.lastCheckedAt)}</small></div>
+          <div className="numberStates">
+            {x.isDefault&&<span className="numberStatus default">Default sender</span>}
+            {x.planAllowed===false&&<span className="numberStatus warning">Outside plan limit</span>}
+            {!x.enabled&&<span className="numberStatus disabled">Disabled</span>}
+            {x.enabled&&<span className={'numberStatus '+(x.connectionStatus==='connected'?'good':'warning')}>{x.connectionStatus==='connected'?'API connected':'Needs attention'}</span>}
+            {x.lastError&&<small className="numberStatusError">{x.lastError}</small>}</div>
+          <div className="numberRowActions">
+            <button type="button" onClick={()=>act(x,'test')} disabled={!x.enabled||!allowed}>Test / Sync</button>
+            <button type="button" onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
+            <button type="button" onClick={()=>{setEditing(x);setShowSetup(true);setShowForm(true);requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}))}}>Edit</button>
+            {!x.isDefault&&<button type="button" onClick={()=>act(x,'default')} disabled={x.planAllowed===false||!x.enabled}>Make default</button>}
+            <button type="button" className="numberDanger" onClick={()=>act(x,'delete')}>Disconnect</button>
           </div>
-          <div className="connectionDetails">
-            <span><small>WhatsApp Business Account</small><b>{x.businessAccountId||'Not added'}</b></span>
-            <span><small>OTP template</small><b>{x.otpTemplateName||'Not configured'}</b></span>
-            <span><small>Access token</small><b>{x.hasAccessToken?'Encrypted & stored':'Missing'}</b></span>
-          </div>
-          {x.lastError&&<Notice type="bad">{x.lastError} — profile remains saved until you disconnect it.</Notice>}
-          <footer><span>{x.connectedAt?'Connected '+fmt(x.connectedAt):'Messaging connection'}</span><div className="rowActions">
-            <button onClick={()=>act(x,'test')}>Test</button>
-            <button onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
-            <button onClick={()=>{setEditing(x);setShowForm(true)}}>Edit</button>
-            {!x.isDefault&&<button onClick={()=>act(x,'default')}>Make default</button>}
-            <button className="danger" onClick={()=>act(x,'delete')}>Disconnect</button>
-          </div></footer>
         </article>)}
-        {!meta.length&&<Empty text="No Meta WhatsApp profiles connected yet."/>}
+        {!shown.length&&<div className="numberEmpty">{meta.length?'No numbers match your search or filter.':'No WhatsApp numbers connected yet. Use Add New Number to get started.'}</div>}
       </div>
     </section>
-
-    <div className="accountGrid metaSetupGrid">
+    {showSetup&&<div className="accountGrid metaSetupGrid">
       <section>
         <h2>Meta webhook setup</h2>
         <p>Embedded Signup automatically subscribes each selected WABA to your app. Keep this callback configured in your Meta app.</p>
@@ -1194,8 +1320,7 @@ function WhatsAppApi({go}){
           <span>4 <b>HTTPS + Webhooks</b><small>Your current Render deployment already uses HTTPS</small></span>
         </div>
       </section>
-    </div>
-
+    </div>}
     {!!demo.length&&<section className="demoProviderInfo"><h2>Demo provider</h2><p>The built-in demo provider remains available for testing without sending real WhatsApp messages.</p></section>}
     <div className="pageBottomActions"><button onClick={()=>go('profile')}>← Back to Profile</button><button onClick={()=>go('subscription')}>View subscription limits</button></div>
   </div>
@@ -1274,14 +1399,24 @@ function SuperAdmin(){
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
   const[workspacePlans,setWorkspacePlans]=useState({});
+  const[adminSearch,setAdminSearch]=useState('');
+  const[adminFilter,setAdminFilter]=useState('all');
+  const[adminTab,setAdminTab]=useState('overview');
+  const[auditEvents,setAuditEvents]=useState([]);
   async function load(){
     setErr('');
     try{
-      const [overview,meta,openai]=await Promise.all([api('/admin/overview'),api('/admin/meta-settings'),api('/admin/openai-settings')]);
+      const [overview,meta,openai]=await Promise.all([api('/admin/overview',{fresh:true}),api('/admin/meta-settings',{fresh:true}),api('/admin/openai-settings',{fresh:true})]);
       setData(overview);setMetaSettings(meta);setOpenaiSettings(openai);
     }catch(e){setErr(e.message)}
   }
   useEffect(()=>{load()},[]);
+  useEffect(()=>{
+    if(adminTab!=='audit')return;
+    let live=true;
+    api('/admin/audit?limit=100',{fresh:true}).then(events=>{if(live)setAuditEvents(events)}).catch(e=>{if(live)setErr(e.message)});
+    return()=>{live=false};
+  },[adminTab]);
   async function saveMetaSettings(e){
     e.preventDefault();setErr('');setMsg('');
     const o=Object.fromEntries(new FormData(e.currentTarget));
@@ -1377,18 +1512,41 @@ function SuperAdmin(){
     }catch(e){setErr(e.message)}
   }
   if(!data)return <div className="page">{err?<Notice type="bad">{err}</Notice>:<Loading/>}</div>;
-  return <div className="page">
-    <Title title="Super Admin" sub="Control WA SANTA plans, pricing, tenant trials and subscriptions." action="Create plan" onAction={()=>{setEditing(null);setShowPlan(true)}}/>
+  const filteredWorkspaces=data.workspaces.filter(w=>{
+    const hay=[w.name,w.owner?.name,w.owner?.email,w._id].join(' ').toLowerCase();
+    return hay.includes(adminSearch.trim().toLowerCase())&&(adminFilter==='all'||(adminFilter==='active'?w.access?.allowed:!w.access?.allowed));
+  });
+  const adminTabs=[['overview','Overview'],['tenants','Tenants'],['approvals','Approvals'],['plans','Plans'],['integrations','Integrations'],['audit','Audit trail']];
+  return <div className="page adminEnterprise">
+    <div className="adminHero">
+      <div><span className="adminOverline"><i/> CONTROL CENTER · PLATFORM ADMINISTRATION</span><h1>Enterprise command center</h1><p>Govern tenants, subscription revenue, approvals and connected business infrastructure from one secure workspace.</p></div>
+      <div className="adminHeroActions"><span className="adminLiveBadge">● Platform administration</span><button type="button" onClick={load}>↻ Refresh data</button><button type="button" className="primary" onClick={()=>{setAdminTab('plans');setEditing(null);setShowPlan(true)}}>+ New plan</button></div>
+    </div>
+    <nav className="adminTabs" aria-label="Admin workspace sections">{adminTabs.map(([id,label])=><button type="button" key={id} aria-current={adminTab===id?'page':undefined} className={adminTab===id?'active':''} onClick={()=>setAdminTab(id)}>{label}{id==='approvals'&&data.pendingRequests.length>0&&<b>{data.pendingRequests.length}</b>}</button>)}</nav>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
 
-    <div className="metrics">
-      <Metric label="Plans" value={data.plans.length} sub={data.plans.filter(x=>x.active).length+' active'}/>
-      <Metric label="Workspaces" value={data.workspaces.length} sub="Registered tenants"/>
-      <Metric label="Pending requests" value={data.pendingRequests.length} sub="Need approval"/>
-      <Metric label="Expired / locked" value={data.workspaces.filter(x=>!x.access?.allowed).length} sub="Subscription required"/>
+    <div className="metrics adminKpis">
+      <Metric label="Projected monthly plan value" value={'₹'+Number(data.insights?.projectedMonthlyRevenue||0).toLocaleString('en-IN')} sub="Active plan prices · not collected revenue"/>
+      <Metric label="Active tenants" value={data.insights?.activeTenants??0} sub={data.workspaces.length+' workspaces shown'}/>
+      <Metric label="Pending approvals" value={data.pendingRequests.length} sub="Require admin review"/>
+      <Metric label="14-day delivery rate" value={(data.insights?.deliveryRateLast14Days||0)+'%'} sub={(data.insights?.deliveredLast14Days||0)+' delivered · '+(data.insights?.dispatchedLast14Days||0)+' dispatched'}/>
     </div>
+    {adminTab==='overview'&&<div className="adminMiniInsights"><span><small>PLATFORM USERS</small><b>{data.insights?.totalUsers??0}</b></span><span><small>CAMPAIGNS CREATED</small><b>{data.insights?.totalCampaigns??0}</b></span><span><small>ACTIVE PLANS</small><b>{data.plans.filter(x=>x.active).length}</b></span><span><small>LOCKED WORKSPACES</small><b>{data.workspaces.filter(x=>!x.access?.allowed).length}</b></span></div>}
 
-    <section className="adminMetaSettings">
+    {(adminTab==='overview'||adminTab==='audit')&&<section className="adminAudit">
+      <div className="sectionHead"><div><small>GOVERNANCE & COMPLIANCE</small><h2>Administration activity</h2><p>Read-only record of plan, subscription and integration administration. Sensitive credential values are never logged.</p></div></div>
+      <div className="table"><div className="tr adminAuditRow th"><span>Activity</span><span>Actor</span><span>Target</span><span>Recorded</span></div>
+        {(adminTab==='audit'?auditEvents:data.recentAudit||[]).map(x=><div className="tr adminAuditRow" key={x._id}>
+          <span><b>{String(x.action||'').replaceAll('.',' · ')}</b><small>{x.description||'Administrative action'}</small></span>
+          <span>{x.actorId?.name||x.actorId?.email||'Administrator'}</span>
+          <span>{x.targetType||'—'} <small>{x.targetId||''}</small></span>
+          <span>{fmt(x.createdAt)}</span>
+        </div>)}{!(adminTab==='audit'?auditEvents:data.recentAudit||[]).length&&<Empty text="New administrator actions will be recorded here."/>}
+      </div>
+      {adminTab==='audit'&&<p className="muted">Showing up to 100 most recent administrator actions. Credential values and access tokens are never included in audit descriptions.</p>}
+    </section>}
+
+    {(adminTab==='overview'||adminTab==='integrations')&&<section className="adminMetaSettings">
       <div className="sectionHead">
         <div>
           <small>META PLATFORM</small>
@@ -1417,9 +1575,9 @@ function SuperAdmin(){
         <span><b>Where to get these values</b><small>Meta for Developers → your app → App settings / Facebook Login for Business → Embedded Signup configuration.</small></span>
         <span><b>Security</b><small>The App Secret is encrypted before being stored and is never returned to the browser after save.</small></span>
       </div>
-    </section>
+    </section>}
 
-    <section className="adminOpenAISettings">
+    {(adminTab==='overview'||adminTab==='integrations')&&<section className="adminOpenAISettings">
       <div className="sectionHead">
         <div>
           <small>OPENAI</small>
@@ -1448,9 +1606,9 @@ function SuperAdmin(){
         <span><b>Privacy</b><small>AI recommendations use the business profile and aggregate workspace metrics. Contact names, phone numbers and email addresses are excluded from AI context.</small></span>
         <span><b>Control</b><small>AI creates recommendations and drafts only. Users must explicitly review and send or schedule campaigns.</small></span>
       </div>
-    </section>
+    </section>}
 
-    {showPlan&&<div className="panel"><form key={editing?editing._id:'new-plan'} className="formGrid" onSubmit={savePlan}>
+    {(adminTab==='plans')&&showPlan&&<div className="panel"><form key={editing?editing._id:'new-plan'} className="formGrid" onSubmit={savePlan}>
       <label>Plan name<input name="name" defaultValue={editing?.name||''} required/></label>
       <label>Slug<input name="slug" defaultValue={editing?.slug||''} placeholder="starter" required/></label>
       <label>Monthly price<input type="number" min="0" step="0.01" name="priceMonthly" defaultValue={editing?.priceMonthly??''} required/></label>
@@ -1465,17 +1623,17 @@ function SuperAdmin(){
       <div className="actions full"><button type="button" onClick={()=>{setShowPlan(false);setEditing(null)}}>Cancel</button><button className="primary">{editing?'Update plan':'Create plan'}</button></div>
     </form></div>}
 
-    <section>
+    {(adminTab==='overview'||adminTab==='plans')&&<section>
       <div className="sectionHead"><div><h2>Subscription plans</h2><p>These are the only plans tenants can request.</p></div></div>
       <div className="adminPlanGrid">{data.plans.map(p=><article key={p._id}>
         <div className="cardTop"><div><small>{p.active?'PUBLISHED':'HIDDEN'}</small><h3>{p.name}</h3></div><em className={'status '+(p.active?'completed':'cancelled')}>{p.active?'active':'disabled'}</em></div>
         <div className="priceValue">{p.currency==='INR'?'₹':p.currency+' '}{Number(p.priceMonthly).toLocaleString()}<span>/month</span></div>
         <p>{p.metaConnections} WhatsApp · {p.teamMembers} team · {Number(p.monthlyMessages).toLocaleString()} messages</p>
-        <footer><span>{p.slug}</span><div className="rowActions"><button onClick={()=>{setEditing(p);setShowPlan(true)}}>Edit</button><button className="danger" onClick={()=>deletePlan(p)}>Delete</button></div></footer>
+        <footer><span>{p.slug}</span><div className="rowActions"><button onClick={()=>{setAdminTab('plans');setEditing(p);setShowPlan(true)}}>Edit</button><button className="danger" onClick={()=>deletePlan(p)}>Delete</button></div></footer>
       </article>)}</div>
-    </section>
+    </section>}
 
-    <section>
+    {(adminTab==='overview'||adminTab==='approvals')&&<section>
       <div className="sectionHead"><div><h2>Pending subscription requests</h2><p>Approve to activate paid access; reject to keep the workspace locked/trial state.</p></div></div>
       <div className="table">
         <div className="tr adminRequest th"><span>Workspace</span><span>Owner</span><span>Plan</span><span>Price</span><span>Requested</span><span>Action</span></div>
@@ -1488,13 +1646,14 @@ function SuperAdmin(){
           <span className="inlineActions"><button className="primary" onClick={()=>requestAction(x,'approve')}>Approve</button><button className="danger" onClick={()=>requestAction(x,'reject')}>Reject</button></span>
         </div>)}{!data.pendingRequests.length&&<Empty text="No pending subscription requests."/>}
       </div>
-    </section>
+    </section>}
 
-    <section>
-      <div className="sectionHead"><div><h2>Tenant workspaces</h2><p>Manually restart a 7-day trial, activate a plan, or expire access.</p></div></div>
+    {(adminTab==='overview'||adminTab==='tenants')&&<section>
+      <div className="sectionHead"><div><h2>Tenant workspaces</h2><p>Search and manage tenant lifecycle, plan assignments and access.</p></div></div>
+      <div className="adminDirectoryTools"><input type="search" placeholder="Search workspace, owner or email…" value={adminSearch} onChange={e=>setAdminSearch(e.target.value)}/><select value={adminFilter} onChange={e=>setAdminFilter(e.target.value)} aria-label="Workspace access filter"><option value="all">All workspaces</option><option value="active">Access active</option><option value="locked">Expired / locked</option></select><small>{filteredWorkspaces.length} of {data.workspaces.length} workspaces</small></div>
       <div className="table">
         <div className="tr adminWorkspace th"><span>Workspace</span><span>Owner</span><span>Access</span><span>Plan</span><span>Ends</span><span>Controls</span></div>
-        {data.workspaces.map(w=><div className="tr adminWorkspace" key={w._id}>
+        {filteredWorkspaces.map(w=><div className="tr adminWorkspace" key={w._id}>
           <span><b>{w.name}</b><small>{String(w._id)}</small></span>
           <span>{w.owner?.email||'—'}</span>
           <span><em className={'status '+(w.access?.allowed?'completed':'failed')}>{w.access?.state||w.subscriptionStatus}</em></span>
@@ -1508,7 +1667,7 @@ function SuperAdmin(){
           </span>
         </div>)}
       </div>
-    </section>
+    </section>}
   </div>
 }
 
@@ -1516,13 +1675,14 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='overview')return <Overview go={go}/>;
   if(id==='ai')return <AICopilot go={go} session={session}/>;
   if(id==='send')return <SingleSend/>;
+  if(id==='bulk')return <BulkWhatsApp go={go}/>;
   if(id==='campaigns')return <Campaigns/>;
   if(id==='contacts')return <Contacts/>;
   if(id==='schedule')return <Schedule/>;
   if(id==='templates')return <Templates/>;
   if(id==='reports')return <Reports go={go}/>;
   if(id==='inbox')return <Inbox/>;
-  if(id==='chatbot')return <FlowBuilder/>;
+  if(id==='chatbot')return <FlowStudio session={session}/>;
   if(id==='whatsapp-api')return <WhatsAppApi go={go}/>;
   if(id==='payments')return <Payments session={session} go={go}/>;
   if(id==='subscription')return <Subscription onSessionUpdate={onSessionUpdate}/>;

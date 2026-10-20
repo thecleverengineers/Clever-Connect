@@ -12,14 +12,20 @@ r.get('/conversations',async(req,res)=>{
   const list=await ChatConversation.find(query).sort({lastMessageAt:-1}).limit(150)
     .populate('contactId','name phone consentStatus')
     .populate('integrationId','name displayPhoneNumber').lean();
-  res.json(list);
+  const threads=await ChatMessage.aggregate([
+    {$match:{workspaceId:req.workspaceId,campaignId:{$ne:null},direction:'in'}},
+    {$sort:{createdAt:-1}},
+    {$group:{_id:'$conversationId',campaignId:{$first:'$campaignId'}}}
+  ]);
+  const byThread=new Map(threads.map(x=>[String(x._id),String(x.campaignId)]));
+  res.json(list.map(x=>({...x,lastCampaignId:byThread.get(String(x._id))||null,isAssignedToMe:!!x.assignedTo&&String(x.assignedTo)===String(req.user._id)})));
 });
 r.get('/conversations/:id/messages',async(req,res)=>{
   if(!mongoose.isValidObjectId(req.params.id))return res.sendStatus(404);
   const convo=await ChatConversation.findOne({_id:req.params.id,workspaceId:req.workspaceId}).lean();
   if(!convo)return res.sendStatus(404);
   const rows=await ChatMessage.find({workspaceId:req.workspaceId,conversationId:convo._id})
-    .sort({createdAt:-1}).limit(150).lean();
+    .sort({createdAt:-1}).limit(150).populate('campaignId','name').lean();
   res.json({conversation:convo,messages:rows.reverse()});
 });
 r.post('/conversations/:id/read',async(req,res)=>{

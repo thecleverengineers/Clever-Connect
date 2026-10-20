@@ -1,0 +1,99 @@
+/* Premium, responsive bulk WhatsApp send console */
+.bulkWhatsApp{max-width:1260px;margin:0 auto;color:#17372a}
+.bwHeading{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:22px}
+.bwHeading h1{font-weight:820;font-size:clamp(28px,3vw,38px);letter-spacing:-.052em;margin:8px 0}
+.bwHeading p{font-size:13px;color:#728778;line-height:1.55;margin:0;max-width:700px}
+.bwEyebrow{font-size:10px;font-weight:850;letter-spacing:.15em;color:#0c875d;display:flex;align-items:center;gap:8px}
+.bwEyebrow span{font-size:17px}
+.bwOutline{border-radius:11px;border:1px solid #cde0d4;background:#fff;padding:11px 15px;color:#167653;font-weight:750;white-space:nowrap}
+.bwLayout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(270px,.8fr);gap:23px;align-items:start}
+.bwMain{display:grid;gap:18px;min-width:0}
+.bwCard{border:1px solid #e2ebe4;background:#fff;border-radius:20px;padding:25px;box-shadow:0 7px 28px #11462a0b}
+.bwCardHeader{display:flex;gap:12px;align-items:center;margin-bottom:24px}
+.bwStep{display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:10px;background:#e7f6eb;color:#087b56;font-size:11px;font-weight:800}
+.bwCardHeader>div{flex:1}
+.bwCardHeader h2{font-size:17px;letter-spacing:-.025em;margin:0;color:#173b2c}
+.bwCardHeader p{font-size:12px;color:#83938b;line-height:1.4;margin:5px 0 0}
+.bwHeaderIcon{font-size:23px;color:#b9d7c7}
+.bwLabel{font-size:12px;font-weight:750;color:#3c5948;display:flex;justify-content:space-between;gap:10px;margin:0 0 10px}
+.bwLabel small{color:#93a59b;font-weight:500}
+.bulkWhatsApp input:not([type=checkbox]):not([type=file]),.bulkWhatsApp select,.bulkWhatsApp textarea{width:100%;font-family:inherit;outline:0;border:1px solid #dce7df;border-radius:12px;background:#fcfefd;color:#1e4532;padding:14px 15px;font-size:14px;transition:border-color .15s,box-shadow .15s}
+.bulkWhatsApp input:focus-visible,.bulkWhatsApp select:focus-visible,.bulkWhatsApp textarea:focus-visible{border-color:#30a978;box-shadow:0 0 0 3px #32bd7d20}
+.bulkWhatsApp select{appearance:auto;min-height:48px}
+.bulkWhatsApp textarea{resize:vertical;min-height:140px;line-height:1.7}
+.bulkWhatsApp select:disabled{opacity:.6}
+.bwAccountFoot{display:flex;align-items:center;flex-wrap:wrap;gap:11px;margin-top:16px;font-size:11px;color:#819388}
+.bwAccountFoot button,.bwTextAction,.bwInlineAlert button{background:none;border:0;color:#087b56;font-weight:750;padding:0;text-decoration:none}
+.bwAccountFoot button{margin-left:auto}
+.bwBadge{display:inline-block;border-radius:30px;background:#e7f7ed;padding:7px 10px;color:#08774f;font-size:11px;font-weight:800;white-space:nowrap}
+.bwBadgeMuted{background:#f4f1ec;color:#a17b61}
+.bwModeTabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;background:#f8faf8;border:1px solid #e0eae2;border-radius:13px;overflow:hidden;margin-bottom:19px}
+.bwModeTabs button{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 6px;border:0;border-right:1px solid #e3ebe5;background:transparent;color:#688374;font-size:12px;font-weight:800;white-space:nowrap}
+.bwModeTabs button:last-child{border-right:0}
+.bwModeTabs button.active{background:#e6f5ea;color:#087b56;box-shadow:inset 0 -2px 0 #0d945f}
+.bwModeTabs button span{font-size:16px}
+.bwRecipientArea{display:grid;gap:10px}
+.bwRecipientArea>.bwLabel{margin-bottom:0}
+.bwRecipientArea>small,.bwDrop small{display:block;color:#8a9d90;font-size:11px;line-height:1.6}
+.bwRecipientSummary{margin-top:22px;padding:15px 0 0;border-top:1px solid #e9efeb;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.bwRecipientSummary>div{display:flex;flex-direction:column;gap:5px}
+.bwRecipientSummary strong{font-size:24px;letter-spacing:-.04em;line-height:1;color:#087b56}
+.bwRecipientSummary>div:nth-child(n+2) strong{color:#6b8173}
+.bwRecipientSummary span{color:#8a9b91;font-size:11px}
+.bwBookTools{display:flex;align-items:center;gap:10px;font-size:11px;color:#8c9b92}
+.bwBookTools span{margin-right:auto}
+.bwBookTools button{border:0;background:none;color:#087b56;font-weight:750;padding:5px}
+.bwBook{max-height:270px;overflow:auto;border:1px solid #e4ede7;border-radius:12px}
+.bwContact{padding:10px 12px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #eff2ef;cursor:pointer}
+.bwContact:last-child{border:0}
+.bwContact input{accent-color:#087b56}
+.bwContactAvatar{height:30px;width:30px;display:grid;place-items:center;border-radius:50%;background:#e6f3eb;color:#347e54;font-size:12px;font-weight:800}
+.bwContactInfo{display:grid;gap:2px;min-width:0;flex:1}
+.bwContactInfo b{font-size:12px;color:#355444}
+.bwContactInfo small{font-size:10px;color:#8da297}
+.bwContactReady,.bwContactBlocked{font-size:10px;color:#0b8757;white-space:nowrap}
+.bwContactBlocked{color:#b16c61}
+.bwEmpty{padding:20px;color:#788f80;font-size:12px}
+.bwDrop{position:relative;border:1px dashed #a9d5b9;border-radius:13px;background:#f5fbf7;padding:29px 18px;display:grid;justify-items:center;gap:8px;text-align:center;cursor:pointer;color:#247653}
+.bwDrop>span{font-size:26px}
+.bwDrop strong{font-size:13px}
+.bwDrop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.bwVariable{display:grid;gap:8px;font-size:12px;font-weight:800;color:#466450;margin:16px 0}
+.bwVariable small{color:#8b9f90;font-weight:500}
+.bwTemplateDetails{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:13px 0 18px;font-size:12px;color:#819185}
+.bwInlineAlert{margin-top:14px;background:#fff8ec;border:1px solid #f7e7ce;color:#8d6b32;padding:11px 13px;border-radius:11px;font-size:11px;line-height:1.6}
+.bwDeliveryChoice{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.bwDeliveryChoice button{border:1px solid #e1eae4;border-radius:12px;padding:14px;background:#fcfefd;color:#759184;font-weight:800}
+.bwDeliveryChoice button.active{background:#e8f7ed;border-color:#99d5b1;color:#08794e}
+.bwDisclaimer{background:#f2f8f4;color:#6b8a77;font-size:11px;line-height:1.65;margin:23px 0;border-radius:12px;padding:13px}
+.bwSubmit{width:100%;border:0!important;background:linear-gradient(110deg,#087947,#16985e)!important;color:#fff!important;border-radius:12px;padding:16px!important;font-size:14px;font-weight:850;box-shadow:0 9px 18px #0d8a5427}
+.bwSubmit:disabled{opacity:.48;cursor:not-allowed;box-shadow:none}
+.bwViewCreated{display:block;margin:12px auto 0;background:#fff;color:#087b56;border:0;font-weight:800}
+.bwSide{position:sticky;top:96px}
+.bwSidePanel{padding:20px;border:1px solid #e4ebe5;background:#fff;border-radius:20px;box-shadow:0 10px 35px #113c2910}
+.bwSideTitle{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:8px}
+.bwSideTitle>span:first-child{font-size:10px;letter-spacing:.1em;font-weight:850;color:#708c7a}
+.bwPreviewMark{color:#128a55;font-size:11px;font-weight:850}
+.bwPreview{border-radius:14px;padding:13px;background:linear-gradient(140deg,#e0eae2,#f0f6ef);min-height:240px}
+.bwPreviewHeader{display:flex;align-items:center;gap:9px;border-radius:10px;background:#fff;padding:10px;margin-bottom:18px}
+.bwPreviewHeader>span{display:grid;place-items:center;background:#def0e5;color:#0a8757;border-radius:50%;width:34px;height:34px}
+.bwPreviewHeader>div{display:grid;gap:4px}
+.bwPreviewHeader b{font-size:11px;color:#214832}
+.bwPreviewHeader small{font-size:9px;color:#8c9e91}
+.bwMessageBubble{white-space:pre-wrap;overflow-wrap:anywhere;max-width:96%;border-radius:12px 12px 4px 12px;background:#dcf6df;padding:13px 14px 10px;color:#244734;font-size:12px;line-height:1.7;margin:0 0 17px auto;box-shadow:0 4px 12px #284f3010}
+.bwMessageBubble>small{display:block;text-align:right;font-size:9px;color:#739a80;margin-top:7px}
+.bwPreviewFooter{font-size:10px;line-height:1.55;color:#587966;display:flex;gap:6px;align-items:center}
+.bwPreviewFooter span{font-size:15px}
+.bwSideDivider{height:1px;background:#e7eee9;margin:20px 0}
+.bwSidePanel h3{font-size:15px;color:#234635;margin:0 0 13px}
+.bwSummaryLine{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid #edf2ee;font-size:11px}
+.bwSummaryLine span{color:#859a8b;flex-shrink:0}
+.bwSummaryLine b{font-weight:750;color:#315441;text-align:right;overflow-wrap:anywhere}
+.bwSideFine{display:block;color:#82978b;font-size:10px;line-height:1.7;margin-top:18px}
+.bwNotice{padding:12px 15px;border:1px solid #d8e8dd;background:#f2faf5;border-radius:11px;color:#347252;margin-bottom:16px;font-size:12px}
+.bwError{background:#fff0ed;border-color:#f6d6d1;color:#aa5549}
+.bwSuccess{background:#ebf9ef;border-color:#b9e1c8;color:#0e7048}
+.bwNotice button{border:0;background:none;text-decoration:underline;color:inherit;font-weight:800}
+@media(max-width:1100px){.bwLayout{grid-template-columns:minmax(0,1fr) minmax(250px,.7fr);gap:13px}.bwCard{padding:20px}}
+@media(max-width:850px){.bwLayout{grid-template-columns:1fr}.bwSide{position:static}.bwSidePanel{padding:16px}.bwCard{padding:19px}.bwPreview{max-width:100%}}
+@media(max-width:600px){.bwHeading{align-items:flex-start;flex-direction:column;gap:12px;margin-bottom:17px}.bwHeading h1{font-size:29px}.bwOutline{width:100%}.bwMain{gap:12px}.bwCard{padding:17px 14px;border-radius:16px}.bwCardHeader{margin-bottom:18px}.bwCardHeader h2{font-size:16px}.bwCardHeader p{font-size:11px}.bwModeTabs button{font-size:10px;gap:4px;padding:13px 2px}.bwModeTabs button span{font-size:14px}.bwAccountFoot{gap:8px}.bwAccountFoot button{margin-left:0}.bwRecipientSummary strong{font-size:21px}.bwRecipientSummary span{font-size:10px}.bwContactReady,.bwContactBlocked{font-size:9px}.bulkWhatsApp input:not([type=checkbox]):not([type=file]),.bulkWhatsApp select,.bulkWhatsApp textarea{font-size:16px}}

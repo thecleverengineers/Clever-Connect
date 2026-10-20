@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import {Integration,Workspace,User} from '../models.js';
 import {requireAuth} from '../middleware/auth.js';
 import {encrypt,decrypt,webhookVerifyToken} from '../utils/crypto.js';
-import {planLimitsForWorkspace,refreshWorkspaceAccess} from '../plan.js';
+import {refreshWorkspaceAccess,metaEntitlements,requireMetaSenderEntitlement} from '../plan.js';
 import {getMetaConfig,getMetaConfigPublic} from '../metaConfig.js';
 
 const r=express.Router();
@@ -35,12 +35,12 @@ const view=x=>({
 async function limits(workspaceId){
   const refreshed=await refreshWorkspaceAccess(workspaceId);
   const w=refreshed?.workspace?.toObject?.()||refreshed?.workspace||await Workspace.findById(workspaceId).lean();
-  const max=(await planLimitsForWorkspace(w)).metaConnections;
-  const used=await Integration.countDocuments({workspaceId,provider:'meta'});
+  const {max,used,allowedIds}=await metaEntitlements(w);
   return {
     plan:w?.plan||'trial',
     max,
     used,
+    allowedIds,
     access:{
       allowed:!!refreshed?.access?.allowed,
       state:refreshed?.access?.state||w?.subscriptionStatus||'expired',
@@ -55,6 +55,23 @@ async function requireMessagingAccess(workspaceId,res){
     return null;
   }
   return usage;
+}
+
+
+/* Serialize Meta connection provisioning per workspace. The lease prevents
+   simultaneous Embedded Signup and manual adds from exceeding a plan limit. */
+async function acquireConnectionLease(workspaceId){
+  const token=crypto.randomUUID();
+  const now=new Date();
+  const row=await Workspace.findOneAndUpdate({
+    _id:workspaceId,
+    $or:[{metaConnectLockExpiresAt:{$exists:false}},{metaConnectLockExpiresAt:null},{metaConnectLockExpiresAt:{$lte:now}}]
+  },{$set:{metaConnectLockToken:token,metaConnectLockExpiresAt:new Date(Date.now()+180000)}},{new:true});
+  return row?token:null;
+}
+async function releaseConnectionLease(workspaceId,token){
+  if(token)await Workspace.updateOne({_id:workspaceId,metaConnectLockToken:token},
+    {$unset:{metaConnectLockToken:1,metaConnectLockExpiresAt:1}}).catch(e=>console.error('Meta connection lease release failed',e));
 }
 
 
@@ -119,10 +136,15 @@ r.get('/embedded-signup/config',async(req,res)=>{
 
 r.post('/embedded-signup/complete',async(req,res)=>{
   let row=null;
+  let lease=null;
   try{
     const usage=await requireMessagingAccess(req.workspaceId,res);
     if(!usage)return;
     if(usage.used>=usage.max)return res.status(409).json({message:'Your '+usage.plan+' plan allows '+usage.max+' Meta WhatsApp connection(s)'});
+    lease=await acquireConnectionLease(req.workspaceId);
+    if(!lease)return res.status(409).json({message:'Another WhatsApp connection is being added. Please wait and retry.'});
+    const fresh=await limits(req.workspaceId);
+    if(fresh.used>=fresh.max)return res.status(409).json({message:'Your plan WhatsApp connection limit was reached'});
 
     const code=String(req.body.code||'').trim();
     const wabaId=String(req.body.wabaId||'').trim();
@@ -145,7 +167,7 @@ r.post('/embedded-signup/complete',async(req,res)=>{
     }
     if(!phoneNumberId)return res.status(400).json({message:'No WhatsApp phone number was returned by Meta'});
 
-    if(await Integration.exists({workspaceId:req.workspaceId,phoneNumberId})){
+    if(await Integration.exists({provider:'meta',phoneNumberId})){
       return res.status(409).json({message:'This WhatsApp phone number is already connected'});
     }
 
@@ -182,7 +204,7 @@ r.post('/embedded-signup/complete',async(req,res)=>{
       registrationPinEncrypted:coexistence?'':encrypt(pin),
       connectMethod:'embedded',
       graphVersion,
-      connectionStatus:registrationStatus==='registered'?'connected':'error',
+      connectionStatus:registrationStatus==='needs_attention'?'error':'connected',
       connectedAt:new Date(),
       lastCheckedAt:new Date(),
       lastError:registrationWarning
@@ -203,6 +225,8 @@ r.post('/embedded-signup/complete',async(req,res)=>{
     if(e?.code===11000)return res.status(409).json({message:'This Meta WhatsApp profile is already connected'});
     console.error('Embedded Signup completion error',e);
     res.status(502).json({message:e.message||'Unable to complete Facebook Embedded Signup'});
+  }finally{
+    await releaseConnectionLease(req.workspaceId,lease);
   }
 });
 
@@ -211,18 +235,25 @@ r.get('/whatsapp-connections',async(req,res)=>{
     Integration.find({workspaceId:req.workspaceId}).sort({isDefault:-1,createdAt:1}).lean(),
     limits(req.workspaceId)
   ]);
-  res.json({connections:rows.map(view),subscription:usage});
+  res.json({connections:rows.map(x=>({...view(x),planAllowed:x.provider!=='meta'||usage.allowedIds.includes(String(x._id))})),subscription:usage});
 });
 
 r.post('/whatsapp-connections',async(req,res)=>{
+  let lease=null;
   try{
     const usage=await requireMessagingAccess(req.workspaceId,res);
     if(!usage)return;
     if(usage.used>=usage.max)return res.status(409).json({message:'Your '+usage.plan+' plan allows '+usage.max+' Meta WhatsApp connection(s)'});
+    lease=await acquireConnectionLease(req.workspaceId);
+    if(!lease)return res.status(409).json({message:'Another WhatsApp connection is being added. Please wait and retry.'});
+    const fresh=await limits(req.workspaceId);
+    if(fresh.used>=fresh.max)return res.status(409).json({message:'Your plan WhatsApp connection limit was reached'});
     const name=String(req.body.name||'WhatsApp connection').trim();
     const phoneNumberId=String(req.body.phoneNumberId||'').trim();
     const accessToken=String(req.body.accessToken||'').trim();
     if(!name||!phoneNumberId||!accessToken)return res.status(400).json({message:'Connection name, Phone Number ID and access token are required'});
+    if(await Integration.exists({provider:'meta',phoneNumberId}))
+      return res.status(409).json({message:'This Meta WhatsApp phone number is already connected to your workspace'});
     if(await Integration.exists({workspaceId:req.workspaceId,name}))return res.status(409).json({message:'A connection with this name already exists'});
     const row=await Integration.create({
       workspaceId:req.workspaceId,
@@ -262,6 +293,8 @@ r.post('/whatsapp-connections',async(req,res)=>{
     }
     console.error('Meta connection create error',e);
     return res.status(500).json({message:'Unable to save Meta WhatsApp profile. Please retry.'});
+  }finally{
+    await releaseConnectionLease(req.workspaceId,lease);
   }
 });
 
@@ -272,7 +305,13 @@ r.put('/whatsapp-connections/:id',async(req,res)=>{
   if(!row)return res.sendStatus(404);
   if(row.provider==='demo')return res.status(409).json({message:'The demo provider cannot be converted into Meta. Add a new Meta connection instead'});
   if(req.body.name!==undefined)row.name=String(req.body.name||'').trim();
-  if(req.body.phoneNumberId!==undefined)row.phoneNumberId=String(req.body.phoneNumberId||'').trim();
+  if(req.body.phoneNumberId!==undefined){
+    const nextId=String(req.body.phoneNumberId||'').trim();
+    if(!nextId)return res.status(400).json({message:'Phone Number ID cannot be empty'});
+    const duplicate=await Integration.exists({provider:'meta',phoneNumberId:nextId,_id:{$ne:row._id}});
+    if(duplicate)return res.status(409).json({message:'This Meta number is already connected'});
+    row.phoneNumberId=nextId;
+  }
   if(req.body.businessAccountId!==undefined)row.businessAccountId=String(req.body.businessAccountId||'').trim();
   if(req.body.graphVersion!==undefined&&/^v\d+\.\d+$/.test(String(req.body.graphVersion)))row.graphVersion=String(req.body.graphVersion);
   if(req.body.otpTemplateName!==undefined)row.otpTemplateName=String(req.body.otpTemplateName||'').trim();
@@ -288,8 +327,10 @@ r.put('/whatsapp-connections/:id',async(req,res)=>{
 
 r.post('/whatsapp-connections/:id/test',async(req,res)=>{
   if(!await requireMessagingAccess(req.workspaceId,res))return;
-  const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId}).lean();
+  if(!mongoose.isValidObjectId(req.params.id))return res.sendStatus(404);
+  const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId,provider:'meta'}).lean();
   if(!x)return res.sendStatus(404);
+  if(!x.enabled)return res.status(409).json({message:'Enable this WhatsApp number before syncing its Meta connection details'});
   try{
     const result=await testConnection(x);
     await Integration.updateOne({_id:x._id},{$set:{
@@ -311,8 +352,11 @@ r.post('/whatsapp-connections/:id/test',async(req,res)=>{
 
 r.post('/whatsapp-connections/:id/default',async(req,res)=>{
   if(!await requireMessagingAccess(req.workspaceId,res))return;
-  const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId,enabled:true});
-  if(!x)return res.status(404).json({message:'Connection not found or disabled'});
+  if(!mongoose.isValidObjectId(req.params.id))return res.sendStatus(404);
+  const x=await Integration.findOne({_id:req.params.id,workspaceId:req.workspaceId,provider:'meta',enabled:true});
+  if(!x)return res.status(404).json({message:'Meta connection not found or disabled'});
+  try{await requireMetaSenderEntitlement(req.workspaceId,x._id)}
+  catch(e){return res.status(409).json({message:e.message})}
   await Integration.updateMany({workspaceId:req.workspaceId},{$set:{isDefault:false}});
   x.isDefault=true;await x.save();
   res.json(view(x));
@@ -344,6 +388,12 @@ r.put('/whatsapp',async(req,res)=>{
   if(!x)x=await Integration.findOne({workspaceId:req.workspaceId});
   if(!x)x=new Integration({workspaceId:req.workspaceId,name:'Demo provider',provider:'demo',isDefault:true});
   const provider=req.body.provider==='meta'?'meta':'demo';
+  if(provider==='meta'){
+    const usage=await requireMessagingAccess(req.workspaceId,res);
+    if(!usage)return;
+    if(x.provider!=='meta')return res.status(409).json({message:'Use Connect manually or Facebook Embedded Signup to add WhatsApp numbers. The legacy settings endpoint cannot create connections.'});
+    if(x.provider==='meta'&&!usage.allowedIds.includes(String(x._id)))return res.status(409).json({message:'This WhatsApp number exceeds your plan limit'});
+  }
   x.provider=provider;
   x.enabled=req.body.enabled!==false;
   if(req.body.phoneNumberId!==undefined)x.phoneNumberId=String(req.body.phoneNumberId||'').trim();

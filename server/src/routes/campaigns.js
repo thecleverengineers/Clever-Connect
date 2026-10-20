@@ -7,7 +7,9 @@ import {parsePublicMediaUrl,digestToken} from './media.js';
 import {InboundWindow} from '../paymentModels.js';
 import {requireAuth} from '../middleware/auth.js';
 import {processCampaign} from '../services/scheduler.js';
+import {refreshCampaignTotals} from '../services/campaignTracking.js';
 import {sendWhatsApp} from '../services/whatsapp.js';
+import {requireMetaSenderEntitlement} from '../plan.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -49,6 +51,7 @@ async function normalizeCampaign(req, existing=null){
     if(template.category==='AUTHENTICATION')throw new Error('OTP/authentication templates need a dedicated verification flow');
     const profile=await Integration.findOne({_id:template.integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).lean();
     if(!profile)throw new Error('The selected template Meta WhatsApp connection is unavailable');
+    await requireMetaSenderEntitlement(req.workspaceId,profile._id);
     const nums=[...String(template.body||'').matchAll(/{{\s*(\d+)\s*}}/g)].map(m=>Number(m[1]));
     const required=nums.length?Math.max(...nums):0;
     if(required>20)throw new Error('Too many template variables for this campaign');
@@ -68,6 +71,7 @@ async function normalizeCampaign(req, existing=null){
       if(!merged.integrationId||!mongoose.isValidObjectId(merged.integrationId))throw new Error('Choose a Meta WhatsApp profile for the image carousel');
       const profile=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true}).lean();
       if(!profile)throw new Error('The selected Meta WhatsApp profile is unavailable');
+      await requireMetaSenderEntitlement(req.workspaceId,profile._id);
       const validated=validateCarousel({text:merged.message,cards:merged.carouselCards});
       for(let i=0;i<validated.cards.length;i++){
         const imageUrl=validated.cards[i].imageUrl;
@@ -91,8 +95,9 @@ async function normalizeCampaign(req, existing=null){
     }
     if(merged.integrationId){
       if(!mongoose.isValidObjectId(merged.integrationId))throw new Error('Invalid WhatsApp profile');
-      const connection=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,enabled:true}).select('_id').lean();
+      const connection=await Integration.findOne({_id:merged.integrationId,workspaceId:req.workspaceId,enabled:true}).select('_id provider').lean();
       if(!connection)throw new Error('Selected WhatsApp profile is unavailable');
+      if(connection.provider==='meta')await requireMetaSenderEntitlement(req.workspaceId,connection._id);
     }
   }
   data.sendMode=mode;
@@ -142,10 +147,31 @@ r.get('/eligibility',async(req,res)=>{
   res.json({optedIn:total,eligible,outsideWindow:Math.max(0,total-eligible),checkedAt:now});
 });
 
+r.get('/:id/funnel',async(req,res)=>{
+  if(!mongoose.isValidObjectId(req.params.id))return res.sendStatus(404);
+  const campaign=await Campaign.findOne({_id:req.params.id,workspaceId:req.workspaceId}).lean();
+  if(!campaign)return res.sendStatus(404);
+  const totals=await refreshCampaignTotals(campaign._id);
+  const failures=await Delivery.aggregate([
+    {$match:{workspaceId:req.workspaceId,campaignId:campaign._id,status:{$in:['failed','skipped']}}},
+    {$group:{_id:{status:'$status',reason:{$ifNull:['$errorCode','UNKNOWN']}},count:{$sum:1}}},
+    {$sort:{count:-1}}
+  ]);
+  res.json({campaignId:campaign._id,name:campaign.name,status:campaign.status,
+    snapshottedAt:campaign.audienceSnapshottedAt,dispatchFinishedAt:campaign.dispatchFinishedAt,
+    totals,failures:failures.map(x=>({status:x._id.status,code:x._id.reason,count:x.count}))});
+});
 r.get('/:id/deliveries',async(req,res)=>{
   const campaign=await Campaign.findOne({_id:req.params.id,workspaceId:req.workspaceId}).select('_id').lean();
   if(!campaign) return res.sendStatus(404);
-  res.json(await Delivery.find({workspaceId:req.workspaceId,campaignId:req.params.id})
+  const filter={workspaceId:req.workspaceId,campaignId:req.params.id};
+  if(req.query.status){
+    if(req.query.status==='pending')filter.status={$in:['queued','submitted','sent']};
+    else if(req.query.status==='non-delivered')filter.status='failed';
+    else if(['queued','submitted','sent','delivered','read','failed','skipped'].includes(req.query.status))filter.status=req.query.status;
+    else return res.status(400).json({message:'Invalid delivery status'});
+  }
+  res.json(await Delivery.find(filter)
     .sort({createdAt:-1}).populate('contactId','name phone consentStatus').populate('campaignId','name status').lean());
 });
 
@@ -208,7 +234,7 @@ r.post('/single/send',async(req,res)=>{
 r.put('/:id',async(req,res)=>{
   const existing=await Campaign.findOne({_id:req.params.id,workspaceId:req.workspaceId});
   if(!existing) return res.sendStatus(404);
-  if(existing.status==='processing') return res.status(409).json({message:'A processing campaign cannot be edited'});
+  if(existing.audienceSnapshottedAt||!['draft','scheduled'].includes(existing.status)) return res.status(409).json({message:'Launched campaigns cannot be edited; create a new campaign instead'});
   try{
     const data=await normalizeCampaign(req,existing);
     if(Object.prototype.hasOwnProperty.call(data,'scheduledAt')){
@@ -223,7 +249,7 @@ r.put('/:id',async(req,res)=>{
 r.post('/:id/send',async(req,res)=>{
   const row=await Campaign.findOne({_id:req.params.id,workspaceId:req.workspaceId});
   if(!row) return res.sendStatus(404);
-  if(row.status==='processing') return res.status(409).json({message:'Campaign is already processing'});
+  if(row.audienceSnapshottedAt||!['draft','scheduled'].includes(row.status)) return res.status(409).json({message:'Campaign already launched; use retry failed or create a new campaign'});
   row.status='draft';
   row.scheduledAt=null;
   await row.save();
@@ -235,6 +261,7 @@ r.post('/:id/retry-failed',async(req,res)=>{
   const row=await Campaign.findOne({_id:req.params.id,workspaceId:req.workspaceId});
   if(!row) return res.sendStatus(404);
   if(row.status==='processing') return res.status(409).json({message:'Campaign is already processing'});
+  if(!row.audienceSnapshottedAt)return res.status(409).json({message:'Campaign has not yet launched'});
   const failed=await Delivery.countDocuments({workspaceId:req.workspaceId,campaignId:row._id,status:'failed'});
   if(!failed) return res.status(409).json({message:'There are no failed deliveries to retry'});
   row.status='draft';
@@ -248,7 +275,7 @@ r.post('/:id/reschedule',async(req,res)=>{
   const at=new Date(req.body.scheduledAt);
   if(Number.isNaN(at.getTime())||at<=new Date()) return res.status(400).json({message:'Choose a future date and time'});
   const row=await Campaign.findOneAndUpdate(
-    {_id:req.params.id,workspaceId:req.workspaceId,status:{$ne:'processing'}},
+    {_id:req.params.id,workspaceId:req.workspaceId,status:{$in:['draft','scheduled']},audienceSnapshottedAt:null},
     {$set:{scheduledAt:at,status:'scheduled',completedAt:null,lastError:''}},
     {new:true}
   );
@@ -258,7 +285,7 @@ r.post('/:id/reschedule',async(req,res)=>{
 
 r.post('/:id/cancel',async(req,res)=>{
   const row=await Campaign.findOneAndUpdate(
-    {_id:req.params.id,workspaceId:req.workspaceId,status:{$in:['draft','scheduled']}},
+    {_id:req.params.id,workspaceId:req.workspaceId,status:{$in:['draft','scheduled']},audienceSnapshottedAt:null},
     {$set:{status:'cancelled',lastError:'Cancelled by user'}},
     {new:true}
   );
