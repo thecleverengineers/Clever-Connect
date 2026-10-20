@@ -19,6 +19,7 @@ import webhook from './routes/webhook.js';
 import payments from './routes/payments.js';
 import inbox from './routes/inbox.js';
 import flows from './routes/flows.js';
+import flowAttributes from './routes/flowAttributes.js';
 import account from './routes/account.js';
 import subscription from './routes/subscription.js';
 import admin from './routes/admin.js';
@@ -66,6 +67,7 @@ app.use('/api/webhooks/meta',webhook);
 app.use('/api/payments',apiLimiter,requireAuth,requireSubscription,payments);
 app.use('/api/inbox',apiLimiter,requireAuth,requireSubscription,inbox);
 app.use('/api/flows',apiLimiter,requireAuth,requireSubscription,flows);
+app.use('/api/flow-attributes',apiLimiter,requireAuth,requireSubscription,flowAttributes);
 
 app.get('/api/health',(req,res)=>res.json({
   ok:mongoose.connection.readyState===1,
