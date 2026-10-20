@@ -62,7 +62,6 @@ function Auth({onAuth}){
     e.preventDefault();setBusy(true);setErr('');
     try{
       const o=Object.fromEntries(new FormData(e.currentTarget));
-    if(!editing&&connectionMode==='cloud_api')o.connectionIntent='existing_cloud_api';
       const x=await api('/auth/'+mode,{method:'POST',body:JSON.stringify(o)});
       if(x.twoFactorRequired){setChallenge(x);return}
       onAuth(x);
@@ -1181,6 +1180,7 @@ function WhatsAppApi({go}){
   async function save(e){
     e.preventDefault();setErr('');setMsg('');
     const o=Object.fromEntries(new FormData(e.currentTarget));
+    if(!editing&&connectionMode==='cloud_api')o.connectionIntent='existing_cloud_api';
     try{
       if(editing){
         await api('/integrations/whatsapp-connections/'+editing.id,{method:'PUT',body:JSON.stringify(o)});
