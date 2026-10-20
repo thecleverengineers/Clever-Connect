@@ -4,7 +4,8 @@ import Payments from './Payments.jsx';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
 import BulkWhatsApp from './BulkWhatsApp.jsx';
 import DropFileInput from './DropFileInput.jsx';
-import {Inbox,FlowBuilder} from './ConversationSuite.jsx';
+import {Inbox} from './ConversationSuite.jsx';
+import FlowStudio from './FlowStudio.jsx';
 import AICopilot from './AICopilot.jsx';
 import './premium.css';
 import {BUSINESS_TYPES,BUSINESS_GOALS,BRAND_TONES,LANGUAGES} from './business.js';
@@ -1681,7 +1682,7 @@ function Page({id,go,session,onSessionUpdate}){
   if(id==='templates')return <Templates/>;
   if(id==='reports')return <Reports go={go}/>;
   if(id==='inbox')return <Inbox/>;
-  if(id==='chatbot')return <FlowBuilder/>;
+  if(id==='chatbot')return <FlowStudio session={session}/>;
   if(id==='whatsapp-api')return <WhatsAppApi go={go}/>;
   if(id==='payments')return <Payments session={session} go={go}/>;
   if(id==='subscription')return <Subscription onSessionUpdate={onSessionUpdate}/>;
