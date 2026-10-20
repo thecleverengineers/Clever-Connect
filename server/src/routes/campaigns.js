@@ -9,6 +9,7 @@ import {requireAuth} from '../middleware/auth.js';
 import {processCampaign} from '../services/scheduler.js';
 import {refreshCampaignTotals} from '../services/campaignTracking.js';
 import {sendWhatsApp} from '../services/whatsapp.js';
+import {singleSendMode,resolveSingleRecipientText,singleTemplateValues,previewSingleTemplate} from '../services/singleMessage.js';
 import {requireMetaSenderEntitlement} from '../plan.js';
 
 const r=express.Router();
@@ -189,46 +190,88 @@ r.post('/',async(req,res)=>{
 
 r.post('/single/send',async(req,res)=>{
   try{
+    const body=req.body||{};
+    const mode=singleSendMode(body);
+    const contactId=body.contactId?String(body.contactId):'';
+    const requestedSenderId=body.integrationId?String(body.integrationId):'';
+    if(requestedSenderId&&!mongoose.isValidObjectId(requestedSenderId))
+      return res.status(400).json({message:'Select a valid connected WhatsApp sender'});
     let contact=null;
     let phone='';
-    if(req.body.contactId){
-      contact=await Contact.findOne({_id:req.body.contactId,workspaceId:req.workspaceId}).lean();
-      if(!contact) return res.status(404).json({message:'Contact not found'});
-      if(contact.suppressed||contact.consentStatus!=='opted_in') return res.status(409).json({message:'Contact must be opted in and not suppressed before live messaging'});
+    if(contactId){
+      if(!mongoose.isValidObjectId(contactId))return res.status(400).json({message:'Select a valid contact'});
+      contact=await Contact.findOne({_id:contactId,workspaceId:req.workspaceId}).lean();
+      if(!contact)return res.status(404).json({message:'Contact not found'});
+      if(contact.suppressed||contact.consentStatus!=='opted_in')
+        return res.status(409).json({message:'The recipient must be opted in and not suppressed'});
       phone=contact.phone;
     }else{
-      phone=String(req.body.phone||'').trim();
-      if(!phone) return res.status(400).json({message:'Choose a contact or enter a phone number'});
-      if(req.body.consentConfirmed!==true) return res.status(400).json({message:'Confirm that this recipient has opted in'});
+      phone=String(body.phone||'').trim();
+      const digits=phone.replace(/\D/g,'');
+      if(!/^\+?[0-9\s()-]+$/.test(phone)||digits.length<8||digits.length>15)
+        return res.status(400).json({message:'Enter a valid international phone number'});
+      if(body.consentConfirmed!==true)
+        return res.status(400).json({message:'Confirm this recipient has explicitly opted in'});
+      const saved=await Contact.findOne({
+        workspaceId:req.workspaceId,phone:{$in:[phone,'+'+digits,digits]}
+      }).lean();
+      if(saved?.suppressed||saved?.consentStatus==='opted_out')
+        return res.status(409).json({message:'The recipient has opted out or is suppressed'});
+      if(saved?.consentStatus==='opted_in')contact=saved;
     }
-    const template=req.body.templateId?await Template.findOne({_id:req.body.templateId,workspaceId:req.workspaceId}).lean():null;
-    const rawMessage=String(req.body.message||template?.body||'').trim();
-    if(!rawMessage&&!template) return res.status(400).json({message:'Add a message or choose a template'});
-    const message=rawMessage
-      .replace(/{{\s*name\s*}}/gi,contact?.name||'')
-      .replace(/{{\s*phone\s*}}/gi,contact?.phone||phone)
-      .replace(/{{\s*email\s*}}/gi,contact?.email||'');
-    // Local copy templates are only a writing aid. Approved Meta templates
-    // are a distinct send type with Meta approval and profile requirements.
-    const approved=template?.metaStatus==='APPROVED'&&template?.metaTemplateName?template:null;
+
+    let integration=null;
+    if(requestedSenderId){
+      integration=await Integration.findOne({
+        _id:requestedSenderId,workspaceId:req.workspaceId,provider:'meta',enabled:true
+      }).lean();
+      if(!integration)return res.status(409).json({message:'Selected Meta WhatsApp number is unavailable'});
+      await requireMetaSenderEntitlement(req.workspaceId,integration._id);
+    }
+
+    const recipient={name:contact?.name||'',phone:contact?.phone||phone,email:contact?.email||''};
+    let template=null,templateParams=[],message='';
+    if(mode==='template'){
+      if(!mongoose.isValidObjectId(body.templateId))
+        return res.status(400).json({message:'Choose a valid Meta-approved template'});
+      template=await Template.findOne({_id:body.templateId,workspaceId:req.workspaceId}).lean();
+      if(!template||template.metaStatus!=='APPROVED'||!template.metaTemplateName||!template.integrationId)
+        return res.status(409).json({message:'Only approved, connected Meta templates can be sent'});
+      if(template.category==='AUTHENTICATION')
+        return res.status(409).json({message:'Authentication templates require the dedicated verification flow'});
+      if(requestedSenderId&&String(template.integrationId)!==requestedSenderId)
+        return res.status(409).json({message:'Template belongs to a different WhatsApp sender'});
+      if(!integration){
+        integration=await Integration.findOne({
+          _id:template.integrationId,workspaceId:req.workspaceId,provider:'meta',enabled:true
+        }).lean();
+        if(!integration)return res.status(409).json({message:'Template sender is not connected'});
+        await requireMetaSenderEntitlement(req.workspaceId,integration._id);
+      }
+      templateParams=singleTemplateValues(template.body,body.templateParams||[],recipient);
+      message=previewSingleTemplate(template.body,templateParams);
+    }else{
+      message=resolveSingleRecipientText(String(body.message||'').trim(),recipient);
+      if(!message||message.length>4096)
+        return res.status(400).json({message:'FreeForm message must contain 1–4096 characters'});
+      // Enforced again by sendWhatsApp immediately before dispatch, because
+      // the window can expire while a person is composing a message.
+    }
     const result=await sendWhatsApp({
-      workspaceId:req.workspaceId,phone,text:message,template:approved,
-      integrationId:approved?.integrationId||null,
-      templateParams:Array.isArray(req.body.templateParams)?req.body.templateParams.map(x=>String(x||'').trim()):[]
+      workspaceId:req.workspaceId,phone,text:message,template,
+      integrationId:integration?._id||null,templateParams
     });
     const d=await Delivery.create({
-      workspaceId:req.workspaceId,
-      contactId:contact?._id||null,
-      phone,
-      message,
-      provider:result.provider,
-      providerMessageId:result.id,
-      status:result.status,
-      sentAt:new Date(),
-      deliveredAt:result.status==='delivered'?new Date():undefined
+      workspaceId:req.workspaceId,contactId:contact?._id||null,phone,message,
+      provider:result.provider,providerMessageId:result.id,status:result.status,
+      sentAt:new Date(),deliveredAt:result.status==='delivered'?new Date():undefined
     });
-    res.json(d);
-  }catch(e){res.status(502).json({message:e.message})}
+    res.json({...d.toObject(),sendMode:mode,senderName:integration?.name||''});
+  }catch(e){
+    if(e?.submissionUnknown)
+      return res.status(502).json({message:'Provider acceptance is uncertain. The message may have been sent; do not click Send again until you review Meta delivery logs. '+String(e.message||'').slice(0,200)});
+    res.status(502).json({message:e.message||'Unable to send WhatsApp message'});
+  }
 });
 
 r.put('/:id',async(req,res)=>{
