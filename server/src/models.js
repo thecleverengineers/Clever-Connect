@@ -7,6 +7,8 @@ const workspaceSchema = new Schema({
   name: { type: String, required: true, trim: true },
   plan: { type: String, default:'trial', index:true },
   subscriptionPlanId: { type: Schema.Types.ObjectId, ref:'SubscriptionPlan', default:null },
+  metaConnectLockToken:{type:String,select:false},
+  metaConnectLockExpiresAt:{type:Date,select:false},
   subscriptionStatus: { type: String, enum:['trialing','active','past_due','cancelled','expired'], default:'trialing', index:true },
   trialStartedAt: { type:Date, default:Date.now },
   trialEndsAt: { type:Date, default:()=>new Date(Date.now()+7*24*60*60*1000), index:true },
