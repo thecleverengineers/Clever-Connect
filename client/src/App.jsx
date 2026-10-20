@@ -1037,12 +1037,22 @@ function WhatsAppApi({go}){
     setErr('');
     try{
       const [x,embed]=await Promise.all([
-        api('/integrations/whatsapp-connections'),
+        api('/integrations/whatsapp-connections',{fresh:true}),
         api('/integrations/embedded-signup/config')
       ]);
       setConnections(x.connections||[]);
       setSubscription(x.subscription||null);
       setEmbedded(embed);
+      const requestedEdit=sessionStorage.getItem('wa:edit-sender');
+      if(requestedEdit){
+        sessionStorage.removeItem('wa:edit-sender');
+        const profile=(x.connections||[]).find(y=>y.id===requestedEdit&&y.provider==='meta');
+        if(profile){
+          setEditing(profile);setShowSetup(true);setShowForm(true);
+          setConnectionMode('cloud_api');
+          setTimeout(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}),120);
+        }
+      }
     }catch(e){setErr(e.message)}
   }
   useEffect(()=>{load()},[]);
