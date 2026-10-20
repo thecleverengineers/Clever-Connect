@@ -66,6 +66,7 @@ export default function MetaTemplateManager(){
   const filtered=useMemo(()=>rows.filter(t=>(!profileId||profileOf(t)===profileId)&&
     (statusFilter==='ALL'||String(t.metaStatus||'DRAFT')===statusFilter)&&
     (!search||[t.name,t.body,t.metaTemplateName,t.metaRejectedReason].some(x=>String(x||'').toLowerCase().includes(search.toLowerCase())))),[rows,profileId,statusFilter,search]);
+  const availableStatuses=[...new Set([...statuses,...rows.map(x=>x.metaStatus||'DRAFT')])];
   const stat=key=>rows.filter(t=>(!profileId||profileOf(t)===profileId)&&t.metaStatus===key).length;
   const update=(key,value)=>setDraft(old=>({...old,[key]:value}));
   function newDraft(seed={}){
@@ -233,7 +234,7 @@ export default function MetaTemplateManager(){
       <div className="mtmListHead"><div><h2>Templates</h2><p>{filtered.length} template(s) in this view</p></div>
         <div><input aria-label="Search templates" placeholder="Search templates" value={search} onChange={e=>setSearch(e.target.value)}/>
           <select aria-label="Filter template status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
-            {statuses.map(s=><option key={s} value={s}>{s==='ALL'?'All statuses':badgeText(s)}</option>)}</select></div></div>
+            {availableStatuses.map(s=><option key={s} value={s}>{s==='ALL'?'All statuses':badgeText(s)}</option>)}</select></div></div>
       {busy?<p>Loading templates…</p>:<div className="mtmCards">{filtered.map(row=>{
         const p=profiles.find(p=>p.id===profileOf(row));
         const usable=goodForSend(row,p);
