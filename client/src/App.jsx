@@ -1038,6 +1038,11 @@ function WhatsAppApi({go}){
   const[coexistence,setCoexistence]=useState(false);
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
+  const[numberSearch,setNumberSearch]=useState('');
+  const[numberFilter,setNumberFilter]=useState('all');
+  const[showSetup,setShowSetup]=useState(false);
+  const[syncing,setSyncing]=useState(false);
+
 
   async function load(){
     setErr('');
@@ -1054,6 +1059,13 @@ function WhatsAppApi({go}){
   useEffect(()=>{load()},[]);
   const meta=connections.filter(x=>x.provider==='meta');
   const demo=connections.filter(x=>x.provider==='demo');
+  const shown=meta.filter(x=>{
+    const query=numberSearch.toLowerCase().trim();
+    const matches=!query||[x.name,x.displayPhoneNumber,x.phoneNumberId,x.businessAccountId].some(v=>String(v||'').toLowerCase().includes(query));
+    const health=x.enabled&&x.connectionStatus==='connected'&&x.planAllowed!==false;
+    return matches&&(numberFilter==='all'||(numberFilter==='ready'&&health)||(numberFilter==='attention'&&!health)||(numberFilter==='default'&&x.isDefault));
+  });
+
   const allowed=subscription?.access?.allowed!==false;
   const canAdd=allowed&&subscription&&subscription.used<subscription.max;
   const verifyToken=connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
@@ -1194,11 +1206,47 @@ function WhatsAppApi({go}){
     }catch(e){setErr(e.message)}
   }
 
+  async function syncDetails(){
+    if(syncing||!allowed||!meta.length)return;
+    setSyncing(true);setErr('');setMsg('');
+    let succeeded=0,failed=0;
+    for(const x of meta.filter(x=>x.enabled)){
+      try{await api('/integrations/whatsapp-connections/'+x.id+'/test',{method:'POST'});succeeded++}
+      catch{failed++}
+    }
+    try{await load()}catch(e){setErr(e.message)}
+    setMsg(succeeded+' account(s) synchronized with Meta'+(failed?', '+failed+' need attention.':'.'));
+    setSyncing(false);
+  }
+
   return <div className="page">
-    <div className="title"><div><span>WHATSAPP CLOUD API</span><h1>Meta WhatsApp API</h1><p>Connect Meta through Facebook Embedded Signup or use manual credentials as an advanced option.</p></div></div>
+    <div className="title numbersHeading"><div><span>WHATSAPP MANAGER</span><h1>Numbers</h1><p>Manage your Meta WhatsApp numbers in one place. Search, check connection health and connect more numbers within your subscription.</p></div><div className="numbersTopStat"><strong>{meta.length}</strong><span>connected profiles</span></div></div>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
 
-    <section className="facebookConnectHero">
+
+    <section className="whatsappApiHero">
+      <div><small>SUBSCRIPTION LIMIT</small><h2>{subscription?.used||0} of {subscription?.max||0} Meta connections used</h2><p>{subscription?.plan||'trial'} plan · {subscription?.access?.state||'loading'} access</p></div>
+      <div className="apiUsageMeter"><i style={{width:Math.min(100,((subscription?.used||0)/Math.max(1,subscription?.max||1))*100)+'%'}}></i></div>
+      {!allowed&&<Notice type="bad">Meta WhatsApp API management is locked until your subscription or trial is active.</Notice>}
+      {allowed&&subscription?.used>=subscription?.max&&<Notice type="bad">You have reached your plan limit. Upgrade your subscription to connect another WhatsApp number.</Notice>}
+    </section>
+
+
+    <section className="numberManagerPanel" aria-label="WhatsApp numbers">
+      <div className="numberControlBar">
+        <label className="numberSearch"><span aria-hidden="true">⌕</span><input type="search" placeholder="Search by business name or phone number" aria-label="Search WhatsApp numbers" value={numberSearch} onChange={e=>setNumberSearch(e.target.value)}/></label>
+        <label className="numberFilterSelect"><span>Filter</span><select aria-label="Filter WhatsApp numbers" value={numberFilter} onChange={e=>setNumberFilter(e.target.value)}>
+          <option value="all">All numbers</option><option value="ready">Ready to send</option><option value="attention">Needs attention</option><option value="default">Default sender</option>
+        </select></label>
+      </div>
+      <div className="numbersActionStack">
+        <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
+        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={()=>{setEditing(null);setShowForm(false);setShowSetup(v=>!v)}}>{showSetup?'−  Close connection options':'+  Add New Number'}</button>
+        {!canAdd&&<small>{!allowed?'Subscription inactive — activate a plan to connect numbers.':'Your plan connection limit has been reached.'}</small>}
+      </div>
+      {showSetup&&<div className="numbersSetup" id="numbersSetup">
+        <div className="numbersSetupIntro"><b>Connect a WhatsApp Business number</b><span>Facebook Embedded Signup is recommended. Advanced manual API configuration remains available.</span></div>
+        <section className="facebookConnectHero">
       <div className="facebookConnectCopy">
         <span className="facebookLogo">f</span>
         <div><small>RECOMMENDED</small><h2>Connect with Facebook</h2><p>Sign in to Meta, choose your Business Portfolio, WhatsApp Business Account and phone number. WA SANTA securely completes the API connection for you.</p></div>
@@ -1210,15 +1258,7 @@ function WhatsAppApi({go}){
         {embedded?.enabled&&<small>Meta-hosted login · WA SANTA never sees your Facebook password</small>}
       </div>
     </section>
-
-    <section className="whatsappApiHero">
-      <div><small>SUBSCRIPTION LIMIT</small><h2>{subscription?.used||0} of {subscription?.max||0} Meta connections used</h2><p>{subscription?.plan||'trial'} plan · {subscription?.access?.state||'loading'} access</p></div>
-      <div className="apiUsageMeter"><i style={{width:Math.min(100,((subscription?.used||0)/Math.max(1,subscription?.max||1))*100)+'%'}}></i></div>
-      {!allowed&&<Notice type="bad">Meta WhatsApp API management is locked until your subscription or trial is active.</Notice>}
-      {allowed&&subscription?.used>=subscription?.max&&<Notice type="bad">You have reached your plan limit. Upgrade your subscription to connect another WhatsApp number.</Notice>}
-    </section>
-
-    <section className="manualConnectionBox">
+        <section className="manualConnectionBox">
       <div className="sectionHead">
         <div><small>ADVANCED</small><h2>Manual Meta API connection</h2><p>Use this only if you already have a Phone Number ID, WABA ID and access token.</p></div>
         {canAdd&&<button onClick={()=>{setEditing(null);setShowForm(!showForm)}}>{showForm?'Hide manual form':'Connect manually'}</button>}
@@ -1236,36 +1276,33 @@ function WhatsAppApi({go}){
         </form>
       </div>}
     </section>
-
-    <section>
-      <div className="sectionHead"><div><h2>Connected Meta WhatsApp profiles</h2><p>Connections remain saved until you explicitly disconnect them.</p></div></div>
-      <div className="connectionGrid whatsappConnectionGrid">
-        {meta.map(x=><article className={'connectionCard '+(x.isDefault?'defaultConnection':'')} key={x.id}>
-          <div className="cardTop"><div><small>{x.connectMethod==='embedded'?'FACEBOOK EMBEDDED SIGNUP':'META CLOUD API'}</small><h3>{x.name}</h3></div><div className="connectionBadges">{x.isDefault&&<em className="status completed">Default sender</em>}<em className={'status '+(x.connectionStatus==='error'?'failed':x.connectionStatus==='disabled'?'cancelled':'completed')}>{x.connectionStatus==='error'?'Needs attention':x.connectionStatus||'connected'}</em></div></div>
-          <div className="connectionPhone">{x.displayPhoneNumber||'Phone Number ID: '+x.phoneNumberId}</div>
-          <div className="connectionMeta">
-            <span>{x.connectMethod==='embedded'?'Connected via Facebook':'Manual connection'}</span>
-            <span>{x.enabled?'Enabled':'Disabled'}</span>
+      </div>}
+      <div className="numberListTitle"><div><h2>Connected WhatsApp numbers</h2><p>Only API connection status is shown here. Meta business verification is a separate process.</p></div><span>{shown.length} of {meta.length} shown</span></div>
+      <div className="numberList" role="list">
+        <div className="numberListLabels" aria-hidden="true"><span>S.No.</span><span>Business details</span><span>Connection status</span><span>Manage</span></div>
+        {shown.map((x,index)=><article className="numberRow" role="listitem" key={x.id}>
+          <span className="numberOrdinal">{String(index+1).padStart(2,'0')}</span>
+          <div className="numberMainDetail"><b><span aria-hidden="true" className="numberMetaSymbol">∞</span>{x.name}</b><span className="numberPhone">{x.displayPhoneNumber||'Phone Number ID: '+x.phoneNumberId}</span>
+            <small>Meta Cloud API · {x.connectMethod==='embedded'?'Connected with Facebook':'Manual setup'}</small>
+            <small>WABA: {x.businessAccountId||'Not provided'} · Last checked: {fmt(x.lastCheckedAt)}</small></div>
+          <div className="numberStates">
+            {x.isDefault&&<span className="numberStatus default">Default sender</span>}
+            {x.planAllowed===false&&<span className="numberStatus warning">Outside plan limit</span>}
+            {!x.enabled&&<span className="numberStatus disabled">Disabled</span>}
+            {x.enabled&&<span className={'numberStatus '+(x.connectionStatus==='connected'?'good':'warning')}>{x.connectionStatus==='connected'?'API connected':'Needs attention'}</span>}
+            {x.lastError&&<small className="numberStatusError">{x.lastError}</small>}</div>
+          <div className="numberRowActions">
+            <button type="button" onClick={()=>act(x,'test')} disabled={!x.enabled||!allowed}>Test / Sync</button>
+            <button type="button" onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
+            <button type="button" onClick={()=>{setEditing(x);setShowSetup(true);setShowForm(true);requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}))}}>Edit</button>
+            {!x.isDefault&&<button type="button" onClick={()=>act(x,'default')} disabled={x.planAllowed===false||!x.enabled}>Make default</button>}
+            <button type="button" className="numberDanger" onClick={()=>act(x,'delete')}>Disconnect</button>
           </div>
-          <div className="connectionDetails">
-            <span><small>WhatsApp Business Account</small><b>{x.businessAccountId||'Not added'}</b></span>
-            <span><small>OTP template</small><b>{x.otpTemplateName||'Not configured'}</b></span>
-            <span><small>Access token</small><b>{x.hasAccessToken?'Encrypted & stored':'Missing'}</b></span>
-          </div>
-          {x.lastError&&<Notice type="bad">{x.lastError} — profile remains saved until you disconnect it.</Notice>}
-          <footer><span>{x.connectedAt?'Connected '+fmt(x.connectedAt):'Messaging connection'}</span><div className="rowActions">
-            <button onClick={()=>act(x,'test')}>Test</button>
-            <button onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
-            <button onClick={()=>{setEditing(x);setShowForm(true)}}>Edit</button>
-            {!x.isDefault&&<button onClick={()=>act(x,'default')}>Make default</button>}
-            <button className="danger" onClick={()=>act(x,'delete')}>Disconnect</button>
-          </div></footer>
         </article>)}
-        {!meta.length&&<Empty text="No Meta WhatsApp profiles connected yet."/>}
+        {!shown.length&&<div className="numberEmpty">{meta.length?'No numbers match your search or filter.':'No WhatsApp numbers connected yet. Use Add New Number to get started.'}</div>}
       </div>
     </section>
-
-    <div className="accountGrid metaSetupGrid">
+    {showSetup&&<div className="accountGrid metaSetupGrid">
       <section>
         <h2>Meta webhook setup</h2>
         <p>Embedded Signup automatically subscribes each selected WABA to your app. Keep this callback configured in your Meta app.</p>
@@ -1282,8 +1319,7 @@ function WhatsAppApi({go}){
           <span>4 <b>HTTPS + Webhooks</b><small>Your current Render deployment already uses HTTPS</small></span>
         </div>
       </section>
-    </div>
-
+    </div>}
     {!!demo.length&&<section className="demoProviderInfo"><h2>Demo provider</h2><p>The built-in demo provider remains available for testing without sending real WhatsApp messages.</p></section>}
     <div className="pageBottomActions"><button onClick={()=>go('profile')}>← Back to Profile</button><button onClick={()=>go('subscription')}>View subscription limits</button></div>
   </div>
