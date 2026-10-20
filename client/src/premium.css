@@ -218,3 +218,15 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 
 /* Embedded Signup portfolio eligibility guidance; no unsupported auto-migration promises */
 .metaPortfolioGuide{margin-top:10px!important;font-size:11px!important;line-height:1.65!important;color:#688171!important;background:#f1faf3;padding:10px 12px;border-radius:9px;border:1px solid #dcece2}
+
+/* Clear, channel-correct Meta onboarding paths for existing and new WhatsApp senders */
+.metaConnectionModes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:15px 0 16px}
+.metaConnectionModes button{border:1px solid #d8e9df;background:#fff;border-radius:13px;text-align:left;padding:15px;display:grid;gap:8px;color:#3e6b53;min-height:106px}
+.metaConnectionModes button.selected{background:#e9f8ef;border:1.5px solid #159c66;box-shadow:0 0 0 2px #149c6614}
+.metaConnectionModes button strong{font-size:12px;font-weight:800;color:#23764f}
+.metaConnectionModes button small{font-size:10px;line-height:1.55;color:#81968a}
+.metaExistingHint{border:1px solid #cde5d7;background:#f0faf3;border-radius:12px;padding:14px 16px;margin:14px 0 18px}
+.metaExistingHint b{font-size:13px;color:#1c7c51}
+.metaExistingHint p{font-size:11px;line-height:1.7;color:#5d7868;margin:8px 0 0}
+.metaModeInfo{font-size:12px;line-height:1.6;color:#517f64;background:#eaf6ee;border-radius:8px;padding:10px 11px;margin:0 0 12px}
+@media(max-width:800px){.metaConnectionModes{grid-template-columns:1fr}.metaConnectionModes button{min-height:0;padding:13px}.metaConnectionModes button small{font-size:11px}}
