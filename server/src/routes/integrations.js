@@ -58,6 +58,23 @@ async function requireMessagingAccess(workspaceId,res){
 }
 
 
+/* Serialize Meta connection provisioning per workspace. The lease prevents
+   simultaneous Embedded Signup and manual adds from exceeding a plan limit. */
+async function acquireConnectionLease(workspaceId){
+  const token=crypto.randomUUID();
+  const now=new Date();
+  const row=await Workspace.findOneAndUpdate({
+    _id:workspaceId,
+    $or:[{metaConnectLockExpiresAt:{$exists:false}},{metaConnectLockExpiresAt:null},{metaConnectLockExpiresAt:{$lte:now}}]
+  },{$set:{metaConnectLockToken:token,metaConnectLockExpiresAt:new Date(Date.now()+180000)}},{new:true});
+  return row?token:null;
+}
+async function releaseConnectionLease(workspaceId,token){
+  if(token)await Workspace.updateOne({_id:workspaceId,metaConnectLockToken:token},
+    {$unset:{metaConnectLockToken:1,metaConnectLockExpiresAt:1}}).catch(e=>console.error('Meta connection lease release failed',e));
+}
+
+
 async function metaRequest(version,path,token,{method='GET',body}={}){
   const response=await fetch('https://graph.facebook.com/'+version+'/'+path,{
     method,
@@ -119,10 +136,15 @@ r.get('/embedded-signup/config',async(req,res)=>{
 
 r.post('/embedded-signup/complete',async(req,res)=>{
   let row=null;
+  let lease=null;
   try{
     const usage=await requireMessagingAccess(req.workspaceId,res);
     if(!usage)return;
     if(usage.used>=usage.max)return res.status(409).json({message:'Your '+usage.plan+' plan allows '+usage.max+' Meta WhatsApp connection(s)'});
+    lease=await acquireConnectionLease(req.workspaceId);
+    if(!lease)return res.status(409).json({message:'Another WhatsApp connection is being added. Please wait and retry.'});
+    const fresh=await limits(req.workspaceId);
+    if(fresh.used>=fresh.max)return res.status(409).json({message:'Your plan WhatsApp connection limit was reached'});
 
     const code=String(req.body.code||'').trim();
     const wabaId=String(req.body.wabaId||'').trim();
@@ -203,6 +225,8 @@ r.post('/embedded-signup/complete',async(req,res)=>{
     if(e?.code===11000)return res.status(409).json({message:'This Meta WhatsApp profile is already connected'});
     console.error('Embedded Signup completion error',e);
     res.status(502).json({message:e.message||'Unable to complete Facebook Embedded Signup'});
+  }finally{
+    await releaseConnectionLease(req.workspaceId,lease);
   }
 });
 
@@ -215,10 +239,15 @@ r.get('/whatsapp-connections',async(req,res)=>{
 });
 
 r.post('/whatsapp-connections',async(req,res)=>{
+  let lease=null;
   try{
     const usage=await requireMessagingAccess(req.workspaceId,res);
     if(!usage)return;
     if(usage.used>=usage.max)return res.status(409).json({message:'Your '+usage.plan+' plan allows '+usage.max+' Meta WhatsApp connection(s)'});
+    lease=await acquireConnectionLease(req.workspaceId);
+    if(!lease)return res.status(409).json({message:'Another WhatsApp connection is being added. Please wait and retry.'});
+    const fresh=await limits(req.workspaceId);
+    if(fresh.used>=fresh.max)return res.status(409).json({message:'Your plan WhatsApp connection limit was reached'});
     const name=String(req.body.name||'WhatsApp connection').trim();
     const phoneNumberId=String(req.body.phoneNumberId||'').trim();
     const accessToken=String(req.body.accessToken||'').trim();
@@ -262,6 +291,8 @@ r.post('/whatsapp-connections',async(req,res)=>{
     }
     console.error('Meta connection create error',e);
     return res.status(500).json({message:'Unable to save Meta WhatsApp profile. Please retry.'});
+  }finally{
+    await releaseConnectionLease(req.workspaceId,lease);
   }
 });
 
@@ -347,7 +378,7 @@ r.put('/whatsapp',async(req,res)=>{
   if(provider==='meta'){
     const usage=await requireMessagingAccess(req.workspaceId,res);
     if(!usage)return;
-    if(x.provider!=='meta'&&usage.used>=usage.max)return res.status(409).json({message:'WhatsApp number limit reached for your plan'});
+    if(x.provider!=='meta')return res.status(409).json({message:'Use Connect manually or Facebook Embedded Signup to add WhatsApp numbers. The legacy settings endpoint cannot create connections.'});
     if(x.provider==='meta'&&!usage.allowedIds.includes(String(x._id)))return res.status(409).json({message:'This WhatsApp number exceeds your plan limit'});
   }
   x.provider=provider;
