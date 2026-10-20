@@ -269,7 +269,9 @@ r.post('/single/send',async(req,res)=>{
     res.json({...d.toObject(),sendMode:mode,senderName:integration?.name||''});
   }catch(e){
     if(e?.submissionUnknown)
-      return res.status(502).json({message:'Provider acceptance is uncertain. The message may have been sent; do not click Send again until you review Meta delivery logs. '+String(e.message||'').slice(0,200)});
+      return res.status(502).json({code:'META_ACCEPTANCE_UNKNOWN',message:'Provider acceptance is uncertain. The message may have been sent; do not click Send again until you review Meta delivery logs. '+String(e.message||'').slice(0,200)});
+    if(e?.senderAuthFailure)
+      return res.status(409).json({code:'META_SENDER_AUTH_REQUIRED',message:e.message,action:'reconnect_sender'});
     res.status(502).json({message:e.message||'Unable to send WhatsApp message'});
   }
 });
