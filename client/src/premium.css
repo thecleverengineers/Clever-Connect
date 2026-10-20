@@ -123,3 +123,95 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .waFormatBar{position:relative;align-items:center;gap:4px}
 .waFormatBar>button[title^="Insert"]{color:#087b56;background:#eaf6ee;border-radius:8px;border:1px solid #d0e5d8;font-weight:700}
 @media(max-width:600px){.emojiGrid{left:auto;right:0}.waFormatBar{overflow:visible}.waFormatBar button{min-height:34px}}
+
+
+/* Sidebar information architecture: grouped WhatsApp/Manager navigation */
+.shell aside{overflow:hidden}
+.shell nav.sidebarGroups{flex:1;overflow-y:auto;overflow-x:hidden;gap:17px;min-height:0;padding:2px 2px 30px;scrollbar-width:thin}
+.sidebarGroup{display:grid;gap:3px}
+.sidebarGroupTitle{padding:4px 12px 8px;font-size:10px;font-weight:850;color:#9aa8a0;letter-spacing:.14em}
+.shell nav.sidebarGroups button{width:100%;min-width:0;transition:background .15s;color:#64736a}
+.shell nav.sidebarGroups button>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell nav.sidebarGroups button:hover{background:#f0f8f3;color:#0e714d}
+.shell nav.sidebarGroups button.active{background:#e7f5ed;color:#087d53;font-weight:800}
+.shell nav.sidebarGroups .sidebarManagerToggle{background:linear-gradient(110deg,#e6f6ed,#f2faf5);color:#167a56;border:1px solid #d6e9da;font-weight:850;margin-top:3px}
+.shell nav.sidebarGroups .sidebarManagerToggle.active{background:linear-gradient(100deg,#137e51,#29965a);color:#fff}
+.sidebarManagerToggle b{font-size:20px;font-weight:600}
+.sidebarSubmenu{display:grid;gap:2px;border-left:2px solid #d4e9d9;margin:3px 0 0 23px;padding-left:9px}
+.shell nav.sidebarGroups .sidebarSubmenu button{font-size:12px;padding:9px 11px}
+.sidebarSubmenu button b{min-width:24px;text-align:center;padding:4px 7px;font-size:10px;border-radius:30px;background:#e7efe9;color:#688a74}
+.shell nav.sidebarGroups .sidebarSubmenu button.active b{background:#cae6d5;color:#087750}
+.sidebarScrim{display:none}
+.numbersHeading .numbersTopStat{border:1px solid #dbece0;background:#f0faf4;border-radius:13px;padding:13px 18px;display:flex;align-items:center;gap:10px}
+.numbersTopStat strong{font-size:27px;color:#078352;letter-spacing:-.05em}
+.numbersTopStat span{font-size:11px;color:#759584}
+.numberManagerPanel{padding:22px;margin:16px 0;border-radius:18px;box-shadow:0 8px 32px #0e45280c}
+.numberControlBar{display:flex;gap:10px;align-items:stretch}
+.numberSearch{position:relative;display:flex;flex:1;min-width:160px;align-items:center}
+.numberSearch>span{position:absolute;left:15px;font-size:28px;color:#8c9b93;line-height:1;pointer-events:none}
+.numberSearch input{width:100%;height:50px;border:1px solid #dde9df;border-radius:12px;background:#fff;outline:none;padding:12px 16px 12px 43px;font-size:13px;color:#345341}
+.numberSearch input:focus,.numberFilterSelect select:focus{border-color:#1f9966;box-shadow:0 0 0 3px #1ca46620}
+.numberFilterSelect{display:flex;align-items:center;gap:8px;border:1px solid #dde9df;border-radius:12px;padding:0 8px 0 14px;white-space:nowrap;font-size:11px;color:#7e9587}
+.numberFilterSelect select{border:0;outline:0;background:#fff;color:#436d52;min-width:145px;max-width:210px;height:46px;font-size:12px}
+.numbersActionStack{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 21px}
+.numbersActionStack button{padding:13px 18px;border-radius:11px;font-size:13px;font-weight:800;min-height:48px}
+.numbersActionStack button:disabled{opacity:.48;cursor:not-allowed}
+.numbersSync{background:#fff;border:1px solid #b7d6c3;color:#216e4b}
+.numbersAdd{background:#128b53;border:1px solid #128b53;color:#fff;box-shadow:0 8px 19px #147d4e21}
+.numbersActionStack>small{grid-column:1/-1;color:#a16b54;font-size:11px}
+.numbersSetup{background:#f8fbf9;border:1px solid #d8ebe0;border-radius:15px;padding:13px 17px;margin:15px 0 22px}
+.numbersSetupIntro{display:grid;gap:5px;margin:4px 0 12px}
+.numbersSetupIntro b{font-size:13px;color:#27553d}
+.numbersSetupIntro span{font-size:11px;color:#81958a;line-height:1.5}
+.numbersSetup>section{margin:12px 0}
+.numberListTitle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 13px}
+.numberListTitle h2{font-size:17px;font-weight:800;letter-spacing:-.02em;margin:0 0 5px}
+.numberListTitle p{font-size:11px;color:#889a90;line-height:1.5;margin:0}
+.numberListTitle>span{font-size:11px;font-weight:800;color:#638c72;white-space:nowrap}
+.numberList{border:1px solid #e5eae6;border-radius:14px;overflow:hidden}
+.numberListLabels{display:grid;grid-template-columns:55px minmax(185px,1.8fr) minmax(140px,1fr) minmax(180px,1fr);gap:13px;padding:13px 17px;background:#f7faf8;border-bottom:1px solid #e7eee9;font-size:10px;font-weight:800;color:#8c9f90;letter-spacing:.07em;text-transform:uppercase}
+.numberRow{display:grid;grid-template-columns:55px minmax(185px,1.8fr) minmax(140px,1fr) minmax(180px,1fr);gap:13px;align-items:center;padding:19px 17px;border:0;border-bottom:1px solid #e9efeb;border-radius:0;margin:0;background:#fff;min-width:0}
+.numberRow:nth-of-type(even){background:#fafcfb}
+.numberRow:last-child{border-bottom:0}
+.numberOrdinal{font-size:14px;color:#799184}
+.numberMainDetail{min-width:0;display:grid;gap:6px}
+.numberMainDetail>b{font-size:13px;color:#263f31;line-height:1.45;display:flex;gap:8px;align-items:flex-start;overflow-wrap:anywhere}
+.numberMetaSymbol{font-size:21px;line-height:14px;font-weight:800;color:#113d28}
+.numberMainDetail>.numberPhone{font-size:12px;font-weight:800;color:#157a4f;overflow-wrap:anywhere}
+.numberMainDetail small{color:#8a9b90;font-size:10px;line-height:1.45;overflow-wrap:anywhere}
+.numberStates{display:flex;align-items:flex-start;flex-wrap:wrap;gap:5px}
+.numberStatus{font-size:10px;font-weight:750;border-radius:20px;padding:6px 9px;background:#eef3f0;color:#5d7b68}
+.numberStatus.good{background:#e4f6e9;color:#087b50}
+.numberStatus.default{background:#e8ecfd;color:#5866a4}
+.numberStatus.warning{background:#fff0eb;color:#bb634c}
+.numberStatus.disabled{background:#ecefed;color:#74867a}
+.numberStatusError{width:100%;font-size:10px;color:#ad5549;line-height:1.45;overflow-wrap:anywhere}
+.numberRowActions{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.numberRowActions button{background:#fff;border:1px solid #dce9df;padding:7px 9px;color:#28654a;border-radius:8px;font-size:10px;font-weight:750}
+.numberRowActions button:hover{background:#f1faf3}
+.numberRowActions button:disabled{opacity:.45;cursor:not-allowed}
+.numberRowActions .numberDanger{color:#a95049;border-color:#f1dada}
+.numberEmpty{padding:32px 16px;text-align:center;color:#7f9989;font-size:12px;line-height:1.65}
+@media(max-width:1150px){.numberListLabels,.numberRow{grid-template-columns:35px minmax(160px,1.8fr) minmax(110px,1fr);gap:10px}.numberListLabels span:last-child{display:none}.numberRowActions{grid-column:2/-1}.numberRow{align-items:start}}
+@media(max-width:760px){
+ .sidebarScrim{display:block;position:fixed;inset:0;background:#14241d77;backdrop-filter:blur(2px);border:0;padding:0;z-index:79}
+ .shell aside{width:min(320px,84vw);z-index:80}
+ .shell nav.sidebarGroups{padding-bottom:calc(55px + env(safe-area-inset-bottom))}
+ .numberManagerPanel{padding:13px;border-radius:14px}
+ .numberControlBar{display:grid;grid-template-columns:1fr;gap:9px}
+ .numberFilterSelect{min-height:43px}
+ .numberFilterSelect select{width:100%;max-width:none;flex:1}
+ .numbersActionStack{grid-template-columns:1fr;gap:8px;margin:10px 0 18px}
+ .numbersActionStack button{width:100%;padding:12px}
+ .numberListLabels{grid-template-columns:42px 1fr;gap:12px;padding:12px}
+ .numberListLabels span:nth-child(n+3){display:none}
+ .numberRow{grid-template-columns:33px minmax(0,1fr);gap:10px;padding:16px 12px}
+ .numberMainDetail{grid-column:2}
+ .numberStates{grid-column:2}
+ .numberRowActions{grid-column:2}
+ .numberListTitle{align-items:flex-start;flex-wrap:wrap}
+ .numbersHeading .numbersTopStat{padding:9px 12px}
+ .numbersTopStat strong{font-size:23px}
+ .numbersHeading .numbersTopStat span{font-size:10px}
+ .numbersSetup{padding:10px}
+}
