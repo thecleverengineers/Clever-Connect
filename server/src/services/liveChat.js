@@ -149,11 +149,13 @@ export function validateFlow(body){
 
 async function sendNode(integration,convo,flow,node){
   if(!node)return;
-  const [contact,globals]=await Promise.all([
+  const [contact,globals,userDefs]=await Promise.all([
     Contact.findOne({workspaceId:integration.workspaceId,phone:'+'+convo.phone}).select('name phone email custom').lean(),
-    ChatAttribute.find({workspaceId:integration.workspaceId,scope:'global',enabled:true,isSecret:false}).select('scope key value enabled isSecret').lean()
+    ChatAttribute.find({workspaceId:integration.workspaceId,scope:'global',enabled:true,isSecret:false}).select('scope key value enabled isSecret').lean(),
+    ChatAttribute.find({workspaceId:integration.workspaceId,scope:'user',enabled:true}).select('key').lean()
   ]);
-  const userValues=contact?.custom instanceof Map?Object.fromEntries(contact.custom):contact?.custom||{};
+  const existingValues=contact?.custom instanceof Map?Object.fromEntries(contact.custom):contact?.custom||{};
+  const userValues=Object.fromEntries(userDefs.map(a=>[a.key,existingValues[a.key]||'']));
   const displayText=renderFlowText(node.text,{contact:contact||{phone:'+'+convo.phone},globals,values:userValues});
   if(node.type==='handoff'){
     if(node.text){
