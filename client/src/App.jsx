@@ -1137,6 +1137,10 @@ function WhatsAppApi({go}){
       if(finished||!authCode||!session?.waba_id)return;
       finished=true;cleanup();
       try{
+        const portfolioFromMeta=String(session.business_id||session.businessId||'');
+        if(coexistence&&chosenBusiness&&portfolioFromMeta&&portfolioFromMeta!==chosenBusiness){
+          throw new Error('Meta authorized a different business portfolio from the one you selected. Restart onboarding and choose the same portfolio in Facebook.');
+        }
         const eventName=String(session.event||'').toUpperCase();
         const y=await api('/integrations/embedded-signup/complete',{
           method:'POST',
@@ -1350,7 +1354,7 @@ function WhatsAppApi({go}){
                 <input type="tel" value={businessAppPhone} onChange={e=>setBusinessAppPhone(e.target.value)} placeholder="+91 98765 43210" maxLength={25}/>
                 <small>Clever Connect cannot select an app-only number on your behalf. Enter and verify the same number inside Meta's onboarding popup.</small>
               </label>
-              <div className="metaPickerHint"><b>Selected portfolio:</b> {chosenPortfolio.name}. Click Continue with Facebook below and choose this portfolio and phone inside Meta. We will verify that the portfolio returned by Meta matches your choice before saving a connection.</div>
+              <div className="metaPickerHint"><b>Selected portfolio:</b> {chosenPortfolio.name}. Click Continue with Facebook below and choose this portfolio and phone inside Meta. If Meta returns a portfolio ID, Clever Connect will reject a mismatch before saving the connection.</div>
             </>}
             {(metaAssets.warnings||[]).map((warning,i)=><div className="metaPickerWarning" key={i}>{warning}</div>)}
             <small className="metaPickerSourceNote">{metaAssets.note}</small>
@@ -1378,11 +1382,11 @@ function WhatsAppApi({go}){
         {canAdd&&connectionMode==='cloud_api'&&!editing&&<button type="button" onClick={()=>setShowForm(v=>!v)}>{showForm?'Hide credentials':'Enter credentials'}</button>}
       </div>
       {(showForm||connectionMode==='cloud_api')&&<div className="panel metaConnectionForm">
-        <form key={editing?.id||'new-meta'} className="formGrid" onSubmit={save}>
-          <label>Connection name<input name="name" defaultValue={editing?.name||''} placeholder="Sales WhatsApp" required/></label>
+        <form key={editing?.id||existingPrefill?.phoneNumberId||'new-meta'} className="formGrid" onSubmit={save}>
+          <label>Connection name<input name="name" defaultValue={editing?.name||existingPrefill?.name||''} placeholder="Sales WhatsApp" required/></label>
           <label>Graph API version<input name="graphVersion" defaultValue={editing?.graphVersion||'v23.0'} placeholder="v23.0"/></label>
-          <label>Phone Number ID<input name="phoneNumberId" defaultValue={editing?.phoneNumberId||''} required/></label>
-          <label>WhatsApp Business Account (WABA) ID<input name="businessAccountId" defaultValue={editing?.businessAccountId||''} required={!editing} placeholder="Meta numeric WABA ID"/></label>
+          <label>Phone Number ID<input name="phoneNumberId" defaultValue={editing?.phoneNumberId||existingPrefill?.phoneNumberId||''} required/></label>
+          <label>WhatsApp Business Account (WABA) ID<input name="businessAccountId" defaultValue={editing?.businessAccountId||existingPrefill?.businessAccountId||''} required={!editing} placeholder="Meta numeric WABA ID"/></label>
           <label className="full">Permanent/System-user access token<input type="password" name="accessToken" required={!editing} placeholder={editing?.hasAccessToken?'Saved securely — leave blank to keep current token':'Paste Meta access token'}/></label>
           <label>OTP authentication template<input name="otpTemplateName" defaultValue={editing?.otpTemplateName||''} placeholder="login_otp"/></label>
           <label>OTP template language<input name="otpTemplateLanguage" defaultValue={editing?.otpTemplateLanguage||'en_US'} placeholder="en_US"/></label>
