@@ -182,7 +182,7 @@ export default function MetaTemplateManager({go}){
     {senderNeedsAuthorization&&<div className="mtmNotice mtmSenderAuthNotice" role="status">
       <b>WhatsApp sending needs authorization.</b> Template synchronization can work with Meta management permission while message sending fails. Renew the selected sender's token with <code>whatsapp_business_messaging</code>, then test it under Numbers.
       <button type="button" onClick={()=>go('whatsapp-api')}>Manage sender →</button>
-    </div>
+    </div>}
     <div className="mtmToolbar">
       <label>WhatsApp account<select value={profileId} onChange={e=>{setProfileId(e.target.value);localStorage.setItem('wa:template-profile',e.target.value);setRecommendation(null)}}>
         <option value="">All accounts</option>{profiles.map(p=><option key={p.id} value={p.id}>{p.name} · {p.displayPhoneNumber||p.phoneNumberId}{p.planAllowed===false?' (plan limit)':''}</option>)}</select></label>
