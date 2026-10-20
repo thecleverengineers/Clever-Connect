@@ -1,7 +1,7 @@
 import {Campaign,Delivery,DeliveryReceipt} from '../models.js';
 
-export const PENDING_DELIVERY_STATES=['queued','submitted','sent'];
-export const DELIVERY_STATES=['queued','submitted','sent','delivered','read','failed','skipped'];
+export const PENDING_DELIVERY_STATES=['queued','dispatching','acceptance_unknown','submitted','sent'];
+export const DELIVERY_STATES=['queued','dispatching','acceptance_unknown','submitted','sent','delivered','read','failed','skipped'];
 
 export function normalizedAudiencePhone(value){
   const phone=String(value||'').replace(/\D/g,'');
@@ -26,13 +26,14 @@ export function summarizeStatuses(counts={}){
   const failed=counts.failed||0;
   const read=counts.read||0;
   const delivered=(counts.delivered||0)+read;
-  const pending=(counts.queued||0)+(counts.submitted||0)+(counts.sent||0);
+  const unknown=(counts.acceptance_unknown||0);
+  const pending=(counts.queued||0)+(counts.dispatching||0)+unknown+(counts.submitted||0)+(counts.sent||0);
   const audience=skipped+failed+delivered+pending;
   const submitted=(counts.submitted||0)+(counts.sent||0)+delivered;
   const eligible=audience-skipped;
   const pct=(n,d)=>d?Math.round(n*1000/d)/10:0;
   return {
-    audience,eligible,skipped,submitted,delivered,read,failed,pending,
+    audience,eligible,skipped,submitted,delivered,read,failed,pending,unknown,
     deliveredPct:pct(delivered,eligible),failedPct:pct(failed,eligible),
     readPct:pct(read,delivered),audienceDeliveryPct:pct(delivered,audience),
     replied:counts.replied||0
@@ -57,10 +58,10 @@ export async function refreshCampaignTotals(campaignId){
 // A Meta receipt can be duplicated or arrive out of order. Atomic status
 // guards prevent read -> delivered, delivered -> sent, or delivered -> failed.
 const transitions={
-  sent:['queued','submitted'],
-  delivered:['queued','submitted','sent'],
-  read:['queued','submitted','sent','delivered'],
-  failed:['queued','submitted','sent']
+  sent:['queued','dispatching','acceptance_unknown','submitted'],
+  delivered:['queued','dispatching','acceptance_unknown','submitted','sent'],
+  read:['queued','dispatching','acceptance_unknown','submitted','sent','delivered'],
+  failed:['queued','dispatching','acceptance_unknown','submitted','sent']
 };
 export async function applyMetaReceipt({workspaceId,providerMessageId,status,occurredAt,errorCode='',errorMessage=''}){
   if(!transitions[status]||!providerMessageId)return null;
