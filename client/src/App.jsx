@@ -1037,6 +1037,14 @@ function WhatsAppApi({go}){
   const[editing,setEditing]=useState(null);
   const[fbBusy,setFbBusy]=useState(false);
   const[connectionMode,setConnectionMode]=useState('new');
+  const[metaAssets,setMetaAssets]=useState(null);
+  const[assetBusy,setAssetBusy]=useState(false);
+  const[chosenBusiness,setChosenBusiness]=useState('');
+  const[chosenWaba,setChosenWaba]=useState('');
+  const[chosenPhone,setChosenPhone]=useState('');
+  const[businessAppPhone,setBusinessAppPhone]=useState('');
+  const[accountDiscoveryError,setAccountDiscoveryError]=useState('');
+  const[existingPrefill,setExistingPrefill]=useState(null);
   const coexistence=connectionMode==='business_app';
   const[msg,setMsg]=useState('');
   const[err,setErr]=useState('');
@@ -1072,6 +1080,42 @@ function WhatsAppApi({go}){
   const canAdd=allowed&&subscription&&subscription.used<subscription.max;
   const verifyToken=connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
   const webhook=BASE.replace(/\/api$/,'')+'/api/webhooks/meta';
+
+  // Meta requires the business owner to authorize portfolio enumeration.
+  // This is a separate short-lived Facebook Login; it does NOT connect,
+  // migrate or register any number. No user token is persisted.
+  async function discoverFacebookAssets(){
+    if(assetBusy)return;
+    if(!embedded?.enabled){setAccountDiscoveryError('Facebook Login is not configured by Super Admin.');return}
+    setAssetBusy(true);setAccountDiscoveryError('');setMetaAssets(null);
+    setChosenBusiness('');setChosenWaba('');setChosenPhone('');
+    try{
+      const FB=await loadFacebookSdk(embedded.appId,embedded.graphVersion||'v23.0');
+      const auth=await new Promise((resolve,reject)=>{
+        FB.login(response=>{
+          if(response?.authResponse?.accessToken)resolve(response.authResponse.accessToken);
+          else reject(new Error('Facebook did not grant access to list portfolios. Choose the intended Meta account and approve business_management/WhatsApp permissions, or continue with Meta Coexistence directly.'));
+        },{
+          scope:'public_profile,business_management,whatsapp_business_management',
+          auth_type:'rerequest',
+          return_scopes:true
+        });
+      });
+      const result=await api('/integrations/meta-portfolios/discover',{method:'POST',body:JSON.stringify({accessToken:auth})});
+      setMetaAssets(result);
+      if(result.portfolios?.length)setChosenBusiness(result.portfolios[0].id);
+    }catch(e){setAccountDiscoveryError(e.message||'Unable to list Meta portfolios.')}
+    finally{setAssetBusy(false)}
+  }
+
+  const chosenPortfolio=metaAssets?.portfolios?.find(x=>x.id===chosenBusiness);
+  const selectedWaba=chosenPortfolio?.wabas?.find(x=>x.id===chosenWaba);
+  const availableNumbers=selectedWaba?.numbers||[];
+  function useExistingApiPhone(waba,phone){
+    setExistingPrefill({businessAccountId:waba.id,phoneNumberId:phone.id,name:phone.verifiedName||waba.name});
+    setConnectionMode('cloud_api');setShowForm(true);
+    setMsg('Selected '+(phone.displayPhoneNumber||phone.id)+'. Enter the WABA owner’s authorized system-user token to link this existing Cloud API number. This does not migrate the number.');
+  }
 
   async function connectWithFacebook(){
     if(!canAdd)return;
@@ -1268,9 +1312,49 @@ function WhatsAppApi({go}){
           <p>Do not try registering the same number again. You need an authorized <strong>Phone Number ID</strong>, <strong>WABA ID</strong>, and <strong>system-user token</strong> with WhatsApp permissions. This does not transfer an account from another provider or create a second WABA. If access cannot be granted, coordinate a formal provider migration.</p>
           <p><strong>Meta error #3441034:</strong> Meta says the number is not eligible to register or migrate. Inspect the current WABA and linked Business Suite/partner assets with its owner; do not delete or disconnect a working number without assessing the impact.</p>
         </div>}
-        {connectionMode==='business_app'&&!editing&&<div className="metaExistingHint">
-          <b>WhatsApp Business App + Cloud API (Coexistence)</b>
-          <p>For eligible numbers used in the <strong>WhatsApp Business app</strong> on your phone, not a number already running solely through a Cloud API provider. Meta determines eligibility. Do not delete your phone account to force this process.</p>
+        {connectionMode==='business_app'&&!editing&&<div className="metaBusinessAccountPicker">
+          <div className="metaExistingHint">
+            <b>Connect an existing WhatsApp Business App number (Coexistence)</b>
+            <p>First choose the Facebook/Meta account. Clever Connect lists <strong>portfolios, WABAs, and API numbers you have permission to view</strong>. WhatsApp Business App-only numbers may not appear in Meta's API until Coexistence onboarding. Meta makes the final number selection and eligibility decision.</p>
+          </div>
+          <div className="metaPickerActions">
+            <button type="button" className="facebookButton" disabled={assetBusy} onClick={discoverFacebookAssets}>
+              {assetBusy?'Checking Meta account…':metaAssets?'Change / refresh Meta account':'① Sign in & list Meta portfolios'}
+            </button>
+            {metaAssets?.metaAccount&&<div className="metaSignedIn"><b>Signed in as {metaAssets.metaAccount.name}</b><small>Facebook account ID: {metaAssets.metaAccount.id}</small></div>}
+          </div>
+          {accountDiscoveryError&&<div className="metaPickerWarning" role="alert">{accountDiscoveryError}<p>You can still continue with Meta Coexistence below; Meta controls the portfolio and phone selection in its signup window.</p></div>}
+          {metaAssets&&<div className="metaPortfolioResults">
+            <div className="metaPortfolioResultHead"><b>② Choose a business portfolio</b><span>{metaAssets.portfolios?.length||0} accessible</span></div>
+            {(metaAssets.portfolios||[]).length?
+              <select aria-label="Business portfolio" value={chosenBusiness} onChange={e=>{setChosenBusiness(e.target.value);setChosenWaba('');setChosenPhone('')}}>
+                {metaAssets.portfolios.map(x=><option key={x.id} value={x.id}>{x.name} · {x.id}</option>)}
+              </select>:
+              <p className="metaPickerWarning">No accessible portfolios returned. Confirm the selected Facebook identity has full portfolio access and approved business_management permission.</p>}
+            {chosenPortfolio&&<>
+              <div className="metaPortfolioResultHead"><b>③ WhatsApp Business Accounts in {chosenPortfolio.name}</b><span>{chosenPortfolio.wabas.length} visible</span></div>
+              {chosenPortfolio.wabas.length?<div className="metaWabaOptions">{chosenPortfolio.wabas.map(w=><div className="metaWaba" key={w.id}>
+                <button type="button" className={chosenWaba===w.id?'chosen':''} onClick={()=>{setChosenWaba(w.id);setChosenPhone('')}}>
+                  <b>◉ {w.name}</b><small>WABA ID: {w.id} · {w.source==='owned'?'Owned':'Shared'} · {w.numbers.length} API number(s)</small>
+                </button>
+                {chosenWaba===w.id&&<div className="metaNumbers">{w.numbers.length?
+                  w.numbers.map(n=><div className="metaPhoneRow" key={n.id}>
+                    <label><input type="radio" name="metaPhone" checked={chosenPhone===n.id} onChange={()=>setChosenPhone(n.id)}/>
+                      <span><b>{n.displayPhoneNumber||n.id}</b><small>{n.verifiedName||'Meta Cloud API number'} · Phone ID: {n.id}</small></span>
+                    </label>
+                    <button type="button" onClick={()=>useExistingApiPhone(w,n)}>Link as existing API →</button>
+                  </div>):
+                  <div className="metaPickerHint">No Cloud API phone numbers visible for this WABA. A number used only in the WhatsApp Business phone app might be absent until Meta completes Coexistence onboarding.</div>}</div>}
+              </div>)}</div>:<div className="metaPickerHint">No WABAs are visible for this portfolio with the current Meta permissions. Meta may still offer eligible Business App numbers during its hosted Coexistence flow.</div>}
+              <label className="metaAppNumberInput">④ WhatsApp Business App number you want to connect (optional, for reference)
+                <input type="tel" value={businessAppPhone} onChange={e=>setBusinessAppPhone(e.target.value)} placeholder="+91 98765 43210" maxLength={25}/>
+                <small>Clever Connect cannot select an app-only number on your behalf. Enter and verify the same number inside Meta's onboarding popup.</small>
+              </label>
+              <div className="metaPickerHint"><b>Selected portfolio:</b> {chosenPortfolio.name}. Click Continue with Facebook below and choose this portfolio and phone inside Meta. We will verify that the portfolio returned by Meta matches your choice before saving a connection.</div>
+            </>}
+            {(metaAssets.warnings||[]).map((warning,i)=><div className="metaPickerWarning" key={i}>{warning}</div>)}
+            <small className="metaPickerSourceNote">{metaAssets.note}</small>
+          </div>}
         </div>}
         {connectionMode==='new'&&!editing&&<div className="metaExistingHint">
           <b>Set up a new WhatsApp number</b>
