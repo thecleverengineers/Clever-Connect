@@ -230,3 +230,38 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .metaExistingHint p{font-size:11px;line-height:1.7;color:#5d7868;margin:8px 0 0}
 .metaModeInfo{font-size:12px;line-height:1.6;color:#517f64;background:#eaf6ee;border-radius:8px;padding:10px 11px;margin:0 0 12px}
 @media(max-width:800px){.metaConnectionModes{grid-template-columns:1fr}.metaConnectionModes button{min-height:0;padding:13px}.metaConnectionModes button small{font-size:11px}}
+
+/* Explicitly authorized Meta identity + business/WABA/number picker */
+.metaBusinessAccountPicker{display:grid;gap:15px;margin:15px 0}
+.metaBusinessAccountPicker .metaExistingHint{margin:0}
+.metaPickerActions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.metaPickerActions>.facebookButton{border:0;padding:12px 17px;border-radius:10px;background:#167d51;color:#fff;font-size:12px;font-weight:800}
+.metaPickerActions>.facebookButton:disabled{opacity:.5;cursor:wait}
+.metaSignedIn{display:grid;gap:4px;color:#255c3c;font-size:12px}
+.metaSignedIn small{font-size:10px;color:#829589}
+.metaPortfolioResults{border:1px solid #dcece2;border-radius:13px;background:#fbfefa;padding:17px;display:grid;gap:12px}
+.metaPortfolioResultHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px}
+.metaPortfolioResultHead b{color:#285c3d;font-size:12px}
+.metaPortfolioResultHead span{color:#82948a;font-size:11px}
+.metaPortfolioResults select,.metaAppNumberInput input{width:100%;min-height:43px;border:1px solid #d6e8dd;background:#fff;color:#234e34;border-radius:10px;padding:10px 12px;font-size:12px}
+.metaWabaOptions{display:grid;gap:8px}
+.metaWaba{border:1px solid #e1eae4;border-radius:11px;overflow:hidden;background:#fff}
+.metaWaba>button{display:grid;text-align:left;width:100%;gap:5px;padding:12px;background:transparent;border:0;color:#3c6650}
+.metaWaba>button.chosen{background:#e5f6ea;color:#19774d}
+.metaWaba>button>b{font-size:12px}.metaWaba>button>small{font-size:10px;color:#889d90;overflow-wrap:anywhere}
+.metaNumbers{padding:10px;border-top:1px solid #e3ece6}
+.metaPhoneRow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #edf2ee}
+.metaPhoneRow:last-child{border-bottom:0}
+.metaPhoneRow>label{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.metaPhoneRow>label input{accent-color:#0c935b}
+.metaPhoneRow>label>span{display:grid;gap:3px;min-width:0}
+.metaPhoneRow b{font-size:12px;color:#2a5038}
+.metaPhoneRow small{font-size:10px;overflow-wrap:anywhere;color:#8a9b8e}
+.metaPhoneRow>button{border:1px solid #bee4ca;background:#eaf8ed;color:#167f4f;border-radius:8px;padding:8px 10px;font-size:10px;font-weight:800}
+.metaPickerHint,.metaPickerWarning{padding:12px 13px;font-size:11px;line-height:1.7;border-radius:10px;background:#eaf7ee;border:1px solid #d7e9dd;color:#517e60}
+.metaPickerWarning{background:#fff7ec;border-color:#f1dfc8;color:#8b683b}
+.metaPickerWarning p{margin:5px 0 0}
+.metaAppNumberInput{display:grid;gap:8px;color:#396749;font-size:12px;font-weight:750}
+.metaAppNumberInput small{color:#889c90;font-size:10px;font-weight:500;line-height:1.5}
+.metaPickerSourceNote{font-size:10px;color:#859e8c;line-height:1.7}
+@media(max-width:700px){.metaPortfolioResults{padding:12px}.metaPickerActions{align-items:stretch;flex-direction:column}.metaPickerActions .facebookButton{width:100%}.metaPhoneRow{align-items:flex-start;flex-direction:column}.metaPhoneRow>button{width:100%}}
