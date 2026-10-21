@@ -46,7 +46,7 @@ router.post('/prepare',async(req,res)=>{
   if(!code||code.length>4096)return res.status(400).json({message:'Meta authorization code missing'});
   const waba=cleanMetaId(req.body?.wabaId,'WABA ID');
   const portfolio=String(req.body?.businessPortfolioId||'').trim();
-  const mode=req.body?.coexistence===true?'coexistence':'new';
+  const mode=req.body?.existingCloud===true?'existing':req.body?.coexistence===true?'coexistence':'new';
   const auth=await exchange(code);
   const found=[];let after='';
   for(let i=0;i<3;i++){
