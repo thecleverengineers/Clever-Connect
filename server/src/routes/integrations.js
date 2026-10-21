@@ -184,101 +184,12 @@ r.get('/embedded-signup/config',async(req,res)=>{
   res.json({...cfg,subscription:usage,webhookVerifyToken:webhookVerifyToken()});
 });
 
-r.post('/embedded-signup/complete',async(req,res)=>{
-  let row=null;
-  let lease=null;
-  try{
-    const usage=await requireMessagingAccess(req.workspaceId,res);
-    if(!usage)return;
-    if(usage.used>=usage.max)return res.status(409).json({message:'Your '+usage.plan+' plan allows '+usage.max+' Meta WhatsApp connection(s)'});
-    lease=await acquireConnectionLease(req.workspaceId);
-    if(!lease)return res.status(409).json({message:'Another WhatsApp connection is being added. Please wait and retry.'});
-    const fresh=await limits(req.workspaceId);
-    if(fresh.used>=fresh.max)return res.status(409).json({message:'Your plan WhatsApp connection limit was reached'});
-
-    const code=String(req.body.code||'').trim();
-    const wabaId=String(req.body.wabaId||'').trim();
-    let phoneNumberId=String(req.body.phoneNumberId||'').trim();
-    const businessPortfolioId=String(req.body.businessPortfolioId||'').trim();
-    const coexistence=req.body.coexistence===true;
-    if(!code||!wabaId)return res.status(400).json({message:'Facebook signup did not return the required WhatsApp Business Account details'});
-
-    const {token,graphVersion}=await exchangeEmbeddedCode(code);
-    if(!phoneNumberId){
-      const phones=await metaRequest(
-        graphVersion,
-        wabaId+'/phone_numbers?fields=id,display_phone_number,verified_name&limit=100',
-        token,
-        {method:'GET'}
-      );
-      const items=phones.data||[];
-      if(items.length===1)phoneNumberId=String(items[0].id||'');
-      else if(items.length>1)return res.status(409).json({message:'Meta returned multiple phone numbers but did not identify the selected number. Retry Embedded Signup and select one number.'});
-    }
-    if(!phoneNumberId)return res.status(400).json({message:'No WhatsApp phone number was returned by Meta'});
-
-    if(await Integration.exists({provider:'meta',phoneNumberId})){
-      return res.status(409).json({message:'This WhatsApp phone number is already connected'});
-    }
-
-    const phone=await metaRequest(graphVersion,phoneNumberId+'?fields=id,display_phone_number,verified_name',token,{method:'GET'});
-    await metaRequest(graphVersion,wabaId+'/subscribed_apps',token,{method:'POST'});
-
-    const pin=String(crypto.randomInt(100000,1000000));
-    let registrationStatus=coexistence?'coexistence':'registered';
-    let registrationWarning='';
-    if(!coexistence){
-      try{
-        await metaRequest(graphVersion,phoneNumberId+'/register',token,{
-          method:'POST',
-          body:{messaging_product:'whatsapp',pin}
-        });
-      }catch(e){
-        registrationStatus='needs_attention';
-        registrationWarning=e.message;
-      }
-    }
-
-    const count=await Integration.countDocuments({workspaceId:req.workspaceId,provider:'meta'});
-    row=await Integration.create({
-      workspaceId:req.workspaceId,
-      name:String(req.body.name||phone.verified_name||phone.display_phone_number||'Meta WhatsApp').trim(),
-      provider:'meta',
-      enabled:true,
-      isDefault:count===0,
-      phoneNumberId,
-      displayPhoneNumber:phone.display_phone_number||'',
-      businessAccountId:wabaId,
-      businessPortfolioId,
-      accessTokenEncrypted:encrypt(token),
-      registrationPinEncrypted:coexistence?'':encrypt(pin),
-      connectMethod:'embedded',
-      graphVersion,
-      connectionStatus:registrationStatus==='needs_attention'?'error':'connected',
-      connectedAt:new Date(),
-      lastCheckedAt:new Date(),
-      lastError:registrationWarning
-    });
-
-    res.status(201).json({
-      connection:view(row),
-      registrationStatus,
-      warning:registrationWarning||'',
-      message:registrationStatus==='registered'
-        ? 'Facebook signup completed and WhatsApp phone registered.'
-        : registrationStatus==='coexistence'
-          ? 'Facebook signup completed using WhatsApp Business App coexistence.'
-          : 'Facebook signup completed and saved. Phone registration needs attention.'
-    });
-  }catch(e){
-    if(row?._id)await Integration.deleteOne({_id:row._id}).catch(()=>{});
-    if(e?.code===11000)return res.status(409).json({message:'This Meta WhatsApp profile is already connected'});
-    console.error('Embedded Signup completion error',e);
-    res.status(502).json({message:e.message||'Unable to complete Facebook Embedded Signup'});
-  }finally{
-    await releaseConnectionLease(req.workspaceId,lease);
-  }
-});
+// Legacy endpoint is retired to prevent automatically registering an arbitrary
+// first number without the user's explicit activation selection.
+r.post('/embedded-signup/complete',(req,res)=>res.status(409).json({
+  code:'META_SELECTION_REQUIRED',
+  message:'Refresh Clever Connect and choose which Meta phone numbers to activate after authorization.'
+}));
 
 // Explicitly authorized existing-number connection: Meta issues the access
 // token during Embedded Signup and we exchange the code only on the server.
