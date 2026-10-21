@@ -1242,7 +1242,7 @@ function WhatsAppApi({go}){
         <div className="numbersSetupIntro"><b>Connect a WhatsApp Business number</b><span>Choose the correct path. New numbers, WhatsApp Business App numbers, and existing Cloud API numbers use different Meta procedures.</span></div>
         {pendingActivation&&<section className="metaActivationPanel" id="metaActivationPicker" aria-label="Activate WhatsApp numbers">
           <div className="metaActivationHeading">
-            <div><small><icon name="check-circle" inline/> META AUTHORIZATION SUCCESSFUL</small>
+            <div><small>✓ META AUTHORIZATION SUCCESSFUL</small>
               <h2>Choose numbers to activate</h2>
               <p>Meta returned {pendingActivation.numbers.length} WhatsApp number(s) for the authorized WABA. Select only the numbers you want enabled in this Clever Connect workspace.</p>
             </div>
