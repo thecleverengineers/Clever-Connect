@@ -246,7 +246,7 @@ const metaActivationSchema=new Schema({
   businessAccountId:{type:String,required:true},
   businessPortfolioId:{type:String,default:''},
   graphVersion:{type:String,default:'v23.0'},
-  mode:{type:String,enum:['new','coexistence'],required:true},
+  mode:{type:String,enum:['new','coexistence','existing'],required:true},
   accessTokenEncrypted:{type:String,required:true,select:false},
   phones:[{_id:false,id:{type:String,required:true},displayPhoneNumber:String,verifiedName:String}],
   expiresAt:{type:Date,required:true},
