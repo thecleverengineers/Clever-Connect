@@ -899,6 +899,11 @@ function WhatsAppApi({go}){
   const[manualTokenEntry,setManualTokenEntry]=useState(false);
   const[editing,setEditing]=useState(null);
   const[fbBusy,setFbBusy]=useState(false);
+  const[pendingActivation,setPendingActivation]=useState(null);
+  const[activationSelected,setActivationSelected]=useState([]);
+  const[activationBusy,setActivationBusy]=useState(false);
+  const[activationResults,setActivationResults]=useState([]);
+
   const[connectionMode,setConnectionMode]=useState('new');
   const[metaAssets,setMetaAssets]=useState(null);
   const[assetBusy,setAssetBusy]=useState(false);
@@ -1025,7 +1030,7 @@ function WhatsAppApi({go}){
           throw new Error('Meta returned a different WABA from the one you selected. No credential was saved.');
         if(existing&&session.phone_number_id&&String(session.phone_number_id)!==expectedPhone)
           throw new Error('Meta returned a different WhatsApp number. No credential was saved.');
-        const y=await api(existing?'/integrations/embedded-signup/link-existing':'/integrations/embedded-signup/complete',{
+        const y=await api(existing?'/integrations/embedded-signup/link-existing':'/meta-activation/prepare',{
           method:'POST',
           body:JSON.stringify({
             code:authCode,
@@ -1035,9 +1040,18 @@ function WhatsAppApi({go}){
             ...(existing?{profileId:editing?.id||''}:{coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING')})
           })
         });
-        setMsg(y.warning||y.message||'Meta WhatsApp connected with Facebook.');
-        if(existing){setEditing(null);setShowForm(false);setShowSetup(false)}
-        await load();
+        if(!existing){
+          setPendingActivation(y);
+          setActivationSelected([]);
+          setActivationResults([]);
+          setShowSetup(true);
+          setMsg('Meta account authorized. Select the WhatsApp numbers you want to activate.');
+          requestAnimationFrame(()=>document.getElementById('metaActivationPicker')?.scrollIntoView({behavior:'smooth',block:'start'}));
+        }else{
+          setMsg(y.warning||y.message||'Meta WhatsApp reauthorized.');
+          setEditing(null);setShowForm(false);setShowSetup(false);
+          await load();
+        }
       }catch(e){setErr(e.message)}
       finally{setFbBusy(false)}
     };
@@ -1109,6 +1123,35 @@ function WhatsAppApi({go}){
     }
   }
 
+  async function activateSelectedNumbers(){
+    if(!pendingActivation?.sessionId||!activationSelected.length||activationBusy)return;
+    setActivationBusy(true);setErr('');setMsg('');
+    try{
+      const result=await api('/meta-activation/activate',{
+        method:'POST',
+        body:JSON.stringify({
+          sessionId:pendingActivation.sessionId,phoneNumberIds:activationSelected
+        })
+      });
+      setActivationResults(result.results||[]);
+      const attempted=new Set((result.results||[]).filter(x=>x.connection).map(x=>x.phoneNumberId));
+      setPendingActivation(previous=>previous?{
+        ...previous,remainingSlots:result.remainingSlots,
+        numbers:previous.numbers.map(p=>attempted.has(p.id)?{...p,availability:'already_connected'}:p)
+      }:previous);
+      setActivationSelected([]);
+      setMsg(result.message||'Selected WhatsApp numbers processed. Check the activation results.');
+      await load();
+    }catch(e){setErr(e.message||'Unable to activate selected numbers')}
+    finally{setActivationBusy(false)}
+  }
+
+  const activationAvailable=(pendingActivation?.numbers||[]).filter(p=>p.availability==='available');
+  function toggleActivationPhone(id){
+    setActivationSelected(old=>old.includes(id)?old.filter(x=>x!==id):
+      old.length>=(pendingActivation?.remainingSlots||0)?old:[...old,id]);
+  }
+
   async function save(e){
     e.preventDefault();setErr('');setMsg('');
     const o=Object.fromEntries(new FormData(e.currentTarget));
@@ -1159,7 +1202,7 @@ function WhatsAppApi({go}){
   }
 
   return <div className="page">
-    <div className="title numbersHeading"><div><span>WHATSAPP MANAGER</span><h1>Numbers</h1><p>Manage your Meta WhatsApp numbers in one place. Search, check connection health and connect more numbers within your subscription.</p></div><div className="numbersTopStat"><strong>{meta.length}</strong><span>connected profiles</span></div></div>
+    <div className="title numbersHeading"><div><span>WHATSAPP MANAGER</span><h1>Numbers</h1><p>Manage Meta WhatsApp numbers in this workspace. Authorization problems do not delete your saved sender profiles.</p></div><div className="numbersTopStat"><strong>{meta.length}</strong><span>saved profiles</span></div></div>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
 
 
@@ -1197,6 +1240,38 @@ function WhatsAppApi({go}){
       </div>
       {showSetup&&<div className="numbersSetup" id="numbersSetup">
         <div className="numbersSetupIntro"><b>Connect a WhatsApp Business number</b><span>Choose the correct path. New numbers, WhatsApp Business App numbers, and existing Cloud API numbers use different Meta procedures.</span></div>
+        {pendingActivation&&<section className="metaActivationPanel" id="metaActivationPicker" aria-label="Activate WhatsApp numbers">
+          <div className="metaActivationHeading">
+            <div><small><icon name="check-circle" inline/> META AUTHORIZATION SUCCESSFUL</small>
+              <h2>Choose numbers to activate</h2>
+              <p>Meta returned {pendingActivation.numbers.length} WhatsApp number(s) for the authorized WABA. Select only the numbers you want enabled in this Clever Connect workspace.</p>
+            </div>
+            <span>{pendingActivation.remainingSlots} subscription slot(s) available</span>
+          </div>
+          <div className="metaActivationNumbers">
+            {pendingActivation.numbers.map(n=><label key={n.id} className={'metaActivationChoice '+(n.availability!=='available'?'unavailable':'')}>
+              <input type="checkbox" checked={activationSelected.includes(n.id)}
+                disabled={activationBusy||n.availability!=='available'||(!activationSelected.includes(n.id)&&activationSelected.length>=pendingActivation.remainingSlots)}
+                onChange={()=>toggleActivationPhone(n.id)}/>
+              <span className="metaActivationPhoneInfo"><b>{n.displayPhoneNumber||'Meta Phone ID '+n.id}</b>
+                <small>{n.verifiedName||'WhatsApp Business Account'} · Phone Number ID {n.id}</small></span>
+              <span className={'metaActivationStatus '+(n.availability==='available'?'available':'unavailable')}>
+                {n.availability==='available'?'Available':n.availability==='already_connected'?'Already linked here':'Linked to another workspace'}
+              </span>
+            </label>)}
+          </div>
+          {activationResults.length>0&&<div className="metaActivationResults" role="status">
+            {activationResults.map(r=><p key={r.phoneNumberId}><b>{r.ok?'✓ Activated':'! Needs attention'} · {r.phoneNumberId}</b> {r.reason||r.connection?.name||''}</p>)}
+          </div>}
+          <div className="metaActivationFoot">
+            <div><b>{activationSelected.length} selected</b><small>{activationAvailable.length} available · Select up to {pendingActivation.remainingSlots} number(s)</small></div>
+            <button type="button" className="primary" disabled={activationBusy||!activationSelected.length}
+              onClick={activateSelectedNumbers}>{activationBusy?'Activating…':'Activate selected numbers →'}</button>
+            <button type="button" className="metaActivationDiscard" onClick={()=>{setPendingActivation(null);setActivationSelected([]);setActivationResults([])}}>Finish / Close</button>
+          </div>
+          {!activationAvailable.length&&<p className="metaActivationDone">No additional numbers are available in this authorization session. Your saved profiles are listed below.</p>}
+        </section>}
+
         {!editing&&<div className="metaConnectionModes" role="radiogroup" aria-label="WhatsApp number connection type">
           {[
             ['new','New number','Register a new WhatsApp Cloud API sender.'],
