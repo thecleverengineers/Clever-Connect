@@ -57,7 +57,12 @@ async function upsertRemote(req,connection,row){
   // index used by the upsert query. Older imported rows and concurrent syncs
   // can then produce E11000 even when the remote template already exists.
   const updates={$set:{...fields,metaTemplateId:String(row.id)}};
-  const existing=await Template.findOne(key).select('_id').lean();
+  // Meta's template ID is stable across edits. Prefer it over a mutable
+  // name/language combination when reconciling previously imported rows.
+  const existing=await Template.findOne({
+    workspaceId:req.workspaceId,integrationId:connection._id,
+    $or:[{metaTemplateId:String(row.id)},{metaTemplateName:row.name,language:row.language}]
+  }).select('_id').lean();
   if(existing){
     return Template.findOneAndUpdate({_id:existing._id,workspaceId:req.workspaceId},
       updates,{new:true,runValidators:true});
