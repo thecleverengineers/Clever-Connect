@@ -280,6 +280,98 @@ r.post('/embedded-signup/complete',async(req,res)=>{
   }
 });
 
+// Explicitly authorized existing-number connection: Meta issues the access
+// token during Embedded Signup and we exchange the code only on the server.
+// This NEVER returns credentials to the browser and NEVER calls /register.
+// It cannot bypass Meta's eligibility rules for BSP-owned numbers.
+r.post('/embedded-signup/link-existing',async(req,res)=>{
+  let lease=null;
+  try{
+    const usage=await requireMessagingAccess(req.workspaceId,res);
+    if(!usage)return;
+    const code=String(req.body?.code||'').trim();
+    const wabaId=String(req.body?.wabaId||'').trim();
+    const phoneNumberId=String(req.body?.phoneNumberId||'').trim();
+    const profileId=String(req.body?.profileId||'').trim();
+    const businessPortfolioId=String(req.body?.businessPortfolioId||'').trim();
+    if(!code||code.length>4096||!/^[0-9]{5,30}$/.test(wabaId)||
+       !/^[0-9]{5,30}$/.test(phoneNumberId))
+      return res.status(400).json({message:'Meta authorization must identify an existing WABA and Phone Number ID'});
+    if(profileId&&!mongoose.isValidObjectId(profileId))
+      return res.status(400).json({message:'Invalid sender connection'});
+    let prior=null;
+    if(profileId){
+      prior=await Integration.findOne({
+        _id:profileId,workspaceId:req.workspaceId,provider:'meta',enabled:true
+      });
+      if(!prior)return res.status(404).json({message:'WhatsApp connection not found'});
+      await requireMetaSenderEntitlement(req.workspaceId,prior._id);
+      if(prior.phoneNumberId!==phoneNumberId||prior.businessAccountId!==wabaId)
+        return res.status(409).json({message:'Meta authorized a different number or WABA. Existing sender credentials were not changed.'});
+    }else{
+      if(usage.used>=usage.max)return res.status(409).json({message:'Your subscription WhatsApp number limit has been reached'});
+      lease=await acquireConnectionLease(req.workspaceId);
+      if(!lease)return res.status(409).json({message:'Another connection is being added. Please retry shortly.'});
+      const fresh=await limits(req.workspaceId);
+      if(fresh.used>=fresh.max)return res.status(409).json({message:'Your plan WhatsApp number limit was reached'});
+      if(await Integration.exists({provider:'meta',phoneNumberId}))
+        return res.status(409).json({message:'This WhatsApp number is already connected. Open its existing account settings to reauthorize.'});
+    }
+    // One-use code, issued after a user explicitly approves Meta's login
+    // window. Never use the read-only Facebook profile discovery token here.
+    const {token,graphVersion}=await exchangeEmbeddedCode(code);
+    const verified=await verifyExistingCloudApiNumber({
+      phoneNumberId,businessAccountId:wabaId,accessToken:token,graphVersion
+    });
+    // Verify the actual sender credential before replacing or storing it.
+    const encrypted=encrypt(token);
+    const health=await testConnection({
+      enabled:true,provider:'meta',phoneNumberId,
+      accessTokenEncrypted:encrypted,graphVersion
+    });
+    if(profileId){
+      // Important: update only the selected workspace record after verification.
+      // Old encrypted token remains untouched when Meta authorization fails.
+      prior.accessTokenEncrypted=encrypted;
+      prior.connectMethod='embedded';
+      prior.graphVersion=graphVersion;
+      prior.connectionStatus='connected';
+      prior.lastError='';
+      prior.lastCheckedAt=new Date();
+      prior.displayPhoneNumber=verified.displayPhoneNumber||health.displayPhoneNumber||prior.displayPhoneNumber;
+      if(businessPortfolioId)prior.businessPortfolioId=businessPortfolioId;
+      await prior.save();
+      return res.json({
+        connection:view(prior),message:'Meta authorization refreshed. Your existing sender token was replaced securely.',
+        messagingPermission:health.messagingPermission||'unavailable'
+      });
+    }
+    const count=await Integration.countDocuments({workspaceId:req.workspaceId,provider:'meta'});
+    const row=await Integration.create({
+      workspaceId:req.workspaceId,
+      name:String(verified.verifiedName||verified.displayPhoneNumber||'Meta WhatsApp').trim().slice(0,100),
+      provider:'meta',enabled:true,isDefault:count===0,
+      phoneNumberId,businessAccountId:wabaId,businessPortfolioId,
+      displayPhoneNumber:verified.displayPhoneNumber||health.displayPhoneNumber||'',
+      accessTokenEncrypted:encrypted,
+      graphVersion,connectMethod:'embedded',
+      connectionStatus:'connected',connectedAt:new Date(),lastCheckedAt:new Date(),lastError:''
+    });
+    return res.status(201).json({
+      connection:view(row),message:'Existing Meta Cloud API number linked with an authorized token. No registration or migration was performed.',
+      messagingPermission:health.messagingPermission||'unavailable'
+    });
+  }catch(e){
+    if(e?.code===11000)return res.status(409).json({message:'This WhatsApp number is already connected'});
+    return res.status(422).json({
+      message:'Meta could not authorize this existing number. '+String(e?.message||'Check WABA permissions and your Meta account').slice(0,260)+
+        ' Meta may require a provider-approved migration or eligible Embedded Signup; Clever Connect cannot fetch a third-party token.'
+    });
+  }finally{
+    await releaseConnectionLease(req.workspaceId,lease);
+  }
+});
+
 r.get('/whatsapp-connections',async(req,res)=>{
   const [rows,usage]=await Promise.all([
     Integration.find({workspaceId:req.workspaceId}).sort({isDefault:-1,createdAt:1}).lean(),

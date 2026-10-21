@@ -339,6 +339,10 @@ function Campaigns(){
   useEffect(()=>{load().catch(e=>setErr(e.message))},[]);
   async function save(e){
     e.preventDefault();setErr('');setMsg('');
+    if(!editing&&!manualTokenEntry){
+      setErr('Authorize with Facebook above, or choose manual token entry before linking this number.');
+      return;
+    }
     const fd=new FormData(e.currentTarget);
     const o=Object.fromEntries(fd);
     o.contactIds=fd.getAll('contactIds');
@@ -892,6 +896,7 @@ function WhatsAppApi({go}){
   const[subscription,setSubscription]=useState(()=>getCached('/integrations/whatsapp-connections')?.subscription||null);
   const[embedded,setEmbedded]=useState(()=>getCached('/integrations/embedded-signup/config')||null);
   const[showForm,setShowForm]=useState(false);
+  const[manualTokenEntry,setManualTokenEntry]=useState(false);
   const[editing,setEditing]=useState(null);
   const[fbBusy,setFbBusy]=useState(false);
   const[connectionMode,setConnectionMode]=useState('new');
@@ -985,10 +990,16 @@ function WhatsAppApi({go}){
     setMsg('Selected '+(phone.displayPhoneNumber||phone.id)+'. Enter the WABA owner’s authorized system-user token to link this existing Cloud API number. This does not migrate the number.');
   }
 
-  async function connectWithFacebook(){
-    if(!canAdd)return;
+  async function connectWithFacebook({existing=false}={}){
+    if(!canAdd&&!(existing&&editing))return;
+    const existingValues=existing?new FormData(document.getElementById('existingCloudConnectionForm')):null;
+    const expectedPhone=existing?String(existingValues?.get('phoneNumberId')||'').trim():'';
+    const expectedWaba=existing?String(existingValues?.get('businessAccountId')||'').trim():'';
+    if(existing&&(!/^[0-9]{5,30}$/.test(expectedPhone)||!/^[0-9]{5,30}$/.test(expectedWaba))){
+      setErr('Enter the existing Meta Phone Number ID and WABA ID first. Facebook cannot look up an authorization token from the public phone number.');return;
+    }
     if(!embedded?.enabled){
-      setErr('Facebook Embedded Signup is not configured by the WA SANTA administrator yet.');
+      setErr('Meta login is not configured by the Clever Connect Super Admin. Use an owner-authorized system-user token in the manual form.');
       return;
     }
     setFbBusy(true);setErr('');setMsg('');
@@ -1010,17 +1021,22 @@ function WhatsAppApi({go}){
           throw new Error('Meta authorized a different business portfolio from the one you selected. Restart onboarding and choose the same portfolio in Facebook.');
         }
         const eventName=String(session.event||'').toUpperCase();
-        const y=await api('/integrations/embedded-signup/complete',{
+        if(existing&&String(session.waba_id)!==expectedWaba)
+          throw new Error('Meta returned a different WABA from the one you selected. No credential was saved.');
+        if(existing&&session.phone_number_id&&String(session.phone_number_id)!==expectedPhone)
+          throw new Error('Meta returned a different WhatsApp number. No credential was saved.');
+        const y=await api(existing?'/integrations/embedded-signup/link-existing':'/integrations/embedded-signup/complete',{
           method:'POST',
           body:JSON.stringify({
             code:authCode,
             wabaId:session.waba_id,
-            phoneNumberId:session.phone_number_id||'',
+            phoneNumberId:existing?expectedPhone:session.phone_number_id||'',
             businessPortfolioId:session.business_id||session.businessId||'',
-            coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING')
+            ...(existing?{profileId:editing?.id||''}:{coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING')})
           })
         });
         setMsg(y.warning||y.message||'Meta WhatsApp connected with Facebook.');
+        if(existing){setEditing(null);setShowForm(false);setShowSetup(false)}
         await load();
       }catch(e){setErr(e.message)}
       finally{setFbBusy(false)}
@@ -1059,7 +1075,7 @@ function WhatsAppApi({go}){
     try{
       const FB=await loadFacebookSdk(embedded.appId,embedded.graphVersion||'v23.0');
       const extras={setup:{}};
-      if(coexistence)extras.featureType='whatsapp_business_app_onboarding';
+      if(coexistence&&!existing)extras.featureType='whatsapp_business_app_onboarding';
       FB.login(response=>{
         if(response?.authResponse?.code){
           authCode=response.authResponse.code;
@@ -1105,7 +1121,7 @@ function WhatsAppApi({go}){
         const y=await api('/integrations/whatsapp-connections',{method:'POST',body:JSON.stringify(o)});
         setMsg(y.warning||'Meta WhatsApp connection added and verified.');
       }
-      setShowForm(false);setEditing(null);await load();
+      setShowForm(false);setEditing(null);setManualTokenEntry(false);await load();
     }catch(e){setErr(e.message)}
   }
 
@@ -1176,7 +1192,7 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={()=>{setEditing(null);setShowForm(false);setConnectionMode('new');setShowSetup(v=>!v)}}>{showSetup?'−  Close connection options':'+  Connect WhatsApp Number'}</button>
+        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={()=>{setEditing(null);setShowForm(false);setManualTokenEntry(false);setConnectionMode('new');setShowSetup(v=>!v)}}>{showSetup?'−  Close connection options':'+  Connect WhatsApp Number'}</button>
         {!canAdd&&<small>{!allowed?'Subscription inactive — activate a plan to connect numbers.':'Your plan connection limit has been reached.'}</small>}
       </div>
       {showSetup&&<div className="numbersSetup" id="numbersSetup">
@@ -1262,15 +1278,40 @@ function WhatsAppApi({go}){
         {canAdd&&connectionMode==='cloud_api'&&!editing&&<button type="button" onClick={()=>setShowForm(v=>!v)}>{showForm?'Hide credentials':'Enter credentials'}</button>}
       </div>
       {(showForm||connectionMode==='cloud_api')&&<div className="panel metaConnectionForm">
-        <form key={editing?.id||existingPrefill?.phoneNumberId||'new-meta'} className="formGrid" onSubmit={save}>
+        <form id="existingCloudConnectionForm" key={editing?.id||existingPrefill?.phoneNumberId||'new-meta'} className="formGrid" onSubmit={save}>
           <label>Connection name<input name="name" defaultValue={editing?.name||existingPrefill?.name||''} placeholder="Sales WhatsApp" required/></label>
           <label>Graph API version<input name="graphVersion" defaultValue={editing?.graphVersion||'v23.0'} placeholder="v23.0"/></label>
           <label>Phone Number ID<input name="phoneNumberId" defaultValue={editing?.phoneNumberId||existingPrefill?.phoneNumberId||''} required/></label>
           <label>WhatsApp Business Account (WABA) ID<input name="businessAccountId" defaultValue={editing?.businessAccountId||existingPrefill?.businessAccountId||''} required={!editing} placeholder="Meta numeric WABA ID"/></label>
-          <label className="full">Permanent/System-user access token<input type="password" name="accessToken" required={!editing} placeholder={editing?.hasAccessToken?'Saved securely — leave blank to keep current token':'Paste Meta access token'}/></label>
+          <div className="metaAutoTokenPanel full">
+            <div className="metaAutoTokenHead"><span aria-hidden="true">◈</span><div>
+              <b>{editing?.hasAccessToken?'Access token saved securely':'Automatic authorization with Meta'}</b>
+              <p>{editing?.hasAccessToken
+                ?'The existing encrypted token is already saved on the server. It will be reused automatically; the browser never needs to fetch or display it.'
+                :'Sign in to the Meta account that owns this WABA. When Meta grants access through Embedded Signup, Clever Connect exchanges the authorization code securely and stores the new token on the server.'}</p>
+            </div></div>
+            <button type="button" className="metaAutoTokenButton" disabled={fbBusy||!embedded?.enabled||(!canAdd&&!editing)}
+              onClick={()=>connectWithFacebook({existing:true})}>
+              {fbBusy?'Authorizing with Meta…':editing?'↻ Reauthorize with Facebook (refresh token)':'Continue with Facebook — authorize token automatically ↗'}
+            </button>
+            <small>Meta must approve access to the selected number. Existing provider-managed numbers may require the provider to grant WABA access or migrate the number; Clever Connect cannot retrieve a third-party provider's secret token.</small>
+          </div>
+          <div className="metaManualToken full">
+            <button type="button" className="metaManualTokenToggle" aria-expanded={manualTokenEntry}
+              onClick={()=>setManualTokenEntry(v=>!v)}>
+              {manualTokenEntry?'− Hide manual token entry':'+ Use my own system-user token instead'}
+            </button>
+            {manualTokenEntry&&<label>Permanent/System-user access token
+              <input type="password" name="accessToken" autoComplete="off"
+                required={!editing} placeholder={editing?.hasAccessToken?'Enter a replacement token or leave blank to keep saved token':'Paste your authorized system-user access token'}/>
+            </label>}
+          </div>
           <label>OTP authentication template<input name="otpTemplateName" defaultValue={editing?.otpTemplateName||''} placeholder="login_otp"/></label>
           <label>OTP template language<input name="otpTemplateLanguage" defaultValue={editing?.otpTemplateLanguage||'en_US'} placeholder="en_US"/></label>
-          <div className="actions full"><button type="button" onClick={()=>{setShowForm(false);setEditing(null);setShowSetup(false)}}>Cancel</button><button className="primary">{editing?'Save changes':'Verify access & link number'}</button></div>
+          <div className="actions full">
+            <button type="button" onClick={()=>{setShowForm(false);setEditing(null);setManualTokenEntry(false);setShowSetup(false)}}>Cancel</button>
+            {(editing||manualTokenEntry)&&<button className="primary">{editing?'Save changes':'Verify manually & link number'}</button>}
+          </div>
         </form>
       </div>}
     </section>}
@@ -1292,7 +1333,7 @@ function WhatsAppApi({go}){
           <div className="numberRowActions">
             <button type="button" onClick={()=>act(x,'test')} disabled={!x.enabled||!allowed}>Test / Sync</button>
             <button type="button" onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
-            <button type="button" onClick={()=>{setEditing(x);setConnectionMode('cloud_api');setShowSetup(true);setShowForm(true);requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}))}}>Edit</button>
+            <button type="button" onClick={()=>{setEditing(x);setManualTokenEntry(false);setConnectionMode('cloud_api');setShowSetup(true);setShowForm(true);requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}))}}>Edit</button>
             {!x.isDefault&&<button type="button" onClick={()=>act(x,'default')} disabled={x.planAllowed===false||!x.enabled}>Make default</button>}
             <button type="button" className="numberDanger" onClick={()=>act(x,'delete')}>Disconnect</button>
           </div>
