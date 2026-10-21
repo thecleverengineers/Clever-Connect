@@ -125,11 +125,12 @@ router.post('/activate',async(req,res)=>{
      phoneNumberId:phoneId,businessAccountId:session.businessAccountId,
      accessToken:token,graphVersion:session.graphVersion
     });
-    let warning='';
+    let warning='',registrationPin='';
     if(session.mode==='new'){
+     registrationPin=String(crypto.randomInt(100000,1000000));
      try{
       await graph(session.graphVersion,phoneId+'/register',token,'POST',{
-       messaging_product:'whatsapp',pin:String(crypto.randomInt(100000,1000000))
+       messaging_product:'whatsapp',pin:registrationPin
       });
      }catch(e){warning=String(e.message||'Number registration failed').slice(0,240)}
     }
@@ -143,6 +144,7 @@ router.post('/activate',async(req,res)=>{
      phoneNumberId:phoneId,displayPhoneNumber:verified.displayPhoneNumber||source?.displayPhoneNumber||'',
      businessAccountId:session.businessAccountId,businessPortfolioId:session.businessPortfolioId,
      accessTokenEncrypted:session.accessTokenEncrypted,
+     registrationPinEncrypted:registrationPin?encrypt(registrationPin):'',
      graphVersion:session.graphVersion,connectMethod:'embedded',
      connectionStatus:warning?'error':'connected',
      connectedAt:new Date(),lastCheckedAt:new Date(),lastError:warning
