@@ -985,10 +985,16 @@ function WhatsAppApi({go}){
     setMsg('Selected '+(phone.displayPhoneNumber||phone.id)+'. Enter the WABA owner’s authorized system-user token to link this existing Cloud API number. This does not migrate the number.');
   }
 
-  async function connectWithFacebook(){
-    if(!canAdd)return;
+  async function connectWithFacebook({existing=false}={}){
+    if(!canAdd&&!(existing&&editing))return;
+    const existingValues=existing?new FormData(document.getElementById('existingCloudConnectionForm')):null;
+    const expectedPhone=existing?String(existingValues?.get('phoneNumberId')||'').trim():'';
+    const expectedWaba=existing?String(existingValues?.get('businessAccountId')||'').trim():'';
+    if(existing&&(!/^[0-9]{5,30}$/.test(expectedPhone)||!/^[0-9]{5,30}$/.test(expectedWaba))){
+      setErr('Enter the existing Meta Phone Number ID and WABA ID first. Facebook cannot look up an authorization token from the public phone number.');return;
+    }
     if(!embedded?.enabled){
-      setErr('Facebook Embedded Signup is not configured by the WA SANTA administrator yet.');
+      setErr('Meta login is not configured by the Clever Connect Super Admin. Use an owner-authorized system-user token in the manual form.');
       return;
     }
     setFbBusy(true);setErr('');setMsg('');
@@ -1010,17 +1016,22 @@ function WhatsAppApi({go}){
           throw new Error('Meta authorized a different business portfolio from the one you selected. Restart onboarding and choose the same portfolio in Facebook.');
         }
         const eventName=String(session.event||'').toUpperCase();
-        const y=await api('/integrations/embedded-signup/complete',{
+        if(existing&&String(session.waba_id)!==expectedWaba)
+          throw new Error('Meta returned a different WABA from the one you selected. No credential was saved.');
+        if(existing&&session.phone_number_id&&String(session.phone_number_id)!==expectedPhone)
+          throw new Error('Meta returned a different WhatsApp number. No credential was saved.');
+        const y=await api(existing?'/integrations/embedded-signup/link-existing':'/integrations/embedded-signup/complete',{
           method:'POST',
           body:JSON.stringify({
             code:authCode,
             wabaId:session.waba_id,
-            phoneNumberId:session.phone_number_id||'',
+            phoneNumberId:existing?expectedPhone:session.phone_number_id||'',
             businessPortfolioId:session.business_id||session.businessId||'',
-            coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING')
+            ...(existing?{profileId:editing?.id||''}:{coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING')})
           })
         });
         setMsg(y.warning||y.message||'Meta WhatsApp connected with Facebook.');
+        if(existing){setEditing(null);setShowForm(false);setShowSetup(false)}
         await load();
       }catch(e){setErr(e.message)}
       finally{setFbBusy(false)}
@@ -1059,7 +1070,7 @@ function WhatsAppApi({go}){
     try{
       const FB=await loadFacebookSdk(embedded.appId,embedded.graphVersion||'v23.0');
       const extras={setup:{}};
-      if(coexistence)extras.featureType='whatsapp_business_app_onboarding';
+      if(coexistence&&!existing)extras.featureType='whatsapp_business_app_onboarding';
       FB.login(response=>{
         if(response?.authResponse?.code){
           authCode=response.authResponse.code;
