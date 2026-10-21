@@ -1030,17 +1030,19 @@ function WhatsAppApi({go}){
           throw new Error('Meta returned a different WABA from the one you selected. No credential was saved.');
         if(existing&&session.phone_number_id&&String(session.phone_number_id)!==expectedPhone)
           throw new Error('Meta returned a different WhatsApp number. No credential was saved.');
-        const y=await api(existing?'/integrations/embedded-signup/link-existing':'/meta-activation/prepare',{
+        const refreshExisting=existing&&!!editing;
+        const y=await api(refreshExisting?'/integrations/embedded-signup/link-existing':'/meta-activation/prepare',{
           method:'POST',
           body:JSON.stringify({
             code:authCode,
             wabaId:session.waba_id,
             phoneNumberId:existing?expectedPhone:session.phone_number_id||'',
             businessPortfolioId:session.business_id||session.businessId||'',
-            ...(existing?{profileId:editing?.id||''}:{coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING')})
+            ...(refreshExisting?{profileId:editing.id}:
+              {existingCloud:existing,coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING')})
           })
         });
-        if(!existing){
+        if(!refreshExisting){
           setPendingActivation(y);
           setActivationSelected([]);
           setActivationResults([]);
