@@ -296,3 +296,39 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .metaManualToken>label{display:grid;gap:9px;color:#3f654c;font-size:12px;font-weight:750}
 .metaManualToken>label input{min-height:47px}
 @media(max-width:760px){.metaAutoTokenPanel{padding:13px}.metaAutoTokenButton{width:100%;line-height:1.5}.metaAutoTokenHead{gap:8px}.metaAutoTokenHead>span{width:27px;height:27px}}
+
+/* Meta embedded signup: choose precisely which authorized numbers become active */
+.metaActivationPanel{background:#fff;border:1.5px solid #a8d7bb;border-radius:15px;box-shadow:0 10px 32px #0c603b12;padding:19px;margin:17px 0 21px;display:grid;gap:16px}
+.metaActivationHeading{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px}
+.metaActivationHeading small{color:#0e8c54;font-size:10px;font-weight:850;letter-spacing:.11em}
+.metaActivationHeading h2{font-size:20px;letter-spacing:-.035em;color:#164b2f;margin:7px 0 5px}
+.metaActivationHeading p{font-size:11px;line-height:1.7;color:#74917c;margin:0;max-width:590px}
+.metaActivationHeading>span{padding:9px 12px;border-radius:20px;background:#ecf8ee;color:#24764d;font-size:11px;font-weight:800;white-space:nowrap}
+.metaActivationNumbers{display:grid;gap:9px}
+.metaActivationChoice{display:flex;align-items:center;gap:13px;border:1px solid #deebe1;background:#fbfdfb;padding:13px 14px;border-radius:11px;cursor:pointer}
+.metaActivationChoice:has(input:checked){background:#e9f8ed;border-color:#91d1aa}
+.metaActivationChoice.unavailable{opacity:.63;cursor:not-allowed}
+.metaActivationChoice input{width:18px;height:18px;flex-shrink:0;accent-color:#138751}
+.metaActivationPhoneInfo{display:grid;gap:5px;min-width:0;flex:1}
+.metaActivationPhoneInfo b{font-size:13px;color:#234c33;overflow-wrap:anywhere}
+.metaActivationPhoneInfo small{font-size:10px;color:#879b8d;line-height:1.5;overflow-wrap:anywhere}
+.metaActivationStatus{display:inline-block;font-size:10px;font-weight:750;padding:7px 9px;border-radius:16px;white-space:nowrap;background:#e0f4e6;color:#107c4b}
+.metaActivationStatus.unavailable{background:#f0efe9;color:#897e70}
+.metaActivationFoot{display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding-top:13px;border-top:1px solid #e4ece6}
+.metaActivationFoot>div{display:grid;gap:4px;margin-right:auto}
+.metaActivationFoot>div b{color:#30684a;font-size:12px}
+.metaActivationFoot>div small{color:#8da191;font-size:10px}
+.metaActivationFoot .primary{padding:12px 18px;border-radius:10px;min-height:43px;font-size:12px;font-weight:800}
+.metaActivationFoot .primary:disabled{opacity:.45;cursor:not-allowed}
+.metaActivationDiscard{border:1px solid #dbe8de;background:#fff;color:#4c7860;border-radius:10px;padding:12px 14px;font-size:11px;font-weight:750}
+.metaActivationResults{border:1px solid #e3ece6;border-radius:10px;padding:11px 13px}
+.metaActivationResults p{font-size:11px;color:#54745f;line-height:1.6;margin:5px 0;overflow-wrap:anywhere}
+.metaActivationResults b{color:#226b45}
+.metaActivationDone{font-size:11px;color:#62856e;line-height:1.6}
+@media(max-width:760px){
+ .metaActivationPanel{padding:14px 12px}
+ .metaActivationChoice{flex-wrap:wrap;padding:12px}
+ .metaActivationStatus{margin-left:30px}
+ .metaActivationFoot{display:grid;grid-template-columns:1fr}
+ .metaActivationFoot .primary,.metaActivationDiscard{width:100%}
+}

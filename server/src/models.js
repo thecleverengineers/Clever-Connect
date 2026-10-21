@@ -237,6 +237,23 @@ integrationSchema.index({workspaceId:1,name:1},{unique:true});
 // solely by Meta phone_number_id; duplication would leak conversations.
 integrationSchema.index({provider:1,phoneNumberId:1},{unique:true,partialFilterExpression:{provider:'meta',phoneNumberId:{$gt:''}}});
 
+// A short-lived, user-scoped Meta Embedded Signup authorization. The token
+// never reaches a browser, and only explicitly selected numbers are activated.
+// TTL deletion is best-effort; routes always check expiresAt themselves.
+const metaActivationSchema=new Schema({
+  workspaceId:{type:Schema.Types.ObjectId,ref:'Workspace',required:true,index:true},
+  initiatedBy:{type:Schema.Types.ObjectId,ref:'User',required:true},
+  businessAccountId:{type:String,required:true},
+  businessPortfolioId:{type:String,default:''},
+  graphVersion:{type:String,default:'v23.0'},
+  mode:{type:String,enum:['new','coexistence','existing'],required:true},
+  accessTokenEncrypted:{type:String,required:true,select:false},
+  phones:[{_id:false,id:{type:String,required:true},displayPhoneNumber:String,verifiedName:String}],
+  expiresAt:{type:Date,required:true},
+  createdAt:{type:Date,default:Date.now}
+});
+metaActivationSchema.index({expiresAt:1},{expireAfterSeconds:0});
+
 const adminAuditSchema=new Schema({
  actorId:{type:Schema.Types.ObjectId,ref:'User',required:true,index:true},
  action:{type:String,required:true,trim:true,maxlength:100},
@@ -257,6 +274,7 @@ export const Campaign = model('Campaign', campaignSchema);
 export const Delivery = model('Delivery', deliverySchema);
 export const DeliveryReceipt=model('DeliveryReceipt',deliveryReceiptSchema);
 export const Integration = model('Integration', integrationSchema);
+export const MetaActivationSession=model('MetaActivationSession',metaActivationSchema);
 export const SystemSetting = model('SystemSetting',systemSettingSchema);
 export const AIRecommendation = model('AIRecommendation',aiRecommendationSchema);
 export const AdminAuditEvent=model('AdminAuditEvent',adminAuditSchema);
