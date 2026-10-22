@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired} from '../src/services/metaActivation.js';
+import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,shouldRegisterDuringActivation} from '../src/services/metaActivation.js';
 
 test('Meta selectable numbers are unique, valid, bounded and do not include token material',()=>{
   const items=validMetaPhoneList([
@@ -29,4 +29,35 @@ test('staged Meta authorizations expire explicitly even before Mongo TTL cleanup
   assert.equal(activationSessionExpired({expiresAt:new Date(now-1000)},now),true);
   assert.equal(activationSessionExpired({expiresAt:new Date(now+1000)},now),false);
   assert.equal(activationSessionExpired(null,now),true);
+});
+
+
+test('connecting a number used with another provider never registers it again',()=>{
+  assert.equal(shouldRegisterDuringActivation('existing'),false);
+  assert.equal(shouldRegisterDuringActivation('coexistence'),false);
+  assert.equal(shouldRegisterDuringActivation('new'),true);
+});
+
+test('separate Meta login must authorize the exact selected WABA and phone ID',()=>{
+  const allowed={
+    expectedWabaId:'1000012345',
+    authorizedWabaId:'1000012345',
+    expectedPhoneNumberId:'2000012345',
+    returnedPhoneNumberId:'2000012345'
+  };
+  assert.equal(assertSignupMatchesSelection(allowed),true);
+  assert.throws(()=>assertSignupMatchesSelection({
+    ...allowed,authorizedWabaId:'9999912345'
+  }),/different WhatsApp Business Account/);
+  assert.throws(()=>assertSignupMatchesSelection({
+    ...allowed,returnedPhoneNumberId:'8888812345'
+  }),/different phone number/);
+  // If Meta returns the WABA but no individual phone, our server still
+  // validates requested phone membership against Meta /phone_numbers.
+  assert.equal(assertSignupMatchesSelection({
+    ...allowed,returnedPhoneNumberId:''
+  }),true);
+  assert.throws(()=>assertSignupMatchesSelection({
+    ...allowed,expectedPhoneNumberId:'not-an-id'
+  }),/numeric Meta asset ID/);
 });

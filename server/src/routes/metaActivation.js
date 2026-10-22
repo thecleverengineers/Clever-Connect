@@ -5,7 +5,7 @@ import {Integration,MetaActivationSession,Workspace} from '../models.js';
 import {refreshWorkspaceAccess,metaEntitlements} from '../plan.js';
 import {getMetaConfig} from '../metaConfig.js';
 import {encrypt,decrypt} from '../utils/crypto.js';
-import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired} from '../services/metaActivation.js';
+import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,shouldRegisterDuringActivation} from '../services/metaActivation.js';
 import {verifyExistingCloudApiNumber} from '../services/existingMetaNumber.js';
 
 const router=express.Router();
@@ -47,6 +47,17 @@ router.post('/prepare',async(req,res)=>{
   const waba=cleanMetaId(req.body?.wabaId,'WABA ID');
   const portfolio=String(req.body?.businessPortfolioId||'').trim();
   const mode=req.body?.existingCloud===true?'existing':req.body?.coexistence===true?'coexistence':'new';
+  if(portfolio&&!/^[0-9]{5,30}$/.test(portfolio))
+   return res.status(400).json({message:'Invalid Meta Business Portfolio ID'});
+  const selectedId=String(req.body?.phoneNumberId||'').trim();
+  if(mode==='existing'&&!selectedId)
+   return res.status(400).json({message:'Select an existing Cloud API phone number before connecting'});
+  assertSignupMatchesSelection({
+   expectedWabaId:String(req.body?.expectedBusinessAccountId||'').trim(),
+   authorizedWabaId:waba,
+   expectedPhoneNumberId:String(req.body?.expectedPhoneNumberId||'').trim(),
+   returnedPhoneNumberId:String(req.body?.metaReportedPhoneNumberId||'').trim()
+  });
   const auth=await exchange(code);
   const found=[];let after='';
   for(let i=0;i<3;i++){
@@ -59,7 +70,6 @@ router.post('/prepare',async(req,res)=>{
    after=next;
   }
   const phones=validMetaPhoneList(found);
-  const selectedId=String(req.body?.phoneNumberId||'');
   if(selectedId&&!phones.some(p=>p.id===selectedId)){
    const verified=await verifyExistingCloudApiNumber({
     phoneNumberId:selectedId,businessAccountId:waba,accessToken:auth.token,graphVersion:auth.version
@@ -126,7 +136,7 @@ router.post('/activate',async(req,res)=>{
      accessToken:token,graphVersion:session.graphVersion
     });
     let warning='',registrationPin='';
-    if(session.mode==='new'){
+    if(shouldRegisterDuringActivation(session.mode)){
      registrationPin=String(crypto.randomInt(100000,1000000));
      try{
       await graph(session.graphVersion,phoneId+'/register',token,'POST',{
@@ -160,7 +170,10 @@ router.post('/activate',async(req,res)=>{
   res.set('Cache-Control','no-store');
   return res.json({
    activated:results.filter(x=>x.ok).length,results,remainingSlots:updated.remaining,
-   message:results.filter(x=>x.ok).length+' WhatsApp number(s) activated.'
+   message:results.filter(x=>x.ok).length+' WhatsApp number(s) activated.',
+   routingNotice:session.mode==='existing'
+    ?'No external provider or conversation routing was changed. If this number is shared across partners under Meta’s current account model, review Conversation Routing in Meta Business Suite to choose which partner handles inbound conversations.'
+    :''
   });
  }catch(e){
   return res.status(422).json({message:String(e.message||'Activation failed').slice(0,300)});
