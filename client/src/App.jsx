@@ -1290,7 +1290,7 @@ function WhatsAppApi({go}){
             <button type="button" className="primary" disabled={activationBusy||!activationSelected.length}
               onClick={activateSelectedNumbers}>{activationBusy?'Activating…':'Activate selected numbers →'}</button>
             <button type="button" className="metaActivationDiscard" onClick={()=>{setPendingActivation(null);setActivationSelected([]);setActivationResults([])}}>Finish / Close</button>
-            {pendingActivation.remainingSlots>0&&<button type="button" className="metaActivationAnother" onClick={addAnotherMetaProfile}>Connect another Meta Business Account →</button>
+            {pendingActivation.remainingSlots>0&&<button type="button" className="metaActivationAnother" onClick={addAnotherMetaProfile}>Connect another Meta Business Account →</button>}
           </div>
           {!activationAvailable.length&&<p className="metaActivationDone">No additional numbers are available in this authorization session. Your saved profiles are listed below.</p>}
         </section>}
