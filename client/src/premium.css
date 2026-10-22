@@ -416,3 +416,10 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 /* Session-first Meta login: clearly distinguish authorized session reuse
    from Meta's own non-bypassable password re-authentication. */
 .metaLoginSecurityNote{display:block;color:#708779;font-size:11px;line-height:1.65;max-width:620px}
+
+/* Meta Login for Business local preflight. Approval/status comes only from Meta. */
+.metaLoginPreflight{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:13px 0 16px}
+.metaLoginPreflight>div{display:grid;gap:6px;background:#f4faf5;border:1px solid #d9eadc;border-radius:10px;padding:12px;min-width:0}
+.metaLoginPreflight b{font-size:11px;color:#236f49;line-height:1.45;overflow-wrap:anywhere}
+.metaLoginPreflight small{font-size:10px;line-height:1.6;color:#688774}
+@media(max-width:740px){.metaLoginPreflight{grid-template-columns:1fr}.metaLoginPreflight>div{padding:10px 12px}}
