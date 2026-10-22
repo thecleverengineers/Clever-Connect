@@ -893,6 +893,8 @@ function WhatsAppApi({go}){
   const[manualTokenEntry,setManualTokenEntry]=useState(false);
   const[editing,setEditing]=useState(null);
   const[fbBusy,setFbBusy]=useState(false);
+  const[fbSdkReady,setFbSdkReady]=useState(false);
+  const[fbSdkFailure,setFbSdkFailure]=useState('');
   const[metaLoginHelpOpen,setMetaLoginHelpOpen]=useState(false);
   const[pendingActivation,setPendingActivation]=useState(null);
   const[activationSelected,setActivationSelected]=useState([]);
@@ -941,6 +943,17 @@ function WhatsAppApi({go}){
       }
     }catch(e){setErr(e.message)}
   }
+  useEffect(()=>{
+    if(!embedded?.enabled){setFbSdkReady(false);return}
+    let active=true;
+    // Preload the Facebook SDK before the user clicks Connect. Calling
+    // FB.login from a still-loading async script can be blocked as a popup.
+    loadFacebookSdk(embedded.appId,embedded.graphVersion||'v23.0')
+      .then(()=>{if(active){setFbSdkReady(true);setFbSdkFailure('')}})
+      .catch(e=>{if(active){setFbSdkReady(false);setFbSdkFailure(e.message||'Facebook SDK unavailable')}});
+    return()=>{active=false};
+  },[embedded?.enabled,embedded?.appId,embedded?.graphVersion]);
+
   useEffect(()=>{
     load();
     // Recover a staged Meta signup after a browser refresh without ever
@@ -1063,6 +1076,10 @@ function WhatsAppApi({go}){
     }
     if(!embedded?.enabled){
       setErr('Meta login is not configured by the Clever Connect Super Admin. Use an owner-authorized system-user token in the manual form.');
+      return;
+    }
+    if(!fbSdkReady){
+      setErr(fbSdkFailure||'Facebook Login is still loading. Check that popups and cookies are permitted, then try again.');
       return;
     }
     setFbBusy(true);setErr('');setMsg('');
@@ -1320,7 +1337,7 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd||fbBusy||!embedded?.enabled}
+        <button type="button" className="numbersAdd" disabled={!canAdd||fbBusy||!embedded?.enabled||!fbSdkReady}
           onClick={()=>connectWithFacebook({existing:true,browse:true})}>
           {fbBusy?'Connecting to Meta…':'ⓕ One-click Connect with Facebook'}
         </button>
@@ -1383,11 +1400,12 @@ function WhatsAppApi({go}){
         {connectionMode==='cloud_api'&&!editing&&<div className="metaExistingHint">
           <b>Connect existing Cloud API in one click</b>
           <div className="metaOneClickInline">
-            <button type="button" className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled}
+            <button type="button" className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled||!fbSdkReady}
               onClick={()=>connectWithFacebook({existing:true,browse:true})}>
               {fbBusy?'Opening Meta authorization…':'ⓕ Continue with Facebook — choose my number'}
             </button>
             <small>No manual WABA ID, Phone Number ID, or token needed. After you approve Meta's login, choose numbers and activate them. Saved connections stay until you explicitly disconnect.</small>
+            {fbSdkFailure&&<small role="alert">Facebook Login unavailable: {fbSdkFailure}. Check your browser's network and Meta App settings.</small>}
           </div>
           <b>Already registered with Fast2SMS or another provider?</b>
           <p>Login with Facebook below to browse all Cloud API numbers accessible to that Meta account. Select a specific number to authorize it through Meta Embedded Signup. When Meta grants sharing access, the same number can remain with another provider. Clever Connect does <strong>not</strong> automatically transfer, deregister or disconnect an external integration.</p>
