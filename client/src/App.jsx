@@ -989,6 +989,7 @@ function WhatsAppApi({go}){
   // migrate or register any number. No user token is persisted.
   async function discoverFacebookAssets(){
     if(assetBusy)return;
+    setExistingPrefill(null);
     if(!embedded?.enabled){setAccountDiscoveryError('Facebook Login is not configured by Super Admin.');return}
     setAssetBusy(true);setAccountDiscoveryError('');setMetaAssets(null);
     setChosenBusiness('');setChosenWaba('');setChosenPhone('');
@@ -1015,9 +1016,18 @@ function WhatsAppApi({go}){
   const selectedWaba=chosenPortfolio?.wabas?.find(x=>x.id===chosenWaba);
   const availableNumbers=selectedWaba?.numbers||[];
   function useExistingApiPhone(waba,phone){
+    // The user's choice is a Meta Phone Number ID, never an unverified
+    // formatted phone number. An external provider is not disconnected.
+    if(meta.some(p=>p.phoneNumberId===phone.id)){
+      setErr('This number is already saved in the current workspace. Use its Edit / Reauthorize action instead.');
+      return;
+    }
+    setChosenWaba(waba.id);
+    setChosenPhone(phone.id);
     setExistingPrefill({businessAccountId:waba.id,phoneNumberId:phone.id,name:phone.verifiedName||waba.name});
-    setConnectionMode('cloud_api');setShowForm(true);
-    setMsg('Selected '+(phone.displayPhoneNumber||phone.id)+'. Enter the WABA owner’s authorized system-user token to link this existing Cloud API number. This does not migrate the number.');
+    setConnectionMode('cloud_api');setShowForm(true);setErr('');
+    setMsg('Selected '+(phone.displayPhoneNumber||phone.id)+'. Continue with Facebook to authorize this existing Cloud API number without deregistering it from any other provider. If Meta does not grant access, no connection will be created.');
+    requestAnimationFrame(()=>document.getElementById('existingCloudConnectionForm')?.scrollIntoView({behavior:'smooth',block:'center'}));
   }
 
   async function connectWithFacebook({existing=false}={}){
@@ -1069,7 +1079,9 @@ function WhatsAppApi({go}){
         });
         if(!refreshExisting){
           setPendingActivation(y);
-          setActivationSelected([]);
+          // Show the exact chosen phone pre-selected, but NEVER activate it
+          // without the user's explicit "Activate selected numbers" action.
+          setActivationSelected(existing&&y.numbers?.some(n=>n.id===expectedPhone&&n.availability==='available')?[expectedPhone]:[]);
           setActivationResults([]);
           setShowSetup(true);
           setMsg('Meta account authorized. Select the WhatsApp numbers you want to activate.');
@@ -1321,21 +1333,27 @@ function WhatsAppApi({go}){
         </div>}
         {connectionMode==='cloud_api'&&!editing&&<div className="metaExistingHint">
           <b>Already registered with Fast2SMS or another provider?</b>
-          <p>Do not try registering the same number again. You need an authorized <strong>Phone Number ID</strong>, <strong>WABA ID</strong>, and <strong>system-user token</strong> with WhatsApp permissions. This does not transfer an account from another provider or create a second WABA. If access cannot be granted, coordinate a formal provider migration.</p>
-          <p><strong>Meta error #3441034:</strong> Meta says the number is not eligible to register or migrate. Inspect the current WABA and linked Business Suite/partner assets with its owner; do not delete or disconnect a working number without assessing the impact.</p>
+          <p>Login with Facebook below to browse all Cloud API numbers accessible to that Meta account. Select a specific number to authorize it through Meta Embedded Signup. When Meta grants sharing access, the same number can remain with another provider. Clever Connect does <strong>not</strong> automatically transfer, deregister or disconnect an external integration.</p>
+          <p><strong>If Meta denies access:</strong> request the necessary WABA/phone asset sharing permissions from its owner or provider. Do not disconnect a working integration just to force activation. A blocked Meta account cannot be overridden from Clever Connect.</p>
         </div>}
-        {connectionMode==='business_app'&&!editing&&<div className="metaBusinessAccountPicker">
+        {(connectionMode==='business_app'||connectionMode==='cloud_api')&&!editing&&<div className="metaBusinessAccountPicker">
           <div className="metaExistingHint">
-            <b>Connect an existing WhatsApp Business App number (Coexistence)</b>
-            <p>First choose the Facebook/Meta account. Clever Connect lists <strong>portfolios, WABAs, and API numbers you have permission to view</strong>. WhatsApp Business App-only numbers may not appear in Meta's API until Coexistence onboarding. Meta makes the final number selection and eligibility decision.</p>
+            <b>{connectionMode==='cloud_api'?'Browse existing Cloud API numbers by Meta account':'Connect an existing WhatsApp Business App number (Coexistence)'}</b>
+            <p>{connectionMode==='cloud_api'
+              ?'Sign in with the specific Facebook/Meta account. Browse every accessible portfolio, WhatsApp Business Account and Cloud API phone number, including shared WABAs. Select the number you want to authorize. Any other provider remains connected unless its owner or Meta changes that access.'
+              :'First choose the Facebook/Meta account. Clever Connect lists portfolios, WABAs, and API numbers you have permission to view. WhatsApp Business App-only numbers may not appear until Meta Coexistence onboarding. Meta determines eligibility.'}</p>
           </div>
           <div className="metaPickerActions">
             <button type="button" className="facebookButton" disabled={assetBusy} onClick={discoverFacebookAssets}>
-              {assetBusy?'Checking Meta account…':metaAssets?'Change / refresh Meta account':'① Sign in & list Meta portfolios'}
+              {assetBusy?'Checking Meta account…':metaAssets?'Change Meta account / refresh all numbers':'① Login with Facebook · Browse portfolios & numbers'}
             </button>
             {metaAssets?.metaAccount&&<div className="metaSignedIn"><b>Signed in as {metaAssets.metaAccount.name}</b><small>Facebook account ID: {metaAssets.metaAccount.id}</small></div>}
           </div>
-          {accountDiscoveryError&&<div className="metaPickerWarning" role="alert">{accountDiscoveryError}<p>You can still continue with Meta Coexistence below; Meta controls the portfolio and phone selection in its signup window.</p></div>}
+          {accountDiscoveryError&&<div className="metaPickerWarning" role="alert">{accountDiscoveryError}
+              <p>{connectionMode==='cloud_api'
+                ?'Meta must grant business_management and WhatsApp business management access before Clever Connect can list your Cloud API numbers. You may still use an authorized system-user token below.'
+                :'You can still continue with Meta Coexistence below; Meta controls portfolio and phone selection in its signup window.'}</p>
+            </div>}
           {metaAssets&&<div className="metaPortfolioResults">
             <div className="metaPortfolioResultHead"><b>② Choose a business portfolio</b><span>{metaAssets.portfolios?.length||0} accessible</span></div>
             {(metaAssets.portfolios||[]).length?
@@ -1354,15 +1372,22 @@ function WhatsAppApi({go}){
                     <label><input type="radio" name="metaPhone" checked={chosenPhone===n.id} onChange={()=>setChosenPhone(n.id)}/>
                       <span><b>{n.displayPhoneNumber||n.id}</b><small>{n.verifiedName||'Meta Cloud API number'} · Phone ID: {n.id}</small></span>
                     </label>
-                    <button type="button" onClick={()=>useExistingApiPhone(w,n)}>Link as existing API →</button>
+                    <button type="button"
+                      disabled={meta.some(profile=>profile.phoneNumberId===n.id)}
+                      onClick={()=>useExistingApiPhone(w,n)}>
+                      {meta.some(profile=>profile.phoneNumberId===n.id)?'Saved in this workspace':'Select this API number →'}
+                    </button>
                   </div>):
                   <div className="metaPickerHint">No Cloud API phone numbers visible for this WABA. A number used only in the WhatsApp Business phone app might be absent until Meta completes Coexistence onboarding.</div>}</div>}
               </div>)}</div>:<div className="metaPickerHint">No WABAs are visible for this portfolio with the current Meta permissions. Meta may still offer eligible Business App numbers during its hosted Coexistence flow.</div>}
-              <label className="metaAppNumberInput">④ WhatsApp Business App number you want to connect (optional, for reference)
+              {connectionMode==='business_app'&&<label className="metaAppNumberInput">④ WhatsApp Business App number you want to connect (optional, for reference)
                 <input type="tel" value={businessAppPhone} onChange={e=>setBusinessAppPhone(e.target.value)} placeholder="+91 98765 43210" maxLength={25}/>
                 <small>Clever Connect cannot select an app-only number on your behalf. Enter and verify the same number inside Meta's onboarding popup.</small>
-              </label>
-              <div className="metaPickerHint"><b>Selected portfolio:</b> {chosenPortfolio.name}. Click Continue with Facebook below and choose this portfolio and phone inside Meta. If Meta returns a portfolio ID, Clever Connect will reject a mismatch before saving the connection.</div>
+              </label>}
+              <div className="metaPickerHint"><b>Selected portfolio:</b> {chosenPortfolio.name}.
+                {connectionMode==='cloud_api'
+                  ?' Choose an existing Cloud API phone number above, then authorize the same WABA and number through Facebook. The selected number stays on its current provider when Meta permits sharing.'
+                  :' Continue with Meta Coexistence below. If Meta returns a portfolio ID, Clever Connect checks for a mismatch before saving.'}</div>
             </>}
             {(metaAssets.warnings||[]).map((warning,i)=><div className="metaPickerWarning" key={i}>{warning}</div>)}
             <small className="metaPickerSourceNote">{metaAssets.note}</small>
