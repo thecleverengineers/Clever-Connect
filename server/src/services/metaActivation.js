@@ -26,6 +26,24 @@ export function validateActivationSelection(ids,authorized,maxConnections){
   if(selected.some(id=>!allowed.has(id)))throw new Error('Selected phone number was not authorized in this Meta session');
   return selected;
 }
+// Bind Meta's second (credential-issuing) login to the exact WABA/number
+// that the customer selected in the first, read-only portfolio browser.
+// Backend Graph checks must still independently confirm membership.
+export function assertSignupMatchesSelection({
+  expectedWabaId='',authorizedWabaId='',expectedPhoneNumberId='',returnedPhoneNumberId=''
+}={}){
+  if(expectedWabaId&&cleanMetaId(expectedWabaId,'Selected WABA')!==cleanMetaId(authorizedWabaId,'Authorized WABA')){
+    throw new Error('Meta authorized a different WhatsApp Business Account. No number has been connected.');
+  }
+  if(expectedPhoneNumberId){
+    cleanMetaId(expectedPhoneNumberId,'Selected Phone Number ID');
+    if(returnedPhoneNumberId&&cleanMetaId(returnedPhoneNumberId,'Meta Phone Number ID')!==expectedPhoneNumberId){
+      throw new Error('Meta returned a different phone number from the one selected. No number has been connected.');
+    }
+  }
+  return true;
+}
+
 export function activationSessionExpired(row,at=Date.now()){
   return !row||!row.expiresAt||new Date(row.expiresAt).getTime()<=at;
 }
