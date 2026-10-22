@@ -377,3 +377,14 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .metaAdminCompliance>p{font-size:11px;color:#847866;line-height:1.6;margin:0}
 .metaAdminCompliance a{justify-self:start}
 @media(max-width:650px){.metaLoginTroubleshoot{padding:15px 13px}.metaLoginIdentifiers{grid-template-columns:1fr}.metaLoginHelpLinks{display:grid;grid-template-columns:1fr}.metaLoginHelpLinks a{width:100%}}
+
+/* Multi-WABA Meta profile management */
+.metaMultiSummary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin:16px 0 20px}
+.metaMultiSummary>div{display:grid;gap:7px;background:#fff;border:1px solid #dcebe1;border-radius:13px;padding:17px;min-width:0;box-shadow:0 5px 20px #123a2809}
+.metaMultiSummary strong{color:#125b37;font-size:25px;line-height:1;letter-spacing:-.04em}
+.metaMultiSummary span{color:#819587;font-size:10px;font-weight:750;line-height:1.45}
+.metaMultiSecondary{border:1px solid #c9e2d3;background:#fff;color:#26744b;border-radius:10px;padding:11px 13px;font-size:11px;font-weight:800}
+.metaBusinessFilter{display:flex;align-items:center;flex-wrap:wrap;gap:11px;background:#f7fcf8;border:1px solid #e1eee6;border-radius:12px;padding:13px 16px;margin:0 0 14px}
+.metaBusinessFilter label{font-size:11px;color:#57705e;font-weight:800;flex-shrink:0}
+.metaBusinessFilter select{flex:1;min-width:185px;max-width:460px;min-height:41px;color:#286044;font-size:12px;border-radius:9px;border:1px solid #d5e6da;background:#fff;padding:8px 11px}
+@media(max-width:750px){.metaMultiSummary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metaMultiSummary>div{padding:13px}.metaMultiSummary strong{font-size:21px}.metaBusinessFilter{display:grid;padding:12px}.metaBusinessFilter select{width:100%;max-width:none}}

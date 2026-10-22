@@ -9,6 +9,7 @@ import {getMetaConfig,getMetaConfigPublic} from '../metaConfig.js';
 import {verifyMessagingPermissionDebug} from '../services/metaTokenDiagnostics.js';
 import {verifyExistingCloudApiNumber} from '../services/existingMetaNumber.js';
 import {discoverMetaPortfolios} from '../services/metaPortfolioDiscovery.js';
+import {summarizeMetaProfiles} from '../services/metaProfiles.js';
 
 const r=express.Router();
 r.use(requireAuth);
@@ -288,7 +289,13 @@ r.get('/whatsapp-connections',async(req,res)=>{
     Integration.find({workspaceId:req.workspaceId}).sort({isDefault:-1,createdAt:1}).lean(),
     limits(req.workspaceId)
   ]);
-  res.json({connections:rows.map(x=>({...view(x),planAllowed:x.provider!=='meta'||usage.allowedIds.includes(String(x._id))})),subscription:usage});
+  const connections=rows.map(x=>({
+    ...view(x),planAllowed:x.provider!=='meta'||usage.allowedIds.includes(String(x._id))
+  }));
+  res.json({
+    connections,subscription:usage,
+    metaProfiles:summarizeMetaProfiles(connections)
+  });
 });
 
 r.post('/whatsapp-connections',async(req,res)=>{

@@ -887,6 +887,7 @@ function loadFacebookSdk(appId,version='v23.0'){
 function WhatsAppApi({go}){
   const[connections,setConnections]=useState(()=>getCached('/integrations/whatsapp-connections')?.connections||[]);
   const[subscription,setSubscription]=useState(()=>getCached('/integrations/whatsapp-connections')?.subscription||null);
+  const[profileSummary,setProfileSummary]=useState(()=>getCached('/integrations/whatsapp-connections')?.metaProfiles||null);
   const[embedded,setEmbedded]=useState(()=>getCached('/integrations/embedded-signup/config')||null);
   const[showForm,setShowForm]=useState(false);
   const[manualTokenEntry,setManualTokenEntry]=useState(false);
@@ -912,6 +913,7 @@ function WhatsAppApi({go}){
   const[err,setErr]=useState('');
   const[numberSearch,setNumberSearch]=useState('');
   const[numberFilter,setNumberFilter]=useState('all');
+  const[businessFilter,setBusinessFilter]=useState('all');
   const[showSetup,setShowSetup]=useState(false);
   const[syncing,setSyncing]=useState(false);
 
@@ -925,6 +927,7 @@ function WhatsAppApi({go}){
       ]);
       setConnections(x.connections||[]);
       setSubscription(x.subscription||null);
+      setProfileSummary(x.metaProfiles||null);
       setEmbedded(embed);
       const requestedEdit=sessionStorage.getItem('wa:edit-sender');
       if(requestedEdit){
@@ -941,17 +944,45 @@ function WhatsAppApi({go}){
   useEffect(()=>{load()},[]);
   const meta=connections.filter(x=>x.provider==='meta');
   const demo=connections.filter(x=>x.provider==='demo');
+  const businessKey=x=>String(x.businessPortfolioId||'')+'|'+String(x.businessAccountId||'unassigned:'+x.id);
+  const businessGroups=[...new Map(meta.map(x=>[businessKey(x),{
+    key:businessKey(x),
+    portfolioId:x.businessPortfolioId||'',
+    wabaId:x.businessAccountId||'',
+    count:meta.filter(z=>businessKey(z)===businessKey(x)).length
+  }])).values()];
   const shown=meta.filter(x=>{
     const query=numberSearch.toLowerCase().trim();
     const matches=!query||[x.name,x.displayPhoneNumber,x.phoneNumberId,x.businessAccountId].some(v=>String(v||'').toLowerCase().includes(query));
     const health=x.enabled&&x.connectionStatus==='connected'&&x.planAllowed!==false;
-    return matches&&(numberFilter==='all'||(numberFilter==='ready'&&health)||(numberFilter==='attention'&&!health)||(numberFilter==='default'&&x.isDefault));
+    const matchedBusiness=businessFilter==='all'||businessKey(x)===businessFilter;
+    return matches&&matchedBusiness&&(numberFilter==='all'||(numberFilter==='ready'&&health)||(numberFilter==='attention'&&!health)||(numberFilter==='default'&&x.isDefault));
   });
 
   const allowed=subscription?.access?.allowed!==false;
   const canAdd=allowed&&subscription&&subscription.used<subscription.max;
   const verifyToken=embedded?.webhookVerifyToken||connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
   const webhook=BASE.replace(/\/api$/,'')+'/api/webhooks/meta';
+
+  function beginAnotherMetaProfile(){
+    if(!canAdd)return;
+    setPendingActivation(null);
+    setActivationSelected([]);
+    setActivationResults([]);
+    setEditing(null);
+    setExistingPrefill(null);
+    setManualTokenEntry(false);
+    setShowForm(false);
+    setConnectionMode('new');
+    setMetaAssets(null);
+    setChosenBusiness('');
+    setChosenWaba('');
+    setChosenPhone('');
+    setErr('');
+    setMsg('Connect a different Meta business portfolio, WABA or phone number. Existing profiles will be preserved.');
+    setShowSetup(true);
+    requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
 
   // Meta requires the business owner to authorize portfolio enumeration.
   // This is a separate short-lived Facebook Login; it does NOT connect,
@@ -1200,7 +1231,13 @@ function WhatsAppApi({go}){
   }
 
   return <div className="page">
-    <div className="title numbersHeading"><div><span>WHATSAPP MANAGER</span><h1>Numbers</h1><p>Manage Meta WhatsApp numbers in this workspace. Authorization problems do not delete your saved sender profiles.</p></div><div className="numbersTopStat"><strong>{meta.length}</strong><span>saved profiles</span></div></div>
+    <div className="title numbersHeading"><div><span>WHATSAPP MANAGER</span><h1>Meta Profiles & Numbers</h1><p>Connect and manage multiple authorized Meta businesses and WhatsApp senders independently within your subscription.</p></div><div className="numbersTopStat"><strong>{meta.length}</strong><span>saved phone profiles</span></div></div>
+    <section className="metaMultiSummary" aria-label="Connected Meta profiles overview">
+      <div><strong>{profileSummary?.total??meta.length}</strong><span>Saved senders</span></div>
+      <div><strong>{profileSummary?.businessAccounts??businessGroups.length}</strong><span>WhatsApp Business Accounts</span></div>
+      <div><strong>{profileSummary?.businessPortfolios??new Set(meta.map(x=>x.businessPortfolioId).filter(Boolean)).size}</strong><span>Meta portfolios</span></div>
+      <div><strong>{profileSummary?.ready??meta.filter(x=>x.enabled&&x.connectionStatus==='connected'&&x.planAllowed!==false).length}</strong><span>Ready senders</span></div>
+    </section>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
 
 
@@ -1233,7 +1270,8 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={()=>{setEditing(null);setShowForm(false);setManualTokenEntry(false);setConnectionMode('new');setShowSetup(v=>!v)}}>{showSetup?'−  Close connection options':'+  Connect WhatsApp Number'}</button>
+        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={beginAnotherMetaProfile}>+ Connect another Meta profile</button>
+        {showSetup&&<button type="button" className="metaMultiSecondary" onClick={()=>setShowSetup(false)}>Close setup</button>}
         {!canAdd&&<small>{!allowed?'Subscription inactive — activate a plan to connect numbers.':'Your plan connection limit has been reached.'}</small>}
       </div>
       {showSetup&&<div className="numbersSetup" id="numbersSetup">
@@ -1266,6 +1304,7 @@ function WhatsAppApi({go}){
             <button type="button" className="primary" disabled={activationBusy||!activationSelected.length}
               onClick={activateSelectedNumbers}>{activationBusy?'Activating…':'Activate selected numbers →'}</button>
             <button type="button" className="metaActivationDiscard" onClick={()=>{setPendingActivation(null);setActivationSelected([]);setActivationResults([])}}>Finish / Close</button>
+            {canAdd&&<button type="button" className="metaMultiSecondary" onClick={beginAnotherMetaProfile}>+ Connect another Meta business</button>}
           </div>
           {!activationAvailable.length&&<p className="metaActivationDone">No additional numbers are available in this authorization session. Your saved profiles are listed below.</p>}
         </section>}
@@ -1403,14 +1442,24 @@ function WhatsAppApi({go}){
       </div>}
     </section>}
       </div>}
-      <div className="numberListTitle"><div><h2>Connected WhatsApp numbers</h2><p>Only API connection status is shown here. Meta business verification is a separate process.</p></div><span>{shown.length} of {meta.length} shown</span></div>
+      <div className="numberListTitle"><div><h2>Connected Meta profiles</h2><p>Each number has independent credentials, WABA ownership, templates, connection health and sender selection. Default applies only in this workspace.</p></div><span>{shown.length} of {meta.length} shown</span></div>
+      {businessGroups.length>1&&<div className="metaBusinessFilter">
+        <label htmlFor="metaBusinessFilter">Filter by WhatsApp Business Account</label>
+        <select id="metaBusinessFilter" value={businessFilter} onChange={e=>setBusinessFilter(e.target.value)}>
+          <option value="all">All businesses · {meta.length} profiles</option>
+          {businessGroups.map(g=><option value={g.key} key={g.key}>
+            {g.wabaId?'WABA '+g.wabaId:'Business not assigned'}{g.portfolioId?' · Portfolio '+g.portfolioId:''} · {g.count} number(s)
+          </option>)}
+        </select>
+      </div>}
       <div className="numberList" role="list">
         <div className="numberListLabels" aria-hidden="true"><span>S.No.</span><span>Business details</span><span>Connection status</span><span>Manage</span></div>
         {shown.map((x,index)=><article className="numberRow" role="listitem" key={x.id}>
           <span className="numberOrdinal">{String(index+1).padStart(2,'0')}</span>
           <div className="numberMainDetail"><b><span aria-hidden="true" className="numberMetaSymbol">∞</span>{x.name}</b><span className="numberPhone">{x.displayPhoneNumber||'Phone Number ID: '+x.phoneNumberId}</span>
             <small>Meta Cloud API · {x.connectMethod==='embedded'?'Connected with Facebook':'Manual setup'}</small>
-            <small>WABA: {x.businessAccountId||'Not provided'} · Last checked: {fmt(x.lastCheckedAt)}</small></div>
+            <small>WABA: {x.businessAccountId||'Not provided'} · Last checked: {fmt(x.lastCheckedAt)}</small>
+            {x.businessPortfolioId&&<small>Meta Business Portfolio: {x.businessPortfolioId}</small>}</div>
           <div className="numberStates">
             {x.isDefault&&<span className="numberStatus default">Default sender</span>}
             {x.planAllowed===false&&<span className="numberStatus warning">Outside plan limit</span>}
