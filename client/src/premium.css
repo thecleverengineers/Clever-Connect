@@ -332,3 +332,20 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
  .metaActivationFoot{display:grid;grid-template-columns:1fr}
  .metaActivationFoot .primary,.metaActivationDiscard{width:100%}
 }
+
+/* Lightweight immediate visual placeholders in place of blank screens.
+   They are purely decorative and don't block sidebar interaction. */
+.instantSkeleton{padding:22px 0;min-height:50vh}
+.instantSkeletonTitle,.instantSkeletonSub,.instantSkeletonCard,.instantSkeletonWide{
+  background:linear-gradient(110deg,#ebf4ee 8%,#f7fbf8 45%,#ebf4ee 82%);
+  background-size:230% 100%;animation:instantSkeletonShimmer 1.7s ease-in-out infinite;
+  border-radius:12px;display:block;
+}
+.instantSkeletonTitle{height:36px;max-width:260px;margin:12px 0}
+.instantSkeletonSub{height:15px;max-width:440px;margin:16px 0 25px}
+.instantSkeletonMetrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:24px}
+.instantSkeletonCard{height:110px;border:1px solid #e7f0e9}
+.instantSkeletonWide{height:225px;border:1px solid #e7f0e9}
+@keyframes instantSkeletonShimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+@media(max-width:900px){.instantSkeletonMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}.instantSkeleton{padding:14px 0}}
+@media(prefers-reduced-motion:reduce){.instantSkeletonTitle,.instantSkeletonSub,.instantSkeletonCard,.instantSkeletonWide{animation:none}}
