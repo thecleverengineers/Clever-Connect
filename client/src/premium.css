@@ -388,3 +388,13 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .metaBusinessFilter label{font-size:11px;color:#57705e;font-weight:800;flex-shrink:0}
 .metaBusinessFilter select{flex:1;min-width:185px;max-width:460px;min-height:41px;color:#286044;font-size:12px;border-radius:9px;border:1px solid #d5e6da;background:#fff;padding:8px 11px}
 @media(max-width:750px){.metaMultiSummary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metaMultiSummary>div{padding:13px}.metaMultiSummary strong{font-size:21px}.metaBusinessFilter{display:grid;padding:12px}.metaBusinessFilter select{width:100%;max-width:none}}
+
+/* Existing Cloud API account discovery, exact-number authorization and
+   non-disruptive cross-partner linking (Meta permissions required). */
+.metaSelectedExistingNumber{border:1px solid #aadabd;background:linear-gradient(115deg,#e8f9ed,#f5fcf6);padding:13px 15px;border-radius:11px;display:grid;gap:7px}
+.metaSelectedExistingNumber b{color:#0e7849;font-size:12px}
+.metaSelectedExistingNumber span{color:#2a5e41;font-size:12px;font-weight:750;overflow-wrap:anywhere}
+.metaSelectedExistingNumber small{color:#60846e;font-size:10px;line-height:1.7}
+.metaPhoneRow>button:disabled{cursor:not-allowed;opacity:.52;background:#eff2ef;color:#718479;border-color:#dce5df}
+.metaPhoneRow>button:not(:disabled):hover{background:#d9f4e3;border-color:#94d6ab}
+@media(max-width:700px){.metaSelectedExistingNumber{padding:11px 12px}}
