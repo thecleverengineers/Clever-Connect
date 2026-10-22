@@ -170,7 +170,10 @@ router.post('/activate',async(req,res)=>{
   res.set('Cache-Control','no-store');
   return res.json({
    activated:results.filter(x=>x.ok).length,results,remainingSlots:updated.remaining,
-   message:results.filter(x=>x.ok).length+' WhatsApp number(s) activated.'
+   message:results.filter(x=>x.ok).length+' WhatsApp number(s) activated.',
+   routingNotice:session.mode==='existing'
+    ?'No external provider or conversation routing was changed. If this number is shared across partners under Meta’s current account model, review Conversation Routing in Meta Business Suite to choose which partner handles inbound conversations.'
+    :''
   });
  }catch(e){
   return res.status(422).json({message:String(e.message||'Activation failed').slice(0,300)});
