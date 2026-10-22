@@ -1,10 +1,11 @@
-import React,{useEffect,useMemo,useState}from'react';
+import React,{useEffect,useMemo,useRef,useState}from'react';
 import{api,BASE,getCached}from'./api.js';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
 import DropFileInput from './DropFileInput.jsx';
 import './premium.css';
 import {LazyAICopilot,LazySendMessage,LazyBulkWhatsApp,LazyMetaTemplateManager,LazyInbox,LazyFlowStudio,LazyPayments,prefetchPageModule} from './lazyPages.js';
 import {allowedWorkspacePage,resolveWorkspacePage,workspacePageHash} from './workspaceRouting.js';
+import {existingFacebookAccessToken,shouldReuseFacebookSession,facebookDiscoveryLoginOptions} from './facebookDiscoverySession.js';
 import {BUSINESS_TYPES,BUSINESS_GOALS,BRAND_TONES,LANGUAGES} from './business.js';
 
 const nav=[
@@ -904,6 +905,9 @@ function WhatsAppApi({go}){
   const[connectionMode,setConnectionMode]=useState('new');
   const[metaAssets,setMetaAssets]=useState(null);
   const[assetBusy,setAssetBusy]=useState(false);
+  const[fbSessionAvailable,setFbSessionAvailable]=useState(false);
+  const[permissionRetryAvailable,setPermissionRetryAvailable]=useState(false);
+  const fbAuthRef=useRef(null);
   const[chosenBusiness,setChosenBusiness]=useState('');
   const[chosenWaba,setChosenWaba]=useState('');
   const[chosenPhone,setChosenPhone]=useState('');
@@ -944,12 +948,25 @@ function WhatsAppApi({go}){
     }catch(e){setErr(e.message)}
   }
   useEffect(()=>{
+    fbAuthRef.current=null;
+    setFbSessionAvailable(false);
     if(!embedded?.enabled){setFbSdkReady(false);return}
     let active=true;
-    // Preload the Facebook SDK before the user clicks Connect. Calling
-    // FB.login from a still-loading async script can be blocked as a popup.
+    // Preload the SDK AND discover whether this browser already has an
+    // authenticated session for the configured Meta application. This is a
+    // read-only status check, never an attempt to bypass Meta security.
     loadFacebookSdk(embedded.appId,embedded.graphVersion||'v23.0')
-      .then(()=>{if(active){setFbSdkReady(true);setFbSdkFailure('')}})
+      .then(FB=>{
+        if(!active)return;
+        setFbSdkReady(true);
+        setFbSdkFailure('');
+        FB.getLoginStatus(response=>{
+          if(!active)return;
+          const token=existingFacebookAccessToken(response);
+          fbAuthRef.current=token||null;
+          setFbSessionAvailable(!!token);
+        });
+      })
       .catch(e=>{if(active){setFbSdkReady(false);setFbSdkFailure(e.message||'Facebook SDK unavailable')}});
     return()=>{active=false};
   },[embedded?.enabled,embedded?.appId,embedded?.graphVersion]);
@@ -1014,29 +1031,67 @@ function WhatsAppApi({go}){
   // Meta requires the business owner to authorize portfolio enumeration.
   // This is a separate short-lived Facebook Login; it does NOT connect,
   // migrate or register any number. No user token is persisted.
-  async function discoverFacebookAssets(){
+  function discoverFacebookAssets({forceLogin=false,regrant=false}={}){
     if(assetBusy)return;
     setExistingPrefill(null);
-    if(!embedded?.enabled){setAccountDiscoveryError('Facebook Login is not configured by Super Admin.');return}
-    setAssetBusy(true);setAccountDiscoveryError('');setMetaAssets(null);
-    setChosenBusiness('');setChosenWaba('');setChosenPhone('');
-    try{
-      const FB=await loadFacebookSdk(embedded.appId,embedded.graphVersion||'v23.0');
-      const auth=await new Promise((resolve,reject)=>{
-        FB.login(response=>{
-          if(response?.authResponse?.accessToken)resolve(response.authResponse.accessToken);
-          else reject(new Error('Facebook did not grant access to list portfolios. Choose the intended Meta account and approve business_management/WhatsApp permissions, or continue with Meta Coexistence directly.'));
-        },{
-          scope:'public_profile,business_management,whatsapp_business_management',
-          auth_type:'rerequest',
-          return_scopes:true
+    if(!embedded?.enabled){
+      setAccountDiscoveryError('Facebook Login is not configured by Super Admin.');
+      return;
+    }
+    // Facebook SDK is loaded on page mount so any login popup launches
+    // synchronously in this user gesture, including on mobile Chrome.
+    const FB=window.FB;
+    if(!fbSdkReady||!FB){
+      setAccountDiscoveryError('Facebook is still loading. Retry once the Connect button is ready.');
+      return;
+    }
+    setAssetBusy(true);
+    setAccountDiscoveryError('');
+    setPermissionRetryAvailable(false);
+    setMetaAssets(null);
+    setChosenBusiness('');
+    setChosenWaba('');
+    setChosenPhone('');
+
+    const fetchAssets=async token=>{
+      try{
+        const result=await api('/integrations/meta-portfolios/discover',{
+          method:'POST',body:JSON.stringify({accessToken:token})
         });
-      });
-      const result=await api('/integrations/meta-portfolios/discover',{method:'POST',body:JSON.stringify({accessToken:auth})});
-      setMetaAssets(result);
-      if(result.portfolios?.length)setChosenBusiness(result.portfolios[0].id);
-    }catch(e){setAccountDiscoveryError(e.message||'Unable to list Meta portfolios.')}
-    finally{setAssetBusy(false)}
+        setMetaAssets(result);
+        if(result.portfolios?.length)setChosenBusiness(result.portfolios[0].id);
+      }catch(e){
+        const detail=e.message||'Unable to list Meta portfolios.';
+        setAccountDiscoveryError(detail);
+        // Explicit opt-in re-request, never an automatic password/permission
+        // loop. Reusing a valid Facebook session is still the default.
+        setPermissionRetryAvailable(/permission|scope|not authorized|access denied|business_management|OAuth/i.test(detail));
+        if(e.status===401||/expired|invalid.*token/i.test(detail)){
+          fbAuthRef.current=null;
+          setFbSessionAvailable(false);
+        }
+      }finally{setAssetBusy(false)}
+    };
+
+    if(shouldReuseFacebookSession(fbAuthRef.current,{forceLogin,regrant})){
+      fetchAssets(fbAuthRef.current);
+      return;
+    }
+
+    // Rerequest occurs only after the customer opts to review permissions.
+    const opts=facebookDiscoveryLoginOptions({regrant});
+    FB.login(response=>{
+      const token=response?.authResponse?.accessToken;
+      if(!token){
+        setAssetBusy(false);
+        setAccountDiscoveryError('Facebook did not authorize access to the business portfolios. You can retry with your current account or review permissions.');
+        setPermissionRetryAvailable(true);
+        return;
+      }
+      fbAuthRef.current=token;
+      setFbSessionAvailable(true);
+      fetchAssets(token);
+    },opts);
   }
 
   const chosenPortfolio=metaAssets?.portfolios?.find(x=>x.id===chosenBusiness);
@@ -1420,9 +1475,17 @@ function WhatsAppApi({go}){
               :'First choose the Facebook/Meta account. Clever Connect lists portfolios, WABAs, and API numbers you have permission to view. WhatsApp Business App-only numbers may not appear until Meta Coexistence onboarding. Meta determines eligibility.'}</p>
           </div>
           <div className="metaPickerActions">
-            <button type="button" className="facebookButton" disabled={assetBusy} onClick={discoverFacebookAssets}>
-              {assetBusy?'Checking Meta account…':metaAssets?'Change Meta account / refresh all numbers':'① Login with Facebook · Browse portfolios & numbers'}
+            <button type="button" className="facebookButton" disabled={assetBusy||!fbSdkReady} onClick={()=>discoverFacebookAssets()}>
+              {assetBusy?'Checking Meta account…':fbSessionAvailable
+                ?'① Continue with current Facebook session · Browse numbers'
+                :'① Login with Facebook · Browse portfolios & numbers'}
             </button>
+            {fbSessionAvailable&&<button type="button" className="metaManualTokenToggle" disabled={assetBusy}
+              onClick={()=>discoverFacebookAssets({forceLogin:true})}>Use a different Facebook account</button>}
+            {permissionRetryAvailable&&<button type="button" className="metaManualTokenToggle" disabled={assetBusy}
+              onClick={()=>discoverFacebookAssets({forceLogin:true,regrant:true})}>Review Meta permissions</button>}
+            {!fbSdkReady&&<small>{fbSdkFailure||'Preparing Facebook login…'}</small>}
+            <small className="metaLoginSecurityNote">If Facebook already recognizes this browser session, Clever Connect will reuse it to list accessible numbers. When you authorize a WhatsApp Business Account, Facebook may still require a password or additional security verification. That check is controlled by Meta, and your password is never sent to Clever Connect.</small>
             {metaAssets?.metaAccount&&<div className="metaSignedIn"><b>Signed in as {metaAssets.metaAccount.name}</b><small>Facebook account ID: {metaAssets.metaAccount.id}</small></div>}
           </div>
           {accountDiscoveryError&&<div className="metaPickerWarning" role="alert">{accountDiscoveryError}
