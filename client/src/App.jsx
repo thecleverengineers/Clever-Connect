@@ -941,7 +941,18 @@ function WhatsAppApi({go}){
       }
     }catch(e){setErr(e.message)}
   }
-  useEffect(()=>{load()},[]);
+  useEffect(()=>{
+    load();
+    // Recover a staged Meta signup after a browser refresh without ever
+    // placing tokens into localStorage, query params or browser state.
+    api('/meta-activation/pending',{fresh:true,cache:false}).then(data=>{
+      if(!data.session)return;
+      setPendingActivation(current=>current||data.session);
+      setShowSetup(true);
+      setConnectionMode(data.session.mode==='existing'?'cloud_api':
+        data.session.mode==='coexistence'?'business_app':'new');
+    }).catch(()=>{});
+  },[]);
   const meta=connections.filter(x=>x.provider==='meta');
   const demo=connections.filter(x=>x.provider==='demo');
   const businessKey=x=>String(x.businessPortfolioId||'')+'|'+String(x.businessAccountId||'unassigned:'+x.id);
@@ -966,6 +977,9 @@ function WhatsAppApi({go}){
 
   function beginAnotherMetaProfile(){
     if(!canAdd)return;
+    if(pendingActivation?.sessionId){
+      api('/meta-activation/pending/'+pendingActivation.sessionId,{method:'DELETE'}).catch(()=>{});
+    }
     setPendingActivation(null);
     setActivationSelected([]);
     setActivationResults([]);
@@ -1176,6 +1190,14 @@ function WhatsAppApi({go}){
     }
   }
 
+  async function dismissActivation(){
+    const id=pendingActivation?.sessionId;
+    setPendingActivation(null);setActivationSelected([]);setActivationResults([]);
+    if(id)try{
+      await api('/meta-activation/pending/'+id,{method:'DELETE'});
+    }catch(e){setErr('Could not dismiss the expired Meta authorization: '+e.message)}
+  }
+
   async function activateSelectedNumbers(){
     if(!pendingActivation?.sessionId||!activationSelected.length||activationBusy)return;
     setActivationBusy(true);setErr('');setMsg('');
@@ -1308,7 +1330,8 @@ function WhatsAppApi({go}){
           <div className="metaActivationHeading">
             <div><small>✓ META AUTHORIZATION SUCCESSFUL</small>
               <h2>Choose numbers to activate</h2>
-              <p>Meta returned {pendingActivation.numbers.length} WhatsApp number(s) for the authorized WABA. Select only the numbers you want enabled in this Clever Connect workspace.</p>
+              <p>Meta authorized WABA {pendingActivation.wabaId||'—'} and returned {pendingActivation.numbers.length} WhatsApp number(s).
+                Select which numbers to activate. Saved profiles are preserved if Meta later rejects or revokes a token.</p>
             </div>
             <span>{pendingActivation.remainingSlots} subscription slot(s) available</span>
           </div>
@@ -1318,20 +1341,26 @@ function WhatsAppApi({go}){
                 disabled={activationBusy||n.availability!=='available'||(!activationSelected.includes(n.id)&&activationSelected.length>=pendingActivation.remainingSlots)}
                 onChange={()=>toggleActivationPhone(n.id)}/>
               <span className="metaActivationPhoneInfo"><b>{n.displayPhoneNumber||'Meta Phone ID '+n.id}</b>
-                <small>{n.verifiedName||'WhatsApp Business Account'} · Phone Number ID {n.id}</small></span>
+                <small>{n.verifiedName||'WhatsApp Business Account'} · Phone Number ID {n.id}{n.status?' · Meta status '+n.status:''}</small></span>
               <span className={'metaActivationStatus '+(n.availability==='available'?'available':'unavailable')}>
                 {n.availability==='available'?'Available':n.availability==='already_connected'?'Already linked here':'Linked to another workspace'}
               </span>
             </label>)}
           </div>
           {activationResults.length>0&&<div className="metaActivationResults" role="status">
-            {activationResults.map(r=><p key={r.phoneNumberId}><b>{r.ok?'✓ Activated':'! Needs attention'} · {r.phoneNumberId}</b> {r.reason||r.connection?.name||''}</p>)}
+            {activationResults.map(r=><p key={r.phoneNumberId}>
+              <b>{r.ok?'✓ Connected':'! Needs attention'} · {r.phoneNumberId}</b>
+              {' '}{r.reason||r.warning||r.connection?.name||''}
+              {r.connection?.id&&<button type="button" className="metaActivationInspect" onClick={()=>{setPendingActivation(null);setNumberSearch(r.connection.displayPhoneNumber||r.phoneNumberId);}}>
+                View saved number →
+              </button>}
+            </p>)}
           </div>}
           <div className="metaActivationFoot">
             <div><b>{activationSelected.length} selected</b><small>{activationAvailable.length} available · Select up to {pendingActivation.remainingSlots} number(s)</small></div>
             <button type="button" className="primary" disabled={activationBusy||!activationSelected.length}
               onClick={activateSelectedNumbers}>{activationBusy?'Activating…':'Activate selected numbers →'}</button>
-            <button type="button" className="metaActivationDiscard" onClick={()=>{setPendingActivation(null);setActivationSelected([]);setActivationResults([])}}>Finish / Close</button>
+            <button type="button" className="metaActivationDiscard" onClick={dismissActivation}>Finish / Close</button>
             {canAdd&&<button type="button" className="metaMultiSecondary" onClick={beginAnotherMetaProfile}>+ Connect another Meta business</button>}
           </div>
           {!activationAvailable.length&&<p className="metaActivationDone">No additional numbers are available in this authorization session. Your saved profiles are listed below.</p>}
