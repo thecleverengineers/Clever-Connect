@@ -412,3 +412,7 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
  .metaOneClickInline .facebookButton{width:100%;padding:14px 12px}
  .metaWebhookBadge{font-size:9px}
 }
+
+/* Session-first Meta login: clearly distinguish authorized session reuse
+   from Meta's own non-bypassable password re-authentication. */
+.metaLoginSecurityNote{display:block;color:#708779;font-size:11px;line-height:1.65;max-width:620px}
