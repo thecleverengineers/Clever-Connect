@@ -1250,6 +1250,10 @@ function WhatsAppApi({go}){
         const y=await api('/integrations/whatsapp-connections/'+x.id+'/test',{method:'POST'});
         setMsg('Connection successful: '+(y.verifiedName||y.displayPhoneNumber||x.name));
       }
+      if(type==='webhook'){
+        const result=await api('/integrations/whatsapp-connections/'+x.id+'/webhook/sync',{method:'POST'});
+        setMsg(result.message||'Meta WABA webhook subscription updated.');
+      }
       if(type==='default'){
         await api('/integrations/whatsapp-connections/'+x.id+'/default',{method:'POST'});
         setMsg(x.name+' is now the default WhatsApp sender.');
@@ -1383,7 +1387,7 @@ function WhatsAppApi({go}){
               onClick={()=>connectWithFacebook({existing:true,browse:true})}>
               {fbBusy?'Opening Meta authorization…':'ⓕ Continue with Facebook — choose my number'}
             </button>
-            <small>No manual Phone Number ID or access token required. Meta login and approval are required. Clever Connect then lists all accessible numbers for selection.</small>
+            <small>No manual WABA ID, Phone Number ID, or token needed. After you approve Meta's login, choose numbers and activate them. Saved connections stay until you explicitly disconnect.</small>
           </div>
           <b>Already registered with Fast2SMS or another provider?</b>
           <p>Login with Facebook below to browse all Cloud API numbers accessible to that Meta account. Select a specific number to authorize it through Meta Embedded Signup. When Meta grants sharing access, the same number can remain with another provider. Clever Connect does <strong>not</strong> automatically transfer, deregister or disconnect an external integration.</p>
@@ -1549,9 +1553,15 @@ function WhatsAppApi({go}){
             {x.planAllowed===false&&<span className="numberStatus warning">Outside plan limit</span>}
             {!x.enabled&&<span className="numberStatus disabled">Disabled</span>}
             {x.enabled&&<span className={'numberStatus '+(x.connectionStatus==='connected'?'good':'warning')}>{x.connectionStatus==='connected'?'API connected':'Needs attention'}</span>}
+            {x.webhookStatus==='subscribed'&&<small className="metaWebhookBadge ready">✓ Webhooks subscribed</small>}
+            {x.webhookStatus==='needs_attention'&&<small className="metaWebhookBadge attention">Webhooks need attention</small>}
             {x.lastError&&<small className="numberStatusError">{x.lastError}</small>}</div>
           <div className="numberRowActions">
             <button type="button" onClick={()=>act(x,'test')} disabled={!x.enabled||!allowed}>Test / Sync</button>
+            {x.webhookStatus!=='subscribed'&&
+              <button type="button" onClick={()=>act(x,'webhook')} disabled={!x.enabled||!allowed||x.planAllowed===false}>
+                Verify webhooks ↻
+              </button>}
             <button type="button" onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
             <button type="button" onClick={()=>{setEditing(x);setManualTokenEntry(false);setConnectionMode('cloud_api');setShowSetup(true);setShowForm(true);requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}))}}>Edit</button>
             {!x.isDefault&&<button type="button" onClick={()=>act(x,'default')} disabled={x.planAllowed===false||!x.enabled}>Make default</button>}
