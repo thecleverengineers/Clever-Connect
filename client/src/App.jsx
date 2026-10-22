@@ -892,6 +892,7 @@ function WhatsAppApi({go}){
   const[manualTokenEntry,setManualTokenEntry]=useState(false);
   const[editing,setEditing]=useState(null);
   const[fbBusy,setFbBusy]=useState(false);
+  const[metaLoginHelpOpen,setMetaLoginHelpOpen]=useState(false);
   const[pendingActivation,setPendingActivation]=useState(null);
   const[activationSelected,setActivationSelected]=useState([]);
   const[activationBusy,setActivationBusy]=useState(false);
@@ -1068,6 +1069,7 @@ function WhatsAppApi({go}){
           method:'POST',body:JSON.stringify({event:name,status:'error',detail:explanation})
         }).catch(()=>{});
         cleanup();setFbBusy(false);setErr(explanation);
+        setMetaLoginHelpOpen(true);
         return;
       }
       if(['FINISH','FINISH_ONLY_WABA','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(name)){
@@ -1078,7 +1080,7 @@ function WhatsAppApi({go}){
 
     window.addEventListener('message',listener);
     timer=setTimeout(()=>{
-      if(!finished){cleanup();setFbBusy(false);setErr('Facebook signup timed out. Please try again.')}
+      if(!finished){cleanup();setFbBusy(false);setErr('Meta login did not finish. If Meta displayed “Feature unavailable”, review the app’s Required Actions, Data Use Checkup and App Review status before retrying.');setMetaLoginHelpOpen(true)}
     },120000);
 
     try{
@@ -1102,7 +1104,8 @@ function WhatsAppApi({go}){
               cleanup();setFbBusy(false);
               const status=response?.status||'unknown';
               api('/integrations/embedded-signup/diagnostic',{method:'POST',body:JSON.stringify({event:'FB_LOGIN_CALLBACK',status,detail:'No authorization code returned'})}).catch(()=>{});
-              setErr('Facebook authorization was not completed. Meta status: '+status+'. Check the Facebook Login for Business OAuth/JavaScript SDK settings and the Embedded Signup Configuration ID.');
+              setErr('Facebook authorization did not complete. If the Meta popup says “Feature unavailable”, the developer app may have outstanding Required Actions, Data Use Checkup or App Review restrictions. See the Meta app checklist below. Meta status: '+status+'.');
+              setMetaLoginHelpOpen(true);
             }
           },2500);
         }
@@ -1340,8 +1343,22 @@ function WhatsAppApi({go}){
         <button className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled} onClick={connectWithFacebook}>{fbBusy?'Connecting with Meta…':'Continue with Facebook'}</button>
         {!embedded?.enabled&&embedded&&<small>Admin setup required: {embedded.missing?.join(', ')||'Meta Embedded Signup configuration'}</small>}
         {embedded?.enabled&&<small>Meta-hosted login · WA SANTA never sees your Facebook password</small>}
+        <button type="button" className="metaLoginHelpToggle" aria-expanded={metaLoginHelpOpen} onClick={()=>setMetaLoginHelpOpen(x=>!x)}>Meta says “Feature unavailable”? {metaLoginHelpOpen?'Hide checklist ↑':'Fix developer app settings →'}</button>
       </div>
     </section>}
+        {metaLoginHelpOpen&&<section className="metaLoginTroubleshoot" aria-label="Resolve Meta Facebook Login unavailable">
+          <div className="metaLoginTroubleshootHeading"><div><small>META DEVELOPER APP ACTION REQUIRED</small><h2>Facebook Login is unavailable</h2><p>This restriction is issued by Meta. Saving an App Secret or selecting Live mode alone does not clear pending compliance reviews.</p></div><span>Requires app administrator</span></div>
+          <div className="metaLoginIdentifiers"><div><small>Meta App ID</small><b>{embedded?.appId||'Not configured'}</b></div><div><small>Embedded Signup Configuration ID</small><b>{embedded?.configId||'Not configured'}</b></div></div>
+          <ol className="metaLoginChecklist">
+            <li><b>Open Meta → Required Actions / Alerts</b><span>Resolve any outstanding Data Use Checkup, policy notice, missing app details or disabled functionality.</span></li>
+            <li><b>Complete App Settings → Basic</b><span>Check the real business contact information, privacy policy URL, user data deletion instructions, category and app domain.</span></li>
+            <li><b>Check App Review and business verification</b><span>Complete any review Meta requires for Facebook Login for Business, business_management, whatsapp_business_management and whatsapp_business_messaging. Verify advanced access where needed.</span></li>
+            <li><b>Review Facebook Login for Business configuration</b><span>Confirm the selected WhatsApp Embedded Signup configuration ID, allowed JavaScript SDK domain and HTTPS website origin are correct.</span></li>
+            <li><b>Retest only after Meta clears the restriction</b><span>If the popup still shows this exact error with no pending actions, open a Meta Developer Support case for the App ID displayed here.</span></li>
+          </ol>
+          <div className="metaLoginHelpLinks"><a href={embedded?.appId?'https://developers.facebook.com/apps/'+encodeURIComponent(embedded.appId)+'/':'https://developers.facebook.com/apps/'} target="_blank" rel="noopener noreferrer">Open this Meta Developer App ↗</a><a href="https://developers.facebook.com/support/" target="_blank" rel="noopener noreferrer">Meta Developer Support ↗</a></div>
+          <p className="metaLoginSecurityNote">No WhatsApp sender, Meta token, Business Portfolio or subscription is modified by these checks. Existing Cloud API numbers can still be linked with an authorized system-user token through the manual option below, where Meta permits that access.</p>
+        </section>}
         {(connectionMode==='cloud_api'||!!editing)&&<section className="manualConnectionBox">
       <div className="sectionHead">
         <div><small>EXISTING CLOUD API</small><h2>Connect an existing API number</h2><p>Link only with authorized WABA access. Meta verifies the phone belongs to this account. No registration or provider migration occurs.</p></div>
@@ -1526,14 +1543,14 @@ function SuperAdmin(){
       const x=await api('/admin/meta-settings',{method:'PUT',body:JSON.stringify(o)});
       setMetaSettings(x);
       e.currentTarget.elements.appSecret.value='';
-      setMsg('Meta Embedded Signup settings saved securely.');
+      setMsg('Meta App credentials and configuration saved. Facebook Login availability must still be approved by Meta.');
     }catch(e){setErr(e.message)}
   }
   async function testMetaSettings(){
     setErr('');setMsg('');
     try{
       const x=await api('/admin/meta-settings/test',{method:'POST'});
-      setMsg(x.message||'Meta App credentials are valid.');
+      setMsg((x.message||'Meta App credentials are valid.')+' This test cannot verify Meta App Review, Data Use Checkup or Facebook Login availability.');
     }catch(e){setErr(e.message)}
   }
   async function clearMetaSecret(){
@@ -1655,7 +1672,7 @@ function SuperAdmin(){
           <h2>Meta Embedded Signup Settings</h2>
           <p>Configure the global Facebook/Meta app used by every tenant's “Continue with Facebook” WhatsApp onboarding flow.</p>
         </div>
-        <em className={'status '+(metaSettings?.enabled?'completed':'failed')}>{metaSettings?.enabled?'Ready':'Setup required'}</em>
+        <em className={'status '+(metaSettings?.enabled?'completed':'failed')}>{metaSettings?.enabled?'Credentials saved':'Setup required'}</em>
       </div>
       <form className="formGrid" onSubmit={saveMetaSettings}>
         <label>Meta App ID<input name="appId" defaultValue={metaSettings?.appId||''} placeholder="123456789012345" required/></label>
@@ -1665,7 +1682,7 @@ function SuperAdmin(){
         <div className="metaSecretState full">
           <span><b>App Secret</b><small>{metaSettings?.hasAppSecret?'Encrypted and stored securely':'Not configured'}</small></span>
           <span><b>Config source</b><small>{metaSettings?.source==='admin'?'Managed in Super Admin':'Render environment fallback'}</small></span>
-          <span><b>Missing</b><small>{metaSettings?.missing?.length?metaSettings.missing.join(', '):'None — Facebook connection is ready'}</small></span>
+          <span><b>Configuration fields</b><small>{metaSettings?.missing?.length?metaSettings.missing.join(', '):'Saved; Meta login approval is not verified'}</small></span>
         </div>
         <div className="actions full">
           {metaSettings?.hasAppSecret&&<button type="button" className="danger" onClick={clearMetaSecret}>Clear secret</button>}
@@ -1673,6 +1690,11 @@ function SuperAdmin(){
           <button className="primary">Save Meta settings</button>
         </div>
       </form>
+      <div className="metaAdminCompliance">
+        <b>Meta authorization status is not verified by the credential test.</b>
+        <p>If Facebook displays “Feature unavailable”, visit Meta for Developers → Required Actions, complete outstanding Data Use Checkup or App Review requirements, and check business verification, app details and Embedded Signup settings. Clever Connect cannot lift a restriction imposed by Meta.</p>
+        <a href={metaSettings?.appId?'https://developers.facebook.com/apps/'+encodeURIComponent(metaSettings.appId)+'/':'https://developers.facebook.com/apps/'} target="_blank" rel="noopener noreferrer">Open configured Meta App ↗</a>
+      </div>
       <div className="adminMetaHelp">
         <span><b>Where to get these values</b><small>Meta for Developers → your app → App settings / Facebook Login for Business → Embedded Signup configuration.</small></span>
         <span><b>Security</b><small>The App Secret is encrypted before being stored and is never returned to the browser after save.</small></span>
