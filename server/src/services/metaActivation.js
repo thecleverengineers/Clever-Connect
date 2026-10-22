@@ -29,6 +29,10 @@ export function validateActivationSelection(ids,authorized,maxConnections){
 // Bind Meta's second (credential-issuing) login to the exact WABA/number
 // that the customer selected in the first, read-only portfolio browser.
 // Backend Graph checks must still independently confirm membership.
+// Sharing an existing Cloud API number with another authorized partner
+// must NEVER trigger a new /register request or external deregistration.
+export const shouldRegisterDuringActivation=mode=>mode==='new';
+
 export function assertSignupMatchesSelection({
   expectedWabaId='',authorizedWabaId='',expectedPhoneNumberId='',returnedPhoneNumberId=''
 }={}){
