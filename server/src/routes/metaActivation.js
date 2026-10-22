@@ -5,7 +5,7 @@ import {Integration,MetaActivationSession,Workspace} from '../models.js';
 import {refreshWorkspaceAccess,metaEntitlements} from '../plan.js';
 import {getMetaConfig} from '../metaConfig.js';
 import {encrypt,decrypt} from '../utils/crypto.js';
-import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection} from '../services/metaActivation.js';
+import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,shouldRegisterDuringActivation} from '../services/metaActivation.js';
 import {verifyExistingCloudApiNumber} from '../services/existingMetaNumber.js';
 
 const router=express.Router();
@@ -136,7 +136,7 @@ router.post('/activate',async(req,res)=>{
      accessToken:token,graphVersion:session.graphVersion
     });
     let warning='',registrationPin='';
-    if(session.mode==='new'){
+    if(shouldRegisterDuringActivation(session.mode)){
      registrationPin=String(crypto.randomInt(100000,1000000));
      try{
       await graph(session.graphVersion,phoneId+'/register',token,'POST',{
