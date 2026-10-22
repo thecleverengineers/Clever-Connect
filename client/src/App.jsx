@@ -1485,6 +1485,7 @@ function WhatsAppApi({go}){
             {permissionRetryAvailable&&<button type="button" className="metaManualTokenToggle" disabled={assetBusy}
               onClick={()=>discoverFacebookAssets({forceLogin:true,regrant:true})}>Review Meta permissions</button>}
             {!fbSdkReady&&<small>{fbSdkFailure||'Preparing Facebook login…'}</small>}
+            <small className="metaLoginSecurityNote">If Facebook already recognizes this browser session, Clever Connect will reuse it to list accessible numbers. When you authorize a WhatsApp Business Account, Facebook may still require a password or additional security verification. That check is controlled by Meta, and your password is never sent to Clever Connect.</small>
             {metaAssets?.metaAccount&&<div className="metaSignedIn"><b>Signed in as {metaAssets.metaAccount.name}</b><small>Facebook account ID: {metaAssets.metaAccount.id}</small></div>}
           </div>
           {accountDiscoveryError&&<div className="metaPickerWarning" role="alert">{accountDiscoveryError}
