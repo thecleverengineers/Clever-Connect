@@ -56,7 +56,7 @@ router.post('/prepare',async(req,res)=>{
    expectedWabaId:String(req.body?.expectedBusinessAccountId||'').trim(),
    authorizedWabaId:waba,
    expectedPhoneNumberId:String(req.body?.expectedPhoneNumberId||'').trim(),
-   returnedPhoneNumberId:selectedId
+   returnedPhoneNumberId:String(req.body?.metaReportedPhoneNumberId||'').trim()
   });
   const auth=await exchange(code);
   const found=[];let after='';
