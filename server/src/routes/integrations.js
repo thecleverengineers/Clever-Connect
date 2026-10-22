@@ -30,6 +30,8 @@ const view=x=>({
   otpTemplateLanguage:x.otpTemplateLanguage||'en_US',
   hasAccessToken:!!x.accessTokenEncrypted,
   connectionStatus:x.connectionStatus||'connected',
+  webhookStatus:x.webhookStatus||'unknown',
+  lastWebhookCheckedAt:x.lastWebhookCheckedAt||null,
   connectedAt:x.connectedAt||null,
   lastCheckedAt:x.lastCheckedAt||null,
   lastError:x.lastError||'',
@@ -438,6 +440,45 @@ r.post('/whatsapp-connections/:id/test',async(req,res)=>{
       message:'Meta WhatsApp connection needs attention: '+String(e.message||'Check token and permissions').slice(0,260)+
         '. Renew the token under WhatsApp Manager → Numbers → Edit and run Test / Sync.',
       connectionPreserved:true
+    });
+  }
+});
+
+// Reconnect the Clever Connect Meta app to the WABA's webhook
+// independently of sender credentials. This does not remove any other app,
+// revoke another partner's token or change Meta conversation routing.
+r.post('/whatsapp-connections/:id/webhook/sync',async(req,res)=>{
+  if(!await requireMessagingAccess(req.workspaceId,res))return;
+  if(!mongoose.isValidObjectId(req.params.id))
+    return res.status(400).json({message:'Invalid WhatsApp connection'});
+  const connection=await Integration.findOne({
+    _id:req.params.id,workspaceId:req.workspaceId,provider:'meta'
+  }).lean();
+  if(!connection)return res.sendStatus(404);
+  if(!connection.enabled)return res.status(409).json({message:'Enable this connection before subscribing to webhooks'});
+  try{
+    await requireMetaSenderEntitlement(req.workspaceId,connection._id);
+    if(!/^[0-9]{5,30}$/.test(connection.businessAccountId||''))
+      return res.status(409).json({message:'This connection has no valid Meta WABA ID. Reauthorize with Facebook.'});
+    const token=decrypt(connection.accessTokenEncrypted);
+    const version=connection.graphVersion||'v23.0';
+    await metaRequest(version,connection.businessAccountId+'/subscribed_apps',token,{method:'POST'});
+    const when=new Date();
+    await Integration.updateOne({_id:connection._id,workspaceId:req.workspaceId},{
+      $set:{webhookStatus:'subscribed',lastWebhookCheckedAt:when,
+        lastError:connection.connectionStatus==='connected'?'':connection.lastError||''}
+    });
+    return res.json({ok:true,webhookStatus:'subscribed',
+      message:'Meta WABA subscribed to Clever Connect webhooks. Verify the callback URL and messages field in Meta App settings to receive events.'});
+  }catch(e){
+    await Integration.updateOne({_id:connection._id,workspaceId:req.workspaceId},
+      {$set:{webhookStatus:'needs_attention',lastWebhookCheckedAt:new Date(),
+        lastError:String(e.message||'Webhook setup failed').slice(0,300)}}
+    ).catch(()=>{});
+    return res.status(409).json({
+      code:'META_WEBHOOK_SUBSCRIPTION_FAILED',
+      message:'Meta webhook subscription could not be completed: '+String(e.message||'Check Meta WABA permissions').slice(0,180)+
+      '. This saved sender has not been disconnected.'
     });
   }
 });
