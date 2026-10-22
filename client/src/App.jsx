@@ -1252,7 +1252,8 @@ function WhatsAppApi({go}){
         }
       },{
         config_id:embedded.configId,
-        auth_type:'rerequest',
+        // Do not force the user to re-grant permissions on every signup.
+        // Facebook may still challenge the session for security.
         response_type:'code',
         override_default_response_type:true,
         extras
@@ -1550,15 +1551,22 @@ function WhatsAppApi({go}){
       </div>
     </section>}
         {metaLoginHelpOpen&&<section className="metaLoginTroubleshoot" aria-label="Resolve Meta Facebook Login unavailable">
-          <div className="metaLoginTroubleshootHeading"><div><small>META DEVELOPER APP ACTION REQUIRED</small><h2>Facebook Login is unavailable</h2><p>This restriction is issued by Meta. Saving an App Secret or selecting Live mode alone does not clear pending compliance reviews.</p></div><span>Requires app administrator</span></div>
+          <div className="metaLoginTroubleshootHeading"><div><small>META DEVELOPER APP ACTION REQUIRED</small><h2>Resolve Facebook Login “Feature unavailable”</h2><p>Meta controls this restriction. App credentials can be saved correctly even when Meta has blocked login or your Embedded Signup configuration is outdated.</p></div><span>Requires Meta app administrator</span></div>
+          <div className="metaLoginPreflight" aria-label="Local Meta configuration checks">
+            <div><b>{embedded?.appId&&embedded?.configId&&embedded?.hasAppSecret?'✓ App ID, config ID and App Secret saved':'! Meta settings incomplete'}</b><small>Configured locally — this does not mean Meta approved the login flow.</small></div>
+            <div><b>{embedded?.graphVersion||'Not set'}</b><small>Graph API version, NOT WhatsApp Embedded Signup version</small></div>
+            <div><b>Confirm Embedded Signup v4</b><small>Version and compliance approval must be checked in the Meta Developer dashboard.</small></div>
+          </div>
           <div className="metaLoginIdentifiers"><div><small>Meta App ID</small><b>{embedded?.appId||'Not configured'}</b></div><div><small>Embedded Signup Configuration ID</small><b>{embedded?.configId||'Not configured'}</b></div></div>
           <ol className="metaLoginChecklist">
-            <li><b>Open Meta → Required Actions / Alerts</b><span>Resolve any outstanding Data Use Checkup, policy notice, missing app details or disabled functionality.</span></li>
-            <li><b>Complete App Settings → Basic</b><span>Check the real business contact information, privacy policy URL, user data deletion instructions, category and app domain.</span></li>
-            <li><b>Check App Review and business verification</b><span>Complete any review Meta requires for Facebook Login for Business, business_management, whatsapp_business_management and whatsapp_business_messaging. Verify advanced access where needed.</span></li>
-            <li><b>Review Facebook Login for Business configuration</b><span>Confirm the selected WhatsApp Embedded Signup configuration ID, allowed JavaScript SDK domain and HTTPS website origin are correct.</span></li>
-            <li><b>Retest only after Meta clears the restriction</b><span>If the popup still shows this exact error with no pending actions, open a Meta Developer Support case for the App ID displayed here.</span></li>
+            <li><b>Required Actions and Alerts</b><span>In Meta for Developers, complete Data Use Checkup, pending policy notices, business verification, and any outstanding compliance tasks. Live mode alone does not guarantee login access.</span></li>
+            <li><b>Create WhatsApp Embedded Signup v4 (mandatory since 15 October 2026)</b><span>Facebook Login for Business → Configurations → Create Configuration → WhatsApp Embedded Signup → WhatsApp Cloud API → System-user access token → WhatsApp accounts → whatsapp_business_management and whatsapp_business_messaging. Replace the previous Configuration ID in Clever Connect Super Admin → Integrations. Graph API v23.0 is NOT the signup configuration version.</span></li>
+            <li><b>Facebook Login for Business → Settings</b><span>Enable Client OAuth Login, Web OAuth Login, Login with JavaScript SDK, Embedded Browser OAuth Login (if offered), Enforce HTTPS and Strict Mode. Set the Allowed Domains for the JavaScript SDK to clever-connect-web-fzma.onrender.com and the same host under App Domains in Meta Settings → Basic. Do not use the WhatsApp webhook as the OAuth redirect URI.</span></li>
+            <li><b>App Review and advanced access</b><span>Confirm external access for whatsapp_business_management, whatsapp_business_messaging, and business_management where applicable. App administrators may work during development even if external users are still blocked.</span></li>
+            <li><b>Meta Settings → Basic</b><span>Provide a reachable HTTPS Privacy Policy URL, Data Deletion Instructions URL, correct contact email, app category, app domains, and Terms URL if required.</span></li>
+            <li><b>Support case if Meta continues to block login</b><span>After resolving all Required Actions, test with a portfolio administrator. If the exact Feature Unavailable message persists, ask Meta Developer Support to review the App ID shown above.</span></li>
           </ol>
+          <p className="metaLoginSecurityNote">Facebook may still ask for the password or 2FA even when the account is already logged in. Clever Connect does not control that security requirement and must not bypass it.</p>
           <div className="metaLoginHelpLinks"><a href={embedded?.appId?'https://developers.facebook.com/apps/'+encodeURIComponent(embedded.appId)+'/':'https://developers.facebook.com/apps/'} target="_blank" rel="noopener noreferrer">Open this Meta Developer App ↗</a><a href="https://developers.facebook.com/support/" target="_blank" rel="noopener noreferrer">Meta Developer Support ↗</a></div>
           <p className="metaLoginSecurityNote">No WhatsApp sender, Meta token, Business Portfolio or subscription is modified by these checks. Existing Cloud API numbers can still be linked with an authorized system-user token through the manual option below, where Meta permits that access.</p>
         </section>}
