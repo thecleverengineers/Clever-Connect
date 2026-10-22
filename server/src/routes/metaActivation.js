@@ -118,6 +118,49 @@ router.post('/prepare',async(req,res)=>{
  }
 });
 
+// Recover an unfinished 10-minute authorization after refreshing the browser.
+// Tokens are never included in the response or returned to the frontend.
+router.get('/pending',async(req,res)=>{
+ try{
+  const limit=await allowance(req.workspaceId);
+  const session=await MetaActivationSession.findOne({
+   workspaceId:req.workspaceId,initiatedBy:req.user._id,
+   expiresAt:{$gt:new Date()}
+  }).select('-accessTokenEncrypted').sort({createdAt:-1}).lean();
+  res.set('Cache-Control','no-store');
+  if(!session)return res.json({session:null});
+  const existing=await Integration.find({
+   provider:'meta',phoneNumberId:{$in:session.phones.map(p=>p.id)}
+  }).select('workspaceId phoneNumberId').lean();
+  const mapped=new Map(existing.map(i=>[i.phoneNumberId,String(i.workspaceId)]));
+  return res.json({
+   session:{
+    sessionId:String(session._id),
+    expiresAt:session.expiresAt,
+    wabaId:session.businessAccountId,mode:session.mode,
+    numbers:session.phones.map(p=>({...p,availability:
+     !mapped.has(p.id)?'available':mapped.get(p.id)===String(req.workspaceId)?
+     'already_connected':'in_another_workspace'})),
+    remainingSlots:limit.remaining
+   }
+  });
+ }catch(e){
+  return res.status(409).json({message:String(e.message||'Unable to read Meta signup state').slice(0,180)});
+ }
+});
+
+// Only the initiating workspace user can dismiss an unfinished authorization;
+// deleting a session NEVER deletes an activated WhatsApp sender.
+router.delete('/pending/:id',async(req,res)=>{
+ if(!mongoose.isValidObjectId(req.params.id))
+  return res.status(400).json({message:'Invalid activation session'});
+ await MetaActivationSession.deleteOne({
+  _id:req.params.id,workspaceId:req.workspaceId,initiatedBy:req.user._id
+ });
+ res.set('Cache-Control','no-store');
+ return res.json({ok:true});
+});
+
 router.post('/activate',async(req,res)=>{
  let lease=null;
  try{
