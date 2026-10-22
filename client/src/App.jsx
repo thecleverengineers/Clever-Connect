@@ -1188,7 +1188,7 @@ function WhatsAppApi({go}){
         numbers:previous.numbers.map(p=>attempted.has(p.id)?{...p,availability:'already_connected'}:p)
       }:previous);
       setActivationSelected([]);
-      setMsg(result.message||'Selected WhatsApp numbers processed. Check the activation results.');
+      setMsg([result.message||'Selected WhatsApp numbers processed.',result.routingNotice].filter(Boolean).join(' '));
       await load();
     }catch(e){setErr(e.message||'Unable to activate selected numbers')}
     finally{setActivationBusy(false)}
@@ -1342,6 +1342,7 @@ function WhatsAppApi({go}){
           <b>Already registered with Fast2SMS or another provider?</b>
           <p>Login with Facebook below to browse all Cloud API numbers accessible to that Meta account. Select a specific number to authorize it through Meta Embedded Signup. When Meta grants sharing access, the same number can remain with another provider. Clever Connect does <strong>not</strong> automatically transfer, deregister or disconnect an external integration.</p>
           <p><strong>If Meta denies access:</strong> request the necessary WABA/phone asset sharing permissions from its owner or provider. Do not disconnect a working integration just to force activation. A blocked Meta account cannot be overridden from Clever Connect.</p>
+          <p><strong>Existing provider protection:</strong> Clever Connect never automatically deregisters the number or changes its primary responder. After Meta authorizes sharing, you may need to configure <strong>Conversation Routing</strong> in Meta Business Suite to choose which provider handles incoming messages.</p>
         </div>}
         {(connectionMode==='business_app'||connectionMode==='cloud_api')&&!editing&&<div className="metaBusinessAccountPicker">
           <div className="metaExistingHint">
