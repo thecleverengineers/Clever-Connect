@@ -1,15 +1,9 @@
 import React,{useEffect,useMemo,useState}from'react';
-import{api,BASE,getCached,warmWorkspace}from'./api.js';
-import Payments from './Payments.jsx';
+import{api,BASE,getCached}from'./api.js';
 import CampaignComposer,{blankCampaignDraft,existingCampaignDraft} from './CampaignComposer.jsx';
-import BulkWhatsApp from './BulkWhatsApp.jsx';
-import SendMessage from './SendMessage.jsx';
-import MetaTemplateManager from './MetaTemplateManager.jsx';
 import DropFileInput from './DropFileInput.jsx';
-import {Inbox} from './ConversationSuite.jsx';
-import FlowStudio from './FlowStudio.jsx';
-import AICopilot from './AICopilot.jsx';
 import './premium.css';
+import {LazyAICopilot,LazySendMessage,LazyBulkWhatsApp,LazyMetaTemplateManager,LazyInbox,LazyFlowStudio,LazyPayments,prefetchPageModule} from './lazyPages.js';
 import {allowedWorkspacePage,resolveWorkspacePage,workspacePageHash} from './workspaceRouting.js';
 import {BUSINESS_TYPES,BUSINESS_GOALS,BRAND_TONES,LANGUAGES} from './business.js';
 
@@ -45,7 +39,7 @@ const fmt=d=>d?new Date(d).toLocaleString([], {dateStyle:'medium',timeStyle:'sho
 const statusLabel=s=>String(s||'draft').replace('_',' ');
 
 function Notice({children,type='ok'}){return children?<div className={'notice '+type}>{children}</div>:null}
-function Loading(){return <div className="loading">Loading workspace…</div>}
+function Loading(){return <div className="page instantSkeleton" aria-busy="true" aria-label="Opening workspace"><div className="instantSkeletonTitle"/><div className="instantSkeletonSub"/><div className="instantSkeletonMetrics">{Array.from({length:4},(_,i)=><div className="instantSkeletonCard" key={i}/>)}</div><div className="instantSkeletonWide"/></div>}
 function Empty({text}){return <div className="empty">{text}</div>}
 function Title({title,sub,action,onAction}){
   return <div className="title"><div><span>WA SANTA</span><h1>{title}</h1><p>{sub}</p></div>{action&&<button className="primary" onClick={onAction}>+ {action}</button>}</div>
@@ -128,7 +122,9 @@ function Shell({session,onLogout,onSessionUpdate}){
   const[managerExpanded,setManagerExpanded]=useState(()=>window.localStorage.getItem('wa:manager-expanded')!=='false');
   const[managerCounts,setManagerCounts]=useState({numbers:null,templates:null});
   useEffect(()=>{
-    if(!access.allowed)return;
+    // Sidebar counters are secondary UI; defer their API calls until the
+    // manager area is actually opened instead of blocking every login.
+    if(!access.allowed||!(open||['whatsapp-api','templates'].includes(page)))return;
     let live=true;
     Promise.allSettled([api('/integrations/whatsapp-connections'),api('/templates')]).then(results=>{
       if(!live)return;
@@ -138,11 +134,12 @@ function Shell({session,onLogout,onSessionUpdate}){
       });
     });
     return()=>{live=false};
-  },[access.allowed,open,managerExpanded]);
+  },[access.allowed,open,page]);
   const menu=session.user.isSuperAdmin?[...nav,['admin','Super Admin','★']]:nav;
   const locked=id=>!access.allowed&&!['subscription','profile','edit-profile','admin'].includes(id);
   const changePage=id=>{
     const next=allowedWorkspacePage(id,{allowed:access.allowed,isSuperAdmin:!!session.user.isSuperAdmin});
+    prefetchPageModule(next);
     setPage(next);
     if(window.location.hash!==workspacePageHash(next))window.location.hash=workspacePageHash(next);
     setOpen(false);setProfileOpen(false);
@@ -191,7 +188,7 @@ function Shell({session,onLogout,onSessionUpdate}){
             const item=menu.find(x=>x[0]===id);
             if(!item)return null;
             const [,label,ic]=item;
-            return <button type="button" key={id} className={page===id?'active':''} aria-current={page===id?'page':undefined} onClick={()=>changePage(id)}>
+            return <button type="button" key={id} className={page===id?'active':''} aria-current={page===id?'page':undefined} onPointerEnter={()=>prefetchPageModule(id)} onFocus={()=>prefetchPageModule(id)} onClick={()=>changePage(id)}>
               <i aria-hidden="true">{ic}</i><span>{id==='inbox'?'Live Chat (Inbox)':id==='chatbot'?'Chat Automation':id==='reports'?'Delivery Report':label}</span>
               {locked(id)&&<small className="navLock">• locked</small>}
             </button>;
@@ -203,7 +200,7 @@ function Shell({session,onLogout,onSessionUpdate}){
             </button>
             {managerExpanded&&<div className="sidebarSubmenu">
               {[['whatsapp-api','Numbers',managerCounts.numbers],['templates','Templates',managerCounts.templates]].map(([id,label,count])=>
-                <button type="button" key={id} className={page===id?'active':''} aria-current={page===id?'page':undefined} onClick={()=>changePage(id)}>
+                <button type="button" key={id} className={page===id?'active':''} aria-current={page===id?'page':undefined} onPointerEnter={()=>prefetchPageModule(id)} onFocus={()=>prefetchPageModule(id)} onClick={()=>changePage(id)}>
                   <span>{label}</span>{count!==null&&<b>{count}</b>}
                 </button>)}
             </div>}
@@ -240,8 +237,8 @@ function Shell({session,onLogout,onSessionUpdate}){
         </div>
       </header>
       {!access.allowed&&page!=='subscription'&&page!=='admin'&&<div className="accessBanner"><b>7-day trial ended.</b> Subscribe to a WA SANTA plan to restore workspace access.</div>}
-      <Page key={page} id={page} session={session} go={changePage} onSessionUpdate={onSessionUpdate}/>
-      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['bulk','Bulk WA','◈'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
+      <React.Suspense fallback={<Loading/>}><Page key={page} id={page} session={session} go={changePage} onSessionUpdate={onSessionUpdate}/></React.Suspense>
+      <nav className="mobileAppbar" aria-label="Mobile app navigation">{[['overview','Home','⌂'],['bulk','Bulk WA','◈'],['campaigns','Campaigns','✦'],['inbox','Inbox','◉'],['contacts','Contacts','◎']].map(([id,label,icon])=><button key={id} type="button" aria-current={page===id?'page':undefined} className={page===id?'active':''} onPointerDown={()=>prefetchPageModule(id)} onClick={()=>changePage(id)}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
     </main>
   </div>
 }
@@ -339,10 +336,6 @@ function Campaigns(){
   useEffect(()=>{load().catch(e=>setErr(e.message))},[]);
   async function save(e){
     e.preventDefault();setErr('');setMsg('');
-    if(!editing&&!manualTokenEntry){
-      setErr('Authorize with Facebook above, or choose manual token entry before linking this number.');
-      return;
-    }
     const fd=new FormData(e.currentTarget);
     const o=Object.fromEntries(fd);
     o.contactIds=fd.getAll('contactIds');
@@ -1782,18 +1775,18 @@ function SuperAdmin(){
 
 function Page({id,go,session,onSessionUpdate}){
   if(id==='overview')return <Overview go={go}/>;
-  if(id==='ai')return <AICopilot go={go} session={session}/>;
-  if(id==='send')return <SendMessage go={go}/>;
-  if(id==='bulk')return <BulkWhatsApp go={go}/>;
+  if(id==='ai')return <LazyAICopilot go={go} session={session}/>;
+  if(id==='send')return <LazySendMessage go={go}/>;
+  if(id==='bulk')return <LazyBulkWhatsApp go={go}/>;
   if(id==='campaigns')return <Campaigns/>;
   if(id==='contacts')return <Contacts/>;
   if(id==='schedule')return <Schedule/>;
-  if(id==='templates')return <MetaTemplateManager/>;
+  if(id==='templates')return <LazyMetaTemplateManager/>;
   if(id==='reports')return <Reports go={go}/>;
-  if(id==='inbox')return <Inbox/>;
-  if(id==='chatbot')return <FlowStudio session={session}/>;
+  if(id==='inbox')return <LazyInbox/>;
+  if(id==='chatbot')return <LazyFlowStudio session={session}/>;
   if(id==='whatsapp-api')return <WhatsAppApi go={go}/>;
-  if(id==='payments')return <Payments session={session} go={go}/>;
+  if(id==='payments')return <LazyPayments session={session} go={go}/>;
   if(id==='subscription')return <Subscription onSessionUpdate={onSessionUpdate}/>;
   if(id==='admin'&&session.user.isSuperAdmin)return <SuperAdmin/>;
   if(id==='profile')return <Profile session={session} go={go} onSessionUpdate={onSessionUpdate}/>;
@@ -1804,7 +1797,7 @@ function Page({id,go,session,onSessionUpdate}){
 export default function App(){
   const[session,setSession]=useState(()=>getCached('/auth/me')??undefined);
   useEffect(()=>{
-    api('/auth/me',{fresh:true}).then(x=>{setSession(x);warmWorkspace(!!x.user?.isSuperAdmin)}).catch(()=>setSession(null));
+    api('/auth/me',{fresh:true}).then(x=>setSession(x)).catch(()=>setSession(null));
     const unauth=()=>setSession(null);
     window.addEventListener('wa:unauthorized',unauth);
     return()=>window.removeEventListener('wa:unauthorized',unauth);
@@ -1815,5 +1808,5 @@ export default function App(){
     window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search+'#/overview');
   }
   if(session===undefined)return <Loading/>;
-  return session?<Shell session={session} onLogout={logout} onSessionUpdate={setSession}/>:<Auth onAuth={x=>{setSession(x);warmWorkspace(!!x.user?.isSuperAdmin)}}/>;
+  return session?<Shell session={session} onLogout={logout} onSessionUpdate={setSession}/>:<Auth onAuth={setSession}/>;
 }

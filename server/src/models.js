@@ -176,6 +176,8 @@ const deliverySchema = new Schema({
 
 deliverySchema.index({workspaceId:1,campaignId:1,contactId:1},{unique:true,partialFilterExpression:{campaignId:{$type:'objectId'},contactId:{$type:'objectId'}}});
 deliverySchema.index({workspaceId:1,providerMessageId:1});
+// Keep date-range dashboard counts index-backed as delivery volume grows.
+deliverySchema.index({workspaceId:1,createdAt:-1,status:1});
 
 const deliveryReceiptSchema=new Schema({
  workspaceId:{type:Schema.Types.ObjectId,required:true,index:true},
