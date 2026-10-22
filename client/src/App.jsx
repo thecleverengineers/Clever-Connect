@@ -1078,6 +1078,7 @@ function WhatsAppApi({go}){
             wabaId:session.waba_id,
             phoneNumberId:existing?expectedPhone:session.phone_number_id||'',
             businessPortfolioId:session.business_id||session.businessId||'',
+            metaReportedPhoneNumberId:session.phone_number_id||'',
             ...(refreshExisting?{profileId:editing.id}:
               {existingCloud:existing,coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING'),
                 ...(existing?{expectedBusinessAccountId:expectedWaba,expectedPhoneNumberId:expectedPhone}:{})})
