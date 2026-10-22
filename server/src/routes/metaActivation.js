@@ -7,6 +7,8 @@ import {getMetaConfig} from '../metaConfig.js';
 import {encrypt,decrypt} from '../utils/crypto.js';
 import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,shouldRegisterDuringActivation} from '../services/metaActivation.js';
 import {verifyExistingCloudApiNumber} from '../services/existingMetaNumber.js';
+import {getMetaConfig as configuredMetaApp} from '../metaConfig.js';
+import {inspectMetaTokenWithGraph,metaNumberRegistrationAction,onboardingResultMessage} from '../services/metaConnectHealth.js';
 
 const router=express.Router();
 
@@ -49,9 +51,11 @@ router.post('/prepare',async(req,res)=>{
   const mode=req.body?.existingCloud===true?'existing':req.body?.coexistence===true?'coexistence':'new';
   if(portfolio&&!/^[0-9]{5,30}$/.test(portfolio))
    return res.status(400).json({message:'Invalid Meta Business Portfolio ID'});
+  // One-click Meta login can legitimately return a WABA with no specific
+  // chosen phone yet. Only a user who explicitly selects a number in the
+  // optional browser must be locked to that ID.
   const selectedId=String(req.body?.phoneNumberId||'').trim();
-  if(mode==='existing'&&!selectedId)
-   return res.status(400).json({message:'Select an existing Cloud API phone number before connecting'});
+  if(selectedId)cleanMetaId(selectedId,'Phone Number ID');
   assertSignupMatchesSelection({
    expectedWabaId:String(req.body?.expectedBusinessAccountId||'').trim(),
    authorizedWabaId:waba,
@@ -59,11 +63,25 @@ router.post('/prepare',async(req,res)=>{
    returnedPhoneNumberId:String(req.body?.metaReportedPhoneNumberId||'').trim()
   });
   const auth=await exchange(code);
+  const cfg=await configuredMetaApp();
+  // Reject tokens for the wrong app, expired tokens and missing messaging
+  // permissions before saving any temporary activation session.
+  await inspectMetaTokenWithGraph({
+   token:auth.token,appId:cfg.appId,appSecret:cfg.appSecret,graphVersion:auth.version
+  });
   const found=[];let after='';
   for(let i=0;i<3;i++){
-   const q=waba+'/phone_numbers?fields=id,display_phone_number,verified_name&limit=100'+
+   const q=waba+'/phone_numbers?fields=id,display_phone_number,verified_name,status&limit=100'+
     (after?'&after='+encodeURIComponent(after):'');
-   const page=await graph(auth.version,q,auth.token);
+   // Older WABAs and newly migrated WAAC/PMA accounts may not expose
+   // registration status on the same Graph version. Fall back gracefully
+   // while still verifying every selected phone at activation time.
+   let page;
+   try{page=await graph(auth.version,q,auth.token)}
+   catch(e){
+    if(!/status|field|parameter/i.test(e.message||''))throw e;
+    page=await graph(auth.version,q.replace(',status&','&'),auth.token);
+   }
    found.push(...(page.data||[]));
    const next=page.paging?.cursors?.after;
    if(!next||next===after||found.length>=250)break;
@@ -74,7 +92,7 @@ router.post('/prepare',async(req,res)=>{
    const verified=await verifyExistingCloudApiNumber({
     phoneNumberId:selectedId,businessAccountId:waba,accessToken:auth.token,graphVersion:auth.version
    });
-   phones.push({id:selectedId,displayPhoneNumber:verified.displayPhoneNumber,verifiedName:verified.verifiedName});
+   phones.push({id:selectedId,displayPhoneNumber:verified.displayPhoneNumber,verifiedName:verified.verifiedName,status:''});
   }
   if(!phones.length)return res.status(409).json({message:'Meta granted access to this WABA, but no accessible phone numbers are available yet'});
   const existing=await Integration.find({provider:'meta',phoneNumberId:{$in:phones.map(p=>p.id)}})
@@ -89,6 +107,7 @@ router.post('/prepare',async(req,res)=>{
   res.set('Cache-Control','no-store');
   return res.json({
    sessionId:String(session._id),expiresAt:session.expiresAt,
+   wabaId:waba,mode,
    numbers:phones.map(p=>({...p,availability:!mapped.has(p.id)?'available':
     mapped.get(p.id)===String(req.workspaceId)?'already_connected':'in_another_workspace'})),
    remainingSlots:limit.remaining,
