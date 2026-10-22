@@ -22,9 +22,13 @@ export async function api(path,opts={}){
   const isForm=requestOpts.body instanceof FormData;
   const cacheable=isGet&&cacheOption!==false;
 
-  if(cacheable&&!fresh){
-    const hit=cache.get(path);
-    if(hit&&Date.now()-hit.at<GET_TTL)return hit.data;
+  if(cacheable){
+    if(!fresh){
+      const hit=cache.get(path);
+      if(hit&&Date.now()-hit.at<GET_TTL)return hit.data;
+    }
+    // Even forced refreshes share a concurrent GET. Rapid sidebar switching
+    // must not produce multiple identical DB queries.
     if(inflight.has(path))return inflight.get(path);
   }
 
@@ -67,32 +71,21 @@ export async function api(path,opts={}){
   return run;
 }
 
-export function warmWorkspace(isSuperAdmin=false){
-  const immediate=[
-    '/dashboard',
-    '/campaigns',
-    '/contacts',
-    '/lists',
-    '/templates',
-    '/integrations/whatsapp-connections',
-    '/account/profile',
-    '/subscription',
-    '/ai/status'
-  ];
-  const deferred=[
-    '/campaigns?status=scheduled',
-    '/campaigns/deliveries?limit=250',
-    '/integrations/embedded-signup/config',
-    '/account/team'
-  ];
-  if(isSuperAdmin)deferred.push('/admin/overview','/admin/meta-settings','/admin/openai-settings');
-
-  Promise.allSettled(immediate.map(path=>api(path)));
-  const runDeferred=()=>Promise.allSettled(deferred.map(path=>api(path)));
-  if(typeof window!=='undefined'&&'requestIdleCallback'in window){
-    window.requestIdleCallback(runDeferred,{timeout:700});
-  }else{
-    setTimeout(runDeferred,80);
+// Optional low-priority prefetch for the route the user actually requested.
+// Never preload every workspace table: that caused unnecessary simultaneous
+// requests on login and amplified Render free-tier cold starts.
+export function warmWorkspace(page='overview'){
+  const routeQueries={
+    overview:['/dashboard'],
+    campaigns:['/campaigns'],
+    contacts:['/contacts'],
+    schedule:['/campaigns?status=scheduled'],
+    reports:['/dashboard'],
+    templates:['/templates'],
+    'whatsapp-api':['/integrations/whatsapp-connections']
+  };
+  for(const path of routeQueries[page]||[]){
+    api(path).catch(()=>{});
   }
 }
 
