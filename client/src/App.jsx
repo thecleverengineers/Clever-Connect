@@ -950,6 +950,23 @@ function WhatsAppApi({go}){
 
   const allowed=subscription?.access?.allowed!==false;
   const canAdd=allowed&&subscription&&subscription.used<subscription.max;
+  const freeMetaSlots=Math.max(0,(subscription?.max||0)-(subscription?.used||0));
+  const wabaCount=new Set(meta.map(p=>p.businessAccountId).filter(Boolean)).size;
+  function addAnotherMetaProfile(){
+    setEditing(null);
+    setConnectionMode('new');
+    setManualTokenEntry(false);
+    setExistingPrefill(null);
+    setPendingActivation(null);
+    setActivationSelected([]);
+    setActivationResults([]);
+    setShowForm(false);
+    setErr('');
+    setMsg('Connect a different Meta Business Account or additional WhatsApp number. Each number uses one subscription slot.');
+    setShowSetup(true);
+    requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
+
   const verifyToken=embedded?.webhookVerifyToken||connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
   const webhook=BASE.replace(/\/api$/,'')+'/api/webhooks/meta';
 
@@ -1200,7 +1217,14 @@ function WhatsAppApi({go}){
   }
 
   return <div className="page">
-    <div className="title numbersHeading"><div><span>WHATSAPP MANAGER</span><h1>Numbers</h1><p>Manage Meta WhatsApp numbers in this workspace. Authorization problems do not delete your saved sender profiles.</p></div><div className="numbersTopStat"><strong>{meta.length}</strong><span>saved profiles</span></div></div>
+    <div className="title numbersHeading"><div><span>WHATSAPP MANAGER</span><h1>Numbers</h1><p>Manage multiple Meta Business Accounts and their WhatsApp sender numbers independently. Authentication errors do not delete saved profiles.</p></div><div className="numbersTopStat"><strong>{meta.length}</strong><span>saved sender profiles</span></div></div>
+    <section className="metaMultiProfileSummary" aria-label="Meta multi-profile connections">
+      <div><strong>{wabaCount}</strong><span>Meta Business Accounts</span></div>
+      <div><strong>{meta.length}</strong><span>Saved WhatsApp numbers</span></div>
+      <div><strong>{freeMetaSlots}</strong><span>Available plan slots</span></div>
+      <button type="button" disabled={!canAdd} onClick={addAnotherMetaProfile}>+ Connect another Meta profile</button>
+      {!canAdd&&<button type="button" className="metaPlanUpgrade" onClick={()=>go('subscription')}>View plans / increase number limit →</button>}
+    </section>
     <Notice>{msg}</Notice><Notice type="bad">{err}</Notice>
 
 
@@ -1233,8 +1257,8 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={()=>{setEditing(null);setShowForm(false);setManualTokenEntry(false);setConnectionMode('new');setShowSetup(v=>!v)}}>{showSetup?'−  Close connection options':'+  Connect WhatsApp Number'}</button>
-        {!canAdd&&<small>{!allowed?'Subscription inactive — activate a plan to connect numbers.':'Your plan connection limit has been reached.'}</small>}
+        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={()=>{if(showSetup)setShowSetup(false);else addAnotherMetaProfile()}}>{showSetup?'−  Close connection options':'+  Connect WhatsApp Number'}</button>
+        {!canAdd&&<small>{!allowed?'Subscription inactive — activate a plan to connect numbers.':'All WhatsApp profile slots are occupied. Upgrade your plan to add another number. No saved sender is overwritten.'}</small>}
       </div>
       {showSetup&&<div className="numbersSetup" id="numbersSetup">
         <div className="numbersSetupIntro"><b>Connect a WhatsApp Business number</b><span>Choose the correct path. New numbers, WhatsApp Business App numbers, and existing Cloud API numbers use different Meta procedures.</span></div>
@@ -1266,6 +1290,7 @@ function WhatsAppApi({go}){
             <button type="button" className="primary" disabled={activationBusy||!activationSelected.length}
               onClick={activateSelectedNumbers}>{activationBusy?'Activating…':'Activate selected numbers →'}</button>
             <button type="button" className="metaActivationDiscard" onClick={()=>{setPendingActivation(null);setActivationSelected([]);setActivationResults([])}}>Finish / Close</button>
+            {pendingActivation.remainingSlots>0&&<button type="button" className="metaActivationAnother" onClick={addAnotherMetaProfile}>Connect another Meta Business Account →</button>
           </div>
           {!activationAvailable.length&&<p className="metaActivationDone">No additional numbers are available in this authorization session. Your saved profiles are listed below.</p>}
         </section>}
@@ -1410,7 +1435,8 @@ function WhatsAppApi({go}){
           <span className="numberOrdinal">{String(index+1).padStart(2,'0')}</span>
           <div className="numberMainDetail"><b><span aria-hidden="true" className="numberMetaSymbol">∞</span>{x.name}</b><span className="numberPhone">{x.displayPhoneNumber||'Phone Number ID: '+x.phoneNumberId}</span>
             <small>Meta Cloud API · {x.connectMethod==='embedded'?'Connected with Facebook':'Manual setup'}</small>
-            <small>WABA: {x.businessAccountId||'Not provided'} · Last checked: {fmt(x.lastCheckedAt)}</small></div>
+            <small>Meta Portfolio: {x.businessPortfolioId||'Not provided'} · WABA: {x.businessAccountId||'Not provided'}</small>
+            <small>Last checked: {fmt(x.lastCheckedAt)}</small></div>
           <div className="numberStates">
             {x.isDefault&&<span className="numberStatus default">Default sender</span>}
             {x.planAllowed===false&&<span className="numberStatus warning">Outside plan limit</span>}
