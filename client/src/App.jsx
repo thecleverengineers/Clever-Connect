@@ -1032,7 +1032,12 @@ function WhatsAppApi({go}){
 
   async function connectWithFacebook({existing=false}={}){
     if(!canAdd&&!(existing&&editing))return;
-    const existingValues=existing?new FormData(document.getElementById('existingCloudConnectionForm')):null;
+    const senderForm=existing?document.getElementById('existingCloudConnectionForm'):null;
+    if(existing&&!senderForm){
+      setErr('Select an existing Meta Cloud API number or open its connection form before authorizing.');
+      return;
+    }
+    const existingValues=senderForm?new FormData(senderForm):null;
     const expectedPhone=existing?String(existingValues?.get('phoneNumberId')||'').trim():'';
     const expectedWaba=existing?String(existingValues?.get('businessAccountId')||'').trim():'';
     if(existing&&(!/^[0-9]{5,30}$/.test(expectedPhone)||!/^[0-9]{5,30}$/.test(expectedWaba))){
@@ -1074,7 +1079,8 @@ function WhatsAppApi({go}){
             phoneNumberId:existing?expectedPhone:session.phone_number_id||'',
             businessPortfolioId:session.business_id||session.businessId||'',
             ...(refreshExisting?{profileId:editing.id}:
-              {existingCloud:existing,coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING')})
+              {existingCloud:existing,coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING'),
+                ...(existing?{expectedBusinessAccountId:expectedWaba,expectedPhoneNumberId:expectedPhone}:{})})
           })
         });
         if(!refreshExisting){
@@ -1084,7 +1090,7 @@ function WhatsAppApi({go}){
           setActivationSelected(existing&&y.numbers?.some(n=>n.id===expectedPhone&&n.availability==='available')?[expectedPhone]:[]);
           setActivationResults([]);
           setShowSetup(true);
-          setMsg('Meta account authorized. Select the WhatsApp numbers you want to activate.');
+          setMsg('Meta account authorized. Review the specific WhatsApp number(s) you wish to activate. Nothing is enabled until you click Activate selected numbers.');
           requestAnimationFrame(()=>document.getElementById('metaActivationPicker')?.scrollIntoView({behavior:'smooth',block:'start'}));
         }else{
           setMsg(y.warning||y.message||'Meta WhatsApp reauthorized.');
@@ -1434,6 +1440,11 @@ function WhatsAppApi({go}){
           <label>Graph API version<input name="graphVersion" defaultValue={editing?.graphVersion||'v23.0'} placeholder="v23.0"/></label>
           <label>Phone Number ID<input name="phoneNumberId" defaultValue={editing?.phoneNumberId||existingPrefill?.phoneNumberId||''} required/></label>
           <label>WhatsApp Business Account (WABA) ID<input name="businessAccountId" defaultValue={editing?.businessAccountId||existingPrefill?.businessAccountId||''} required={!editing} placeholder="Meta numeric WABA ID"/></label>
+          {!editing&&existingPrefill?.phoneNumberId&&<div className="metaSelectedExistingNumber full" role="status">
+            <b>✓ Selected existing Cloud API number</b>
+            <span>{existingPrefill.name||'Meta number'} · Phone Number ID {existingPrefill.phoneNumberId}</span>
+            <small>WABA {existingPrefill.businessAccountId} · Clever Connect will not call Meta's registration, migration or deregistration endpoints for this existing sender.</small>
+          </div>}
           <div className="metaAutoTokenPanel full">
             <div className="metaAutoTokenHead"><span aria-hidden="true">◈</span><div>
               <b>{editing?.hasAccessToken?'Access token saved securely':'Automatic authorization with Meta'}</b>
@@ -1445,7 +1456,7 @@ function WhatsAppApi({go}){
               onClick={()=>connectWithFacebook({existing:true})}>
               {fbBusy?'Authorizing with Meta…':editing?'↻ Reauthorize with Facebook (refresh token)':'Continue with Facebook — authorize token automatically ↗'}
             </button>
-            <small>Meta must approve access to the selected number. Existing provider-managed numbers may require the provider to grant WABA access or migrate the number; Clever Connect cannot retrieve a third-party provider's secret token.</small>
+            <small>Meta must authorize this exact WABA and Phone Number ID. Numbers already in another platform can be connected here only if Meta grants partner sharing/access; Clever Connect does not disconnect, migrate or re-register the existing provider's number.</small>
           </div>
           <div className="metaManualToken full">
             <button type="button" className="metaManualTokenToggle" aria-expanded={manualTokenEntry}
