@@ -5,6 +5,7 @@ import DropFileInput from './DropFileInput.jsx';
 import './premium.css';
 import {LazyAICopilot,LazySendMessage,LazyBulkWhatsApp,LazyMetaTemplateManager,LazyInbox,LazyFlowStudio,LazyPayments,prefetchPageModule} from './lazyPages.js';
 import {allowedWorkspacePage,resolveWorkspacePage,workspacePageHash} from './workspaceRouting.js';
+import {existingFacebookAccessToken,shouldReuseFacebookSession,facebookDiscoveryLoginOptions} from './facebookDiscoverySession.js';
 import {BUSINESS_TYPES,BUSINESS_GOALS,BRAND_TONES,LANGUAGES} from './business.js';
 
 const nav=[
@@ -961,7 +962,7 @@ function WhatsAppApi({go}){
         setFbSdkFailure('');
         FB.getLoginStatus(response=>{
           if(!active)return;
-          const token=response?.status==='connected'?response?.authResponse?.accessToken:'';
+          const token=existingFacebookAccessToken(response);
           fbAuthRef.current=token||null;
           setFbSessionAvailable(!!token);
         });
@@ -1072,23 +1073,19 @@ function WhatsAppApi({go}){
       }finally{setAssetBusy(false)}
     };
 
-    if(!forceLogin&&!regrant&&fbAuthRef.current){
+    if(shouldReuseFacebookSession(fbAuthRef.current,{forceLogin,regrant})){
       fetchAssets(fbAuthRef.current);
       return;
     }
 
-    const opts={
-      scope:'public_profile,business_management,whatsapp_business_management',
-      return_scopes:true
-    };
-    // "rerequest" re-prompts declined permissions and is deliberately used
-    // ONLY when the customer clicks Review permissions, not on every login.
-    if(regrant)opts.auth_type='rerequest';
+    // Rerequest occurs only after the customer opts to review permissions.
+    const opts=facebookDiscoveryLoginOptions({regrant});
     FB.login(response=>{
       const token=response?.authResponse?.accessToken;
       if(!token){
         setAssetBusy(false);
         setAccountDiscoveryError('Facebook did not authorize access to the business portfolios. You can retry with your current account or review permissions.');
+        setPermissionRetryAvailable(true);
         return;
       }
       fbAuthRef.current=token;
