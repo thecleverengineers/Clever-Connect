@@ -893,6 +893,8 @@ function WhatsAppApi({go}){
   const[manualTokenEntry,setManualTokenEntry]=useState(false);
   const[editing,setEditing]=useState(null);
   const[fbBusy,setFbBusy]=useState(false);
+  const[fbSdkReady,setFbSdkReady]=useState(false);
+  const[fbSdkFailure,setFbSdkFailure]=useState('');
   const[metaLoginHelpOpen,setMetaLoginHelpOpen]=useState(false);
   const[pendingActivation,setPendingActivation]=useState(null);
   const[activationSelected,setActivationSelected]=useState([]);
@@ -941,7 +943,29 @@ function WhatsAppApi({go}){
       }
     }catch(e){setErr(e.message)}
   }
-  useEffect(()=>{load()},[]);
+  useEffect(()=>{
+    if(!embedded?.enabled){setFbSdkReady(false);return}
+    let active=true;
+    // Preload the Facebook SDK before the user clicks Connect. Calling
+    // FB.login from a still-loading async script can be blocked as a popup.
+    loadFacebookSdk(embedded.appId,embedded.graphVersion||'v23.0')
+      .then(()=>{if(active){setFbSdkReady(true);setFbSdkFailure('')}})
+      .catch(e=>{if(active){setFbSdkReady(false);setFbSdkFailure(e.message||'Facebook SDK unavailable')}});
+    return()=>{active=false};
+  },[embedded?.enabled,embedded?.appId,embedded?.graphVersion]);
+
+  useEffect(()=>{
+    load();
+    // Recover a staged Meta signup after a browser refresh without ever
+    // placing tokens into localStorage, query params or browser state.
+    api('/meta-activation/pending',{fresh:true,cache:false}).then(data=>{
+      if(!data.session)return;
+      setPendingActivation(current=>current||data.session);
+      setShowSetup(true);
+      setConnectionMode(data.session.mode==='existing'?'cloud_api':
+        data.session.mode==='coexistence'?'business_app':'new');
+    }).catch(()=>{});
+  },[]);
   const meta=connections.filter(x=>x.provider==='meta');
   const demo=connections.filter(x=>x.provider==='demo');
   const businessKey=x=>String(x.businessPortfolioId||'')+'|'+String(x.businessAccountId||'unassigned:'+x.id);
@@ -966,6 +990,9 @@ function WhatsAppApi({go}){
 
   function beginAnotherMetaProfile(){
     if(!canAdd)return;
+    if(pendingActivation?.sessionId){
+      api('/meta-activation/pending/'+pendingActivation.sessionId,{method:'DELETE'}).catch(()=>{});
+    }
     setPendingActivation(null);
     setActivationSelected([]);
     setActivationResults([]);
@@ -1030,21 +1057,29 @@ function WhatsAppApi({go}){
     requestAnimationFrame(()=>document.getElementById('existingCloudConnectionForm')?.scrollIntoView({behavior:'smooth',block:'center'}));
   }
 
-  async function connectWithFacebook({existing=false}={}){
-    if(!canAdd&&!(existing&&editing))return;
-    const senderForm=existing?document.getElementById('existingCloudConnectionForm'):null;
-    if(existing&&!senderForm){
+  async function connectWithFacebook({existing=false,browse=false}={}){
+    if(fbBusy||(!canAdd&&!(existing&&editing)))return;
+    // The primary one-click entry does NOT require a WABA/Phone Number ID.
+    // Meta returns the authorized WABA, then the backend lists its phones.
+    // The user must still confirm precisely which number(s) to activate.
+    const requiresSpecificNumber=existing&&!browse;
+    const senderForm=requiresSpecificNumber?document.getElementById('existingCloudConnectionForm'):null;
+    if(requiresSpecificNumber&&!senderForm){
       setErr('Select an existing Meta Cloud API number or open its connection form before authorizing.');
       return;
     }
     const existingValues=senderForm?new FormData(senderForm):null;
     const expectedPhone=existing?String(existingValues?.get('phoneNumberId')||'').trim():'';
     const expectedWaba=existing?String(existingValues?.get('businessAccountId')||'').trim():'';
-    if(existing&&(!/^[0-9]{5,30}$/.test(expectedPhone)||!/^[0-9]{5,30}$/.test(expectedWaba))){
+    if(requiresSpecificNumber&&(!/^[0-9]{5,30}$/.test(expectedPhone)||!/^[0-9]{5,30}$/.test(expectedWaba))){
       setErr('Enter the existing Meta Phone Number ID and WABA ID first. Facebook cannot look up an authorization token from the public phone number.');return;
     }
     if(!embedded?.enabled){
       setErr('Meta login is not configured by the Clever Connect Super Admin. Use an owner-authorized system-user token in the manual form.');
+      return;
+    }
+    if(!fbSdkReady){
+      setErr(fbSdkFailure||'Facebook Login is still loading. Check that popups and cookies are permitted, then try again.');
       return;
     }
     setFbBusy(true);setErr('');setMsg('');
@@ -1066,11 +1101,11 @@ function WhatsAppApi({go}){
           throw new Error('Meta authorized a different business portfolio from the one you selected. Restart onboarding and choose the same portfolio in Facebook.');
         }
         const eventName=String(session.event||'').toUpperCase();
-        if(existing&&String(session.waba_id)!==expectedWaba)
+        if(requiresSpecificNumber&&String(session.waba_id)!==expectedWaba)
           throw new Error('Meta returned a different WABA from the one you selected. No credential was saved.');
-        if(existing&&session.phone_number_id&&String(session.phone_number_id)!==expectedPhone)
+        if(requiresSpecificNumber&&session.phone_number_id&&String(session.phone_number_id)!==expectedPhone)
           throw new Error('Meta returned a different WhatsApp number. No credential was saved.');
-        const refreshExisting=existing&&!!editing;
+        const refreshExisting=requiresSpecificNumber&&!!editing;
         const y=await api(refreshExisting?'/integrations/embedded-signup/link-existing':'/meta-activation/prepare',{
           method:'POST',
           body:JSON.stringify({
@@ -1081,14 +1116,15 @@ function WhatsAppApi({go}){
             metaReportedPhoneNumberId:session.phone_number_id||'',
             ...(refreshExisting?{profileId:editing.id}:
               {existingCloud:existing,coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING'),
-                ...(existing?{expectedBusinessAccountId:expectedWaba,expectedPhoneNumberId:expectedPhone}:{})})
+                ...(requiresSpecificNumber?{expectedBusinessAccountId:expectedWaba,expectedPhoneNumberId:expectedPhone}:{})})
           })
         });
         if(!refreshExisting){
           setPendingActivation(y);
           // Show the exact chosen phone pre-selected, but NEVER activate it
           // without the user's explicit "Activate selected numbers" action.
-          setActivationSelected(existing&&y.numbers?.some(n=>n.id===expectedPhone&&n.availability==='available')?[expectedPhone]:[]);
+          const suggested=requiresSpecificNumber?expectedPhone:String(session.phone_number_id||'');
+          setActivationSelected(y.numbers?.some(n=>n.id===suggested&&n.availability==='available')?[suggested]:[]);
           setActivationResults([]);
           setShowSetup(true);
           setMsg('Meta account authorized. Review the specific WhatsApp number(s) you wish to activate. Nothing is enabled until you click Activate selected numbers.');
@@ -1171,6 +1207,14 @@ function WhatsAppApi({go}){
     }
   }
 
+  async function dismissActivation(){
+    const id=pendingActivation?.sessionId;
+    setPendingActivation(null);setActivationSelected([]);setActivationResults([]);
+    if(id)try{
+      await api('/meta-activation/pending/'+id,{method:'DELETE'});
+    }catch(e){setErr('Could not dismiss the expired Meta authorization: '+e.message)}
+  }
+
   async function activateSelectedNumbers(){
     if(!pendingActivation?.sessionId||!activationSelected.length||activationBusy)return;
     setActivationBusy(true);setErr('');setMsg('');
@@ -1222,6 +1266,10 @@ function WhatsAppApi({go}){
       if(type==='test'){
         const y=await api('/integrations/whatsapp-connections/'+x.id+'/test',{method:'POST'});
         setMsg('Connection successful: '+(y.verifiedName||y.displayPhoneNumber||x.name));
+      }
+      if(type==='webhook'){
+        const result=await api('/integrations/whatsapp-connections/'+x.id+'/webhook/sync',{method:'POST'});
+        setMsg(result.message||'Meta WABA webhook subscription updated.');
       }
       if(type==='default'){
         await api('/integrations/whatsapp-connections/'+x.id+'/default',{method:'POST'});
@@ -1289,7 +1337,11 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={beginAnotherMetaProfile}>+ Connect another Meta profile</button>
+        <button type="button" className="numbersAdd" disabled={!canAdd||fbBusy||!embedded?.enabled||!fbSdkReady}
+          onClick={()=>connectWithFacebook({existing:true,browse:true})}>
+          {fbBusy?'Connecting to Meta…':'ⓕ One-click Connect with Facebook'}
+        </button>
+        <button type="button" className="metaMultiSecondary" disabled={!canAdd} onClick={beginAnotherMetaProfile}>+ More connection options</button>
         {showSetup&&<button type="button" className="metaMultiSecondary" onClick={()=>setShowSetup(false)}>Close setup</button>}
         {!canAdd&&<small>{!allowed?'Subscription inactive — activate a plan to connect numbers.':'Your plan connection limit has been reached.'}</small>}
       </div>
@@ -1299,7 +1351,8 @@ function WhatsAppApi({go}){
           <div className="metaActivationHeading">
             <div><small>✓ META AUTHORIZATION SUCCESSFUL</small>
               <h2>Choose numbers to activate</h2>
-              <p>Meta returned {pendingActivation.numbers.length} WhatsApp number(s) for the authorized WABA. Select only the numbers you want enabled in this Clever Connect workspace.</p>
+              <p>Meta authorized WABA {pendingActivation.wabaId||'—'} and returned {pendingActivation.numbers.length} WhatsApp number(s).
+                Select which numbers to activate. Saved profiles are preserved if Meta later rejects or revokes a token.</p>
             </div>
             <span>{pendingActivation.remainingSlots} subscription slot(s) available</span>
           </div>
@@ -1309,20 +1362,26 @@ function WhatsAppApi({go}){
                 disabled={activationBusy||n.availability!=='available'||(!activationSelected.includes(n.id)&&activationSelected.length>=pendingActivation.remainingSlots)}
                 onChange={()=>toggleActivationPhone(n.id)}/>
               <span className="metaActivationPhoneInfo"><b>{n.displayPhoneNumber||'Meta Phone ID '+n.id}</b>
-                <small>{n.verifiedName||'WhatsApp Business Account'} · Phone Number ID {n.id}</small></span>
+                <small>{n.verifiedName||'WhatsApp Business Account'} · Phone Number ID {n.id}{n.status?' · Meta status '+n.status:''}</small></span>
               <span className={'metaActivationStatus '+(n.availability==='available'?'available':'unavailable')}>
                 {n.availability==='available'?'Available':n.availability==='already_connected'?'Already linked here':'Linked to another workspace'}
               </span>
             </label>)}
           </div>
           {activationResults.length>0&&<div className="metaActivationResults" role="status">
-            {activationResults.map(r=><p key={r.phoneNumberId}><b>{r.ok?'✓ Activated':'! Needs attention'} · {r.phoneNumberId}</b> {r.reason||r.connection?.name||''}</p>)}
+            {activationResults.map(r=><p key={r.phoneNumberId}>
+              <b>{r.ok?'✓ Connected':'! Needs attention'} · {r.phoneNumberId}</b>
+              {' '}{r.reason||r.warning||r.connection?.name||''}
+              {r.connection?.id&&<button type="button" className="metaActivationInspect" onClick={()=>{setPendingActivation(null);setNumberSearch(r.connection.displayPhoneNumber||r.phoneNumberId);}}>
+                View saved number →
+              </button>}
+            </p>)}
           </div>}
           <div className="metaActivationFoot">
             <div><b>{activationSelected.length} selected</b><small>{activationAvailable.length} available · Select up to {pendingActivation.remainingSlots} number(s)</small></div>
             <button type="button" className="primary" disabled={activationBusy||!activationSelected.length}
               onClick={activateSelectedNumbers}>{activationBusy?'Activating…':'Activate selected numbers →'}</button>
-            <button type="button" className="metaActivationDiscard" onClick={()=>{setPendingActivation(null);setActivationSelected([]);setActivationResults([])}}>Finish / Close</button>
+            <button type="button" className="metaActivationDiscard" onClick={dismissActivation}>Finish / Close</button>
             {canAdd&&<button type="button" className="metaMultiSecondary" onClick={beginAnotherMetaProfile}>+ Connect another Meta business</button>}
           </div>
           {!activationAvailable.length&&<p className="metaActivationDone">No additional numbers are available in this authorization session. Your saved profiles are listed below.</p>}
@@ -1339,6 +1398,15 @@ function WhatsAppApi({go}){
           </button>)}
         </div>}
         {connectionMode==='cloud_api'&&!editing&&<div className="metaExistingHint">
+          <b>Connect existing Cloud API in one click</b>
+          <div className="metaOneClickInline">
+            <button type="button" className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled||!fbSdkReady}
+              onClick={()=>connectWithFacebook({existing:true,browse:true})}>
+              {fbBusy?'Opening Meta authorization…':'ⓕ Continue with Facebook — choose my number'}
+            </button>
+            <small>No manual WABA ID, Phone Number ID, or token needed. After you approve Meta's login, choose numbers and activate them. Saved connections stay until you explicitly disconnect.</small>
+            {fbSdkFailure&&<small role="alert">Facebook Login unavailable: {fbSdkFailure}. Check your browser's network and Meta App settings.</small>}
+          </div>
           <b>Already registered with Fast2SMS or another provider?</b>
           <p>Login with Facebook below to browse all Cloud API numbers accessible to that Meta account. Select a specific number to authorize it through Meta Embedded Signup. When Meta grants sharing access, the same number can remain with another provider. Clever Connect does <strong>not</strong> automatically transfer, deregister or disconnect an external integration.</p>
           <p><strong>If Meta denies access:</strong> request the necessary WABA/phone asset sharing permissions from its owner or provider. Do not disconnect a working integration just to force activation. A blocked Meta account cannot be overridden from Clever Connect.</p>
@@ -1503,9 +1571,15 @@ function WhatsAppApi({go}){
             {x.planAllowed===false&&<span className="numberStatus warning">Outside plan limit</span>}
             {!x.enabled&&<span className="numberStatus disabled">Disabled</span>}
             {x.enabled&&<span className={'numberStatus '+(x.connectionStatus==='connected'?'good':'warning')}>{x.connectionStatus==='connected'?'API connected':'Needs attention'}</span>}
+            {x.webhookStatus==='subscribed'&&<small className="metaWebhookBadge ready">✓ Webhooks subscribed</small>}
+            {x.webhookStatus==='needs_attention'&&<small className="metaWebhookBadge attention">Webhooks need attention</small>}
             {x.lastError&&<small className="numberStatusError">{x.lastError}</small>}</div>
           <div className="numberRowActions">
             <button type="button" onClick={()=>act(x,'test')} disabled={!x.enabled||!allowed}>Test / Sync</button>
+            {x.webhookStatus!=='subscribed'&&
+              <button type="button" onClick={()=>act(x,'webhook')} disabled={!x.enabled||!allowed||x.planAllowed===false}>
+                Verify webhooks ↻
+              </button>}
             <button type="button" onClick={()=>{localStorage.setItem('wa:template-profile',x.id);go('templates')}}>Templates</button>
             <button type="button" onClick={()=>{setEditing(x);setManualTokenEntry(false);setConnectionMode('cloud_api');setShowSetup(true);setShowForm(true);requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}))}}>Edit</button>
             {!x.isDefault&&<button type="button" onClick={()=>act(x,'default')} disabled={x.planAllowed===false||!x.enabled}>Make default</button>}

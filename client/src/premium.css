@@ -398,3 +398,17 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .metaPhoneRow>button:disabled{cursor:not-allowed;opacity:.52;background:#eff2ef;color:#718479;border-color:#dce5df}
 .metaPhoneRow>button:not(:disabled):hover{background:#d9f4e3;border-color:#94d6ab}
 @media(max-width:700px){.metaSelectedExistingNumber{padding:11px 12px}}
+
+/* Meta one-click Embedded Signup, explicit number selection, and webhook health */
+.metaOneClickInline{display:grid;gap:9px;margin:13px 0 16px}
+.metaOneClickInline .facebookButton{background:linear-gradient(120deg,#127955,#0c9763);color:#fff;border:0;border-radius:10px;padding:14px 17px;text-align:center;font-size:12px;font-weight:850;box-shadow:0 7px 19px #0b805022}
+.metaOneClickInline .facebookButton:disabled{opacity:.5;box-shadow:none;cursor:not-allowed}
+.metaOneClickInline small{line-height:1.6;font-size:10px;color:#64826d}
+.metaWebhookBadge{display:inline-flex;align-items:center;font-size:10px;font-weight:800;border:1px solid #dce8dc;padding:6px 9px;border-radius:8px;max-width:max-content}
+.metaWebhookBadge.ready{background:#e8f8ed;border-color:#cce8d3;color:#188250}
+.metaWebhookBadge.attention{background:#fff6ed;border-color:#f0decc;color:#986644}
+.metaActivationInspect{border:0;background:transparent;text-decoration:underline;color:#19764c;font-size:10px;margin-left:8px;font-weight:750}
+@media(max-width:760px){
+ .metaOneClickInline .facebookButton{width:100%;padding:14px 12px}
+ .metaWebhookBadge{font-size:9px}
+}

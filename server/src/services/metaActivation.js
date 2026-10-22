@@ -14,7 +14,8 @@ export function validMetaPhoneList(rows){
   }).slice(0,250).map(row=>({
     id:String(row.id),
     displayPhoneNumber:String(row.display_phone_number||row.displayPhoneNumber||'').slice(0,40),
-    verifiedName:String(row.verified_name||row.verifiedName||'').slice(0,120)
+    verifiedName:String(row.verified_name||row.verifiedName||'').slice(0,120),
+    status:String(row.status||'').toUpperCase().slice(0,32)
   }));
 }
 export function validateActivationSelection(ids,authorized,maxConnections){

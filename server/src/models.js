@@ -230,6 +230,8 @@ const integrationSchema = new Schema({
   otpTemplateName: { type:String, default:'' },
   otpTemplateLanguage: { type:String, default:'en_US' },
   connectionStatus: { type:String, enum:['connected','error','disabled'], default:'connected', index:true },
+  webhookStatus:{type:String,enum:['unknown','subscribed','needs_attention'],default:'unknown'},
+  lastWebhookCheckedAt:Date,
   connectedAt: { type:Date, default:Date.now },
   lastCheckedAt: Date,
   lastError: { type:String, default:'' }
@@ -250,7 +252,7 @@ const metaActivationSchema=new Schema({
   graphVersion:{type:String,default:'v23.0'},
   mode:{type:String,enum:['new','coexistence','existing'],required:true},
   accessTokenEncrypted:{type:String,required:true,select:false},
-  phones:[{_id:false,id:{type:String,required:true},displayPhoneNumber:String,verifiedName:String}],
+  phones:[{_id:false,id:{type:String,required:true},displayPhoneNumber:String,verifiedName:String,status:String}],
   expiresAt:{type:Date,required:true},
   createdAt:{type:Date,default:Date.now}
 });
