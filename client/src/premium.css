@@ -377,3 +377,15 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 .metaAdminCompliance>p{font-size:11px;color:#847866;line-height:1.6;margin:0}
 .metaAdminCompliance a{justify-self:start}
 @media(max-width:650px){.metaLoginTroubleshoot{padding:15px 13px}.metaLoginIdentifiers{grid-template-columns:1fr}.metaLoginHelpLinks{display:grid;grid-template-columns:1fr}.metaLoginHelpLinks a{width:100%}}
+
+/* Multiple authorized Meta WABAs: independent numbers and plan-aware slots */
+.metaMultiProfileSummary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:10px;align-items:stretch;margin:12px 0 19px}
+.metaMultiProfileSummary>div{display:grid;align-content:center;gap:5px;background:#fff;border:1px solid #e0ebe4;border-radius:12px;padding:14px 15px}
+.metaMultiProfileSummary>div strong{font-size:23px;color:#145d3b;line-height:1;font-variant-numeric:tabular-nums}
+.metaMultiProfileSummary>div span{color:#849c8d;font-size:10px;font-weight:750;line-height:1.5}
+.metaMultiProfileSummary>button{border:1px solid #b1d9c1;border-radius:12px;padding:11px 15px;background:#10804f;color:#fff;font-size:11px;font-weight:800;line-height:1.5;max-width:220px}
+.metaMultiProfileSummary>button:disabled{opacity:.46;cursor:not-allowed}
+.metaMultiProfileSummary>button.metaPlanUpgrade{background:#edf8f0;border-color:#c9e7d3;color:#1c774d}
+.metaActivationAnother{background:#e8f7eb;border:1px solid #c4e2d0;color:#1a7c50;padding:12px 14px;border-radius:10px;font-size:11px;font-weight:800;line-height:1.4}
+@media(max-width:950px){.metaMultiProfileSummary{grid-template-columns:repeat(3,minmax(0,1fr))}.metaMultiProfileSummary>button{grid-column:1/-1;max-width:none}}
+@media(max-width:600px){.metaMultiProfileSummary>div{padding:10px 9px}.metaMultiProfileSummary>div strong{font-size:19px}.metaMultiProfileSummary>div span{font-size:9px}.metaMultiProfileSummary>button{grid-column:1/-1;width:100%}}
