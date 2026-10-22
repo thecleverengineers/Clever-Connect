@@ -142,54 +142,109 @@ router.post('/activate',async(req,res)=>{
   const latest=await allowance(req.workspaceId);
   if(selected.length>latest.remaining)return res.status(409).json({message:'Subscription slots changed. Select fewer numbers.'});
   const token=decrypt(session.accessTokenEncrypted);
-  await graph(session.graphVersion,session.businessAccountId+'/subscribed_apps',token,'POST');
   const results=[];
+  let subscribed=null; // Reuse one WABA webhook subscription attempt.
   for(const phoneId of selected){
+   let row=null;
    try{
-    if(await Integration.exists({provider:'meta',phoneNumberId:phoneId})){
-     results.push({phoneNumberId:phoneId,ok:false,reason:'This number is already linked to a workspace'});
+    const already=await Integration.findOne({provider:'meta',phoneNumberId:phoneId})
+      .select('workspaceId name').lean();
+    if(already){
+     results.push({
+      phoneNumberId:phoneId,ok:false,alreadyConnected:true,
+      reason:String(already.workspaceId)===String(req.workspaceId)
+       ?'Already saved in this workspace. Open its existing connection to reauthorize.'
+       :'Already assigned to another Clever Connect workspace. Ask the owner before connecting.'
+     });
      continue;
     }
+    // WABA membership and access are revalidated immediately before any
+    // provisioning side effect, even if this phone was visible at prepare time.
     const verified=await verifyExistingCloudApiNumber({
      phoneNumberId:phoneId,businessAccountId:session.businessAccountId,
      accessToken:token,graphVersion:session.graphVersion
     });
-    let warning='',registrationPin='';
-    if(shouldRegisterDuringActivation(session.mode)){
-     registrationPin=String(crypto.randomInt(100000,1000000));
-     try{
-      await graph(session.graphVersion,phoneId+'/register',token,'POST',{
-       messaging_product:'whatsapp',pin:registrationPin
-      });
-     }catch(e){warning=String(e.message||'Number registration failed').slice(0,240)}
-    }
-    const count=await Integration.countDocuments({workspaceId:req.workspaceId,provider:'meta'});
     const source=session.phones.find(p=>p.id===phoneId);
+    const action=metaNumberRegistrationAction(session.mode,source?.status);
+    const pin=action==='register'?String(crypto.randomInt(100000,1000000)):'';
+    const count=await Integration.countDocuments({workspaceId:req.workspaceId,provider:'meta'});
     let name=String(verified.verifiedName||source?.verifiedName||verified.displayPhoneNumber||phoneId).slice(0,72);
-    if(await Integration.exists({workspaceId:req.workspaceId,name}))name=name.slice(0,60)+' · '+phoneId.slice(-6);
-    const row=await Integration.create({
+    if(await Integration.exists({workspaceId:req.workspaceId,name}))
+      name=name.slice(0,60)+' · '+phoneId.slice(-6);
+
+    // Persist the integration (including registration PIN) BEFORE making an
+    // irreversible Meta registration call. A worker crash won't lose the
+    // PIN or silently deregister a number from another provider.
+    row=await Integration.create({
      workspaceId:req.workspaceId,name,provider:'meta',
-     enabled:!warning,isDefault:count===0&&!warning,
-     phoneNumberId:phoneId,displayPhoneNumber:verified.displayPhoneNumber||source?.displayPhoneNumber||'',
-     businessAccountId:session.businessAccountId,businessPortfolioId:session.businessPortfolioId,
+     enabled:true,isDefault:count===0,
+     phoneNumberId:phoneId,
+     displayPhoneNumber:verified.displayPhoneNumber||source?.displayPhoneNumber||'',
+     businessAccountId:session.businessAccountId,
+     businessPortfolioId:session.businessPortfolioId,
      accessTokenEncrypted:session.accessTokenEncrypted,
-     registrationPinEncrypted:registrationPin?encrypt(registrationPin):'',
+     registrationPinEncrypted:pin?encrypt(pin):'',
      graphVersion:session.graphVersion,connectMethod:'embedded',
-     connectionStatus:warning?'error':'connected',
-     connectedAt:new Date(),lastCheckedAt:new Date(),lastError:warning
+     connectionStatus:'error',webhookStatus:'unknown',
+     connectedAt:new Date(),lastCheckedAt:new Date(),
+     lastError:'Finalizing Meta sender authorization'
     });
-    results.push({phoneNumberId:phoneId,ok:!warning,
+
+    if(action==='register'){
+     // Only a NEW, not-yet-connected number may be registered here.
+     // Never call /register for existing Cloud API/Coexistence numbers.
+     await graph(session.graphVersion,phoneId+'/register',token,'POST',{
+      messaging_product:'whatsapp',pin
+     });
+    }
+
+    let webhookWarning='';
+    if(subscribed===null){
+     try{
+      await graph(session.graphVersion,session.businessAccountId+'/subscribed_apps',token,'POST');
+      subscribed={ok:true};
+     }catch(e){
+      subscribed={ok:false,reason:String(e.message||'Meta webhook subscription failed').slice(0,230)};
+     }
+    }
+    if(!subscribed.ok)webhookWarning='Webhook subscription needs attention: '+subscribed.reason;
+    await Integration.updateOne({_id:row._id,workspaceId:req.workspaceId},{
+     $set:{
+      connectionStatus:'connected',
+      webhookStatus:subscribed.ok?'subscribed':'needs_attention',
+      lastWebhookCheckedAt:new Date(),
+      lastCheckedAt:new Date(),
+      lastError:webhookWarning
+     }
+    });
+    results.push({
+     phoneNumberId:phoneId,ok:true,
      connection:{id:String(row._id),name:row.name,displayPhoneNumber:row.displayPhoneNumber},
-     ...(warning?{reason:'Saved but Meta registration needs attention: '+warning}:{})});
+     ...(webhookWarning?{warning:webhookWarning}:{})
+    });
    }catch(e){
-    results.push({phoneNumberId:phoneId,ok:false,reason:String(e.message||'Could not activate').slice(0,230)});
+    // No automatic disconnection. Preserve a partially provisioned number
+    // and allow the account owner to repair credentials/status in the UI.
+    const reason=String(e.message||'Meta could not activate this number').slice(0,250);
+    if(row){
+     await Integration.updateOne({_id:row._id,workspaceId:req.workspaceId},
+      {$set:{connectionStatus:'error',lastCheckedAt:new Date(),lastError:reason}})
+      .catch(err=>console.error('Failed to preserve Meta activation error:',err));
+    }
+    results.push({
+     phoneNumberId:phoneId,ok:false,reason,
+     ...(row?{connection:{id:String(row._id),name:row.name,displayPhoneNumber:row.displayPhoneNumber}}:{})
+    });
    }
   }
   const updated=await allowance(req.workspaceId);
   res.set('Cache-Control','no-store');
   return res.json({
    activated:results.filter(x=>x.ok).length,results,remainingSlots:updated.remaining,
-   message:results.filter(x=>x.ok).length+' WhatsApp number(s) activated.',
+   message:onboardingResultMessage({
+    selected:selected.length,activated:results.filter(x=>x.ok).length,
+    attention:results.filter(x=>!x.ok||x.warning).length
+   }),
    routingNotice:session.mode==='existing'
     ?'No external provider or conversation routing was changed. If this number is shared across partners under Meta’s current account model, review Conversation Routing in Meta Business Suite to choose which partner handles inbound conversations.'
     :''
