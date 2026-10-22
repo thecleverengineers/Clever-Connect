@@ -349,3 +349,31 @@ body{background:var(--app-bg);color:var(--app-ink);-webkit-tap-highlight-color:t
 @keyframes instantSkeletonShimmer{from{background-position:100% 0}to{background-position:-100% 0}}
 @media(max-width:900px){.instantSkeletonMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}.instantSkeleton{padding:14px 0}}
 @media(prefers-reduced-motion:reduce){.instantSkeletonTitle,.instantSkeletonSub,.instantSkeletonCard,.instantSkeletonWide{animation:none}}
+
+/* Meta controls platform review and Facebook Login availability. Show a
+   helpful, accessible owner-only remediation path rather than generic retry. */
+.metaLoginHelpToggle{display:inline-flex;align-items:center;justify-content:center;width:100%;margin-top:8px;padding:10px 12px;border:1px solid #cddfd3;border-radius:10px;background:#f3faf5;color:#21744a;font-size:11px;font-weight:800;line-height:1.5}
+.metaLoginTroubleshoot{display:grid;gap:17px;border:1px solid #efd6bd;background:linear-gradient(135deg,#fffdfa,#fdf8f0);border-radius:14px;padding:19px 20px;margin:15px 0 22px}
+.metaLoginTroubleshootHeading{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px}
+.metaLoginTroubleshootHeading small{color:#aa7038;font-size:10px;font-weight:850;letter-spacing:.08em}
+.metaLoginTroubleshootHeading h2{font-size:18px;letter-spacing:-.025em;color:#5e4738;margin:8px 0}
+.metaLoginTroubleshootHeading p{font-size:12px;color:#897b6d;line-height:1.6;max-width:580px;margin:0}
+.metaLoginTroubleshootHeading>span{border-radius:30px;background:#fff0da;color:#946b3b;font-size:10px;font-weight:850;padding:8px 10px;white-space:nowrap}
+.metaLoginIdentifiers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.metaLoginIdentifiers>div{display:grid;gap:4px;background:#fff;border:1px solid #f0e4d5;border-radius:10px;padding:11px 13px}
+.metaLoginIdentifiers small{font-size:10px;color:#8c7e6f}
+.metaLoginIdentifiers b{font-size:13px;color:#4e5546;overflow-wrap:anywhere}
+.metaLoginChecklist{display:grid;gap:12px;margin:0;padding:0 0 0 21px}
+.metaLoginChecklist>li{font-size:12px;line-height:1.65;color:#856f5a;padding-left:2px}
+.metaLoginChecklist b,.metaLoginChecklist span{display:block}
+.metaLoginChecklist b{color:#584b3d;font-size:12px}
+.metaLoginChecklist span{font-size:11px}
+.metaLoginHelpLinks{display:flex;gap:10px;flex-wrap:wrap}
+.metaLoginHelpLinks a,.metaAdminCompliance a{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;background:#fff;color:#176846;border:1px solid #caddc9;border-radius:9px;font-size:11px;font-weight:800;text-decoration:none}
+.metaLoginHelpLinks a:hover,.metaAdminCompliance a:hover{background:#edf7ef}
+.metaLoginSecurityNote{margin:0;font-size:10px;line-height:1.7;color:#887f74}
+.metaAdminCompliance{display:grid;gap:9px;background:#fff8ed;border:1px solid #f1ddc4;border-radius:11px;padding:13px 15px;margin:12px 0 17px}
+.metaAdminCompliance>b{font-size:12px;color:#88663b}
+.metaAdminCompliance>p{font-size:11px;color:#847866;line-height:1.6;margin:0}
+.metaAdminCompliance a{justify-self:start}
+@media(max-width:650px){.metaLoginTroubleshoot{padding:15px 13px}.metaLoginIdentifiers{grid-template-columns:1fr}.metaLoginHelpLinks{display:grid;grid-template-columns:1fr}.metaLoginHelpLinks a{width:100%}}

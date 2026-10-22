@@ -120,9 +120,10 @@ r.post('/meta-settings/test',async(req,res)=>{
       ok:true,
       appCredentialsValid:true,
       configIdSaved:!!cfg.configId,
+      facebookLoginReviewStatus:'not_verified',
       message:cfg.configId
-        ? 'Meta App credentials are valid. Embedded Signup Config ID is saved; complete validation occurs when opening Continue with Facebook.'
-        : 'Meta App credentials are valid. Add an Embedded Signup Config ID.'
+        ? 'Meta App ID and Secret passed the Graph API credential check. The saved Embedded Signup Configuration ID, Facebook Login availability, Required Actions, App Review, and Data Use Checkup have NOT been verified. If Meta says “Feature unavailable”, the app owner must resolve this in Meta for Developers.'
+        : 'Meta App credentials are valid, but an Embedded Signup Config ID is missing. Facebook Login availability and app review are not verified.'
     });
   }catch(e){
     res.status(502).json({message:e.name==='TimeoutError'?'Meta credential test timed out':e.message});
