@@ -1030,17 +1030,21 @@ function WhatsAppApi({go}){
     requestAnimationFrame(()=>document.getElementById('existingCloudConnectionForm')?.scrollIntoView({behavior:'smooth',block:'center'}));
   }
 
-  async function connectWithFacebook({existing=false}={}){
-    if(!canAdd&&!(existing&&editing))return;
-    const senderForm=existing?document.getElementById('existingCloudConnectionForm'):null;
-    if(existing&&!senderForm){
+  async function connectWithFacebook({existing=false,browse=false}={}){
+    if(fbBusy||(!canAdd&&!(existing&&editing)))return;
+    // The primary one-click entry does NOT require a WABA/Phone Number ID.
+    // Meta returns the authorized WABA, then the backend lists its phones.
+    // The user must still confirm precisely which number(s) to activate.
+    const requiresSpecificNumber=existing&&!browse;
+    const senderForm=requiresSpecificNumber?document.getElementById('existingCloudConnectionForm'):null;
+    if(requiresSpecificNumber&&!senderForm){
       setErr('Select an existing Meta Cloud API number or open its connection form before authorizing.');
       return;
     }
     const existingValues=senderForm?new FormData(senderForm):null;
     const expectedPhone=existing?String(existingValues?.get('phoneNumberId')||'').trim():'';
     const expectedWaba=existing?String(existingValues?.get('businessAccountId')||'').trim():'';
-    if(existing&&(!/^[0-9]{5,30}$/.test(expectedPhone)||!/^[0-9]{5,30}$/.test(expectedWaba))){
+    if(requiresSpecificNumber&&(!/^[0-9]{5,30}$/.test(expectedPhone)||!/^[0-9]{5,30}$/.test(expectedWaba))){
       setErr('Enter the existing Meta Phone Number ID and WABA ID first. Facebook cannot look up an authorization token from the public phone number.');return;
     }
     if(!embedded?.enabled){
@@ -1066,11 +1070,11 @@ function WhatsAppApi({go}){
           throw new Error('Meta authorized a different business portfolio from the one you selected. Restart onboarding and choose the same portfolio in Facebook.');
         }
         const eventName=String(session.event||'').toUpperCase();
-        if(existing&&String(session.waba_id)!==expectedWaba)
+        if(requiresSpecificNumber&&String(session.waba_id)!==expectedWaba)
           throw new Error('Meta returned a different WABA from the one you selected. No credential was saved.');
-        if(existing&&session.phone_number_id&&String(session.phone_number_id)!==expectedPhone)
+        if(requiresSpecificNumber&&session.phone_number_id&&String(session.phone_number_id)!==expectedPhone)
           throw new Error('Meta returned a different WhatsApp number. No credential was saved.');
-        const refreshExisting=existing&&!!editing;
+        const refreshExisting=requiresSpecificNumber&&!!editing;
         const y=await api(refreshExisting?'/integrations/embedded-signup/link-existing':'/meta-activation/prepare',{
           method:'POST',
           body:JSON.stringify({
@@ -1081,14 +1085,15 @@ function WhatsAppApi({go}){
             metaReportedPhoneNumberId:session.phone_number_id||'',
             ...(refreshExisting?{profileId:editing.id}:
               {existingCloud:existing,coexistence:eventName.includes('WHATSAPP_BUSINESS_APP_ONBOARDING'),
-                ...(existing?{expectedBusinessAccountId:expectedWaba,expectedPhoneNumberId:expectedPhone}:{})})
+                ...(requiresSpecificNumber?{expectedBusinessAccountId:expectedWaba,expectedPhoneNumberId:expectedPhone}:{})})
           })
         });
         if(!refreshExisting){
           setPendingActivation(y);
           // Show the exact chosen phone pre-selected, but NEVER activate it
           // without the user's explicit "Activate selected numbers" action.
-          setActivationSelected(existing&&y.numbers?.some(n=>n.id===expectedPhone&&n.availability==='available')?[expectedPhone]:[]);
+          const suggested=requiresSpecificNumber?expectedPhone:String(session.phone_number_id||'');
+          setActivationSelected(y.numbers?.some(n=>n.id===suggested&&n.availability==='available')?[suggested]:[]);
           setActivationResults([]);
           setShowSetup(true);
           setMsg('Meta account authorized. Review the specific WhatsApp number(s) you wish to activate. Nothing is enabled until you click Activate selected numbers.');
@@ -1289,7 +1294,11 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd} onClick={beginAnotherMetaProfile}>+ Connect another Meta profile</button>
+        <button type="button" className="numbersAdd" disabled={!canAdd||fbBusy||!embedded?.enabled}
+          onClick={()=>connectWithFacebook({existing:true,browse:true})}>
+          {fbBusy?'Connecting to Meta…':'ⓕ One-click Connect with Facebook'}
+        </button>
+        <button type="button" className="metaMultiSecondary" disabled={!canAdd} onClick={beginAnotherMetaProfile}>+ More connection options</button>
         {showSetup&&<button type="button" className="metaMultiSecondary" onClick={()=>setShowSetup(false)}>Close setup</button>}
         {!canAdd&&<small>{!allowed?'Subscription inactive — activate a plan to connect numbers.':'Your plan connection limit has been reached.'}</small>}
       </div>
@@ -1339,6 +1348,14 @@ function WhatsAppApi({go}){
           </button>)}
         </div>}
         {connectionMode==='cloud_api'&&!editing&&<div className="metaExistingHint">
+          <b>Connect existing Cloud API in one click</b>
+          <div className="metaOneClickInline">
+            <button type="button" className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled}
+              onClick={()=>connectWithFacebook({existing:true,browse:true})}>
+              {fbBusy?'Opening Meta authorization…':'ⓕ Continue with Facebook — choose my number'}
+            </button>
+            <small>No manual Phone Number ID or access token required. Meta login and approval are required. Clever Connect then lists all accessible numbers for selection.</small>
+          </div>
           <b>Already registered with Fast2SMS or another provider?</b>
           <p>Login with Facebook below to browse all Cloud API numbers accessible to that Meta account. Select a specific number to authorize it through Meta Embedded Signup. When Meta grants sharing access, the same number can remain with another provider. Clever Connect does <strong>not</strong> automatically transfer, deregister or disconnect an external integration.</p>
           <p><strong>If Meta denies access:</strong> request the necessary WABA/phone asset sharing permissions from its owner or provider. Do not disconnect a working integration just to force activation. A blocked Meta account cannot be overridden from Clever Connect.</p>
