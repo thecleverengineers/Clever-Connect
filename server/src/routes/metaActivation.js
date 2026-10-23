@@ -5,7 +5,7 @@ import {Integration,MetaActivationSession,Workspace} from '../models.js';
 import {refreshWorkspaceAccess,metaEntitlements} from '../plan.js';
 import {getMetaConfig} from '../metaConfig.js';
 import {encrypt,decrypt} from '../utils/crypto.js';
-import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,shouldRegisterDuringActivation} from '../services/metaActivation.js';
+import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,countNewActivationSlots} from '../services/metaActivation.js';
 import {verifyExistingCloudApiNumber} from '../services/existingMetaNumber.js';
 import {getMetaConfig as configuredMetaApp} from '../metaConfig.js';
 import {inspectMetaTokenWithGraph,metaNumberRegistrationAction,onboardingResultMessage} from '../services/metaConnectHealth.js';
@@ -43,7 +43,9 @@ async function exchange(code){
 router.post('/prepare',async(req,res)=>{
  try{
   const limit=await allowance(req.workspaceId);
-  if(!limit.remaining)return res.status(409).json({message:'Subscription connection limit reached'});
+  // Reauthorizing an existing Meta sender never consumes another plan slot.
+  // An owner with a full plan can still grant fresh credentials, but cannot
+  // activate additional numbers until their plan allows it.
   const code=String(req.body?.code||'').trim();
   if(!code||code.length>4096)return res.status(400).json({message:'Meta authorization code missing'});
   const waba=cleanMetaId(req.body?.wabaId,'WABA ID');
@@ -171,7 +173,11 @@ router.post('/activate',async(req,res)=>{
   }).select('+accessTokenEncrypted').lean();
   if(activationSessionExpired(session))return res.status(410).json({message:'Meta authorization expired. Sign in again.'});
   const cap=await allowance(req.workspaceId);
-  const selected=validateActivationSelection(req.body?.phoneNumberIds,session.phones,cap.remaining);
+  const selected=validateActivationSelection(req.body?.phoneNumberIds,session.phones,session.phones.length);
+  const existingRows=await Integration.find({provider:'meta',phoneNumberId:{$in:selected}})
+   .select('workspaceId phoneNumberId').lean();
+  if(countNewActivationSlots(selected,existingRows,req.workspaceId)>cap.remaining)
+   return res.status(409).json({message:'Your subscription has no additional number slots. You can still reauthorize existing sender numbers.'});
   const lockToken=crypto.randomUUID(),now=new Date();
   const locked=await Workspace.findOneAndUpdate({
    _id:req.workspaceId,$or:[
@@ -183,7 +189,10 @@ router.post('/activate',async(req,res)=>{
   if(!locked)return res.status(409).json({message:'A connection is being activated. Try again.'});
   lease=lockToken;
   const latest=await allowance(req.workspaceId);
-  if(selected.length>latest.remaining)return res.status(409).json({message:'Subscription slots changed. Select fewer numbers.'});
+  const known=await Integration.find({provider:'meta',phoneNumberId:{$in:selected}})
+   .select('workspaceId phoneNumberId').lean();
+  if(countNewActivationSlots(selected,known,req.workspaceId)>latest.remaining)
+   return res.status(409).json({message:'Your subscription has insufficient new sender slots. Existing numbers can be reauthorized without adding a slot.'});
   const token=decrypt(session.accessTokenEncrypted);
   const results=[];
   let subscribed=null; // Reuse one WABA webhook subscription attempt.
