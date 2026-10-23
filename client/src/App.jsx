@@ -1535,7 +1535,7 @@ function WhatsAppApi({go}){
                   <small>Connect an eligible existing WhatsApp Business App number through Meta Coexistence.</small>
                 </button>
               </div>
-            </div>
+            </div>}
           </div>
           {accountDiscoveryError&&<div className="metaPickerWarning" role="alert">{accountDiscoveryError}
               <p>{connectionMode==='cloud_api'
