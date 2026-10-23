@@ -422,13 +422,35 @@ r.post('/whatsapp-connections/:id/test',async(req,res)=>{
   if(!x.enabled)return res.status(409).json({message:'Enable this WhatsApp number before syncing its Meta connection details'});
   try{
     const result=await testConnection(x);
-    await Integration.updateOne({_id:x._id},{$set:{
+    // Test / Sync explicitly retries webhook subscription as well as sender
+    // credentials. A webhook failure never deletes a saved connection or
+    // replaces its access token, and other providers are not deregistered.
+    let webhookStatus=x.webhookStatus||'unknown';
+    let warning='';
+    if(x.businessAccountId&&x.accessTokenEncrypted){
+      try{
+        await metaRequest(
+          x.graphVersion||'v23.0',
+          x.businessAccountId+'/subscribed_apps',
+          decrypt(x.accessTokenEncrypted),{method:'POST'}
+        );
+        webhookStatus='subscribed';
+      }catch(e){
+        webhookStatus='needs_attention';
+        warning='Meta webhook subscription needs attention: '+String(e.message||'App is not authorized').slice(0,220);
+      }
+    }else{
+      webhookStatus='needs_attention';
+      warning='WABA ID is missing. Edit the saved sender and reauthorize it to receive inbound messages.';
+    }
+    await Integration.updateOne({_id:x._id,workspaceId:req.workspaceId},{$set:{
       displayPhoneNumber:result.displayPhoneNumber||x.displayPhoneNumber||'',
-      connectionStatus:'connected',
+      connectionStatus:'connected',webhookStatus,
+      lastWebhookCheckedAt:new Date(),
       lastCheckedAt:new Date(),
-      lastError:''
+      lastError:warning
     }});
-    res.json(result);
+    res.json({...result,webhookStatus,...(warning?{warning}:{})});
   }catch(e){
     await Integration.updateOne({_id:x._id},{$set:{
       connectionStatus:'error',
