@@ -5,7 +5,7 @@ import {Integration,MetaActivationSession,Workspace} from '../models.js';
 import {refreshWorkspaceAccess,metaEntitlements} from '../plan.js';
 import {getMetaConfig} from '../metaConfig.js';
 import {encrypt,decrypt} from '../utils/crypto.js';
-import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,shouldRegisterDuringActivation} from '../services/metaActivation.js';
+import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,countNewActivationSlots} from '../services/metaActivation.js';
 import {verifyExistingCloudApiNumber} from '../services/existingMetaNumber.js';
 import {getMetaConfig as configuredMetaApp} from '../metaConfig.js';
 import {inspectMetaTokenWithGraph,metaNumberRegistrationAction,onboardingResultMessage} from '../services/metaConnectHealth.js';
@@ -43,7 +43,9 @@ async function exchange(code){
 router.post('/prepare',async(req,res)=>{
  try{
   const limit=await allowance(req.workspaceId);
-  if(!limit.remaining)return res.status(409).json({message:'Subscription connection limit reached'});
+  // Reauthorizing an existing Meta sender never consumes another plan slot.
+  // An owner with a full plan can still grant fresh credentials, but cannot
+  // activate additional numbers until their plan allows it.
   const code=String(req.body?.code||'').trim();
   if(!code||code.length>4096)return res.status(400).json({message:'Meta authorization code missing'});
   const waba=cleanMetaId(req.body?.wabaId,'WABA ID');
@@ -171,7 +173,11 @@ router.post('/activate',async(req,res)=>{
   }).select('+accessTokenEncrypted').lean();
   if(activationSessionExpired(session))return res.status(410).json({message:'Meta authorization expired. Sign in again.'});
   const cap=await allowance(req.workspaceId);
-  const selected=validateActivationSelection(req.body?.phoneNumberIds,session.phones,cap.remaining);
+  const selected=validateActivationSelection(req.body?.phoneNumberIds,session.phones,session.phones.length);
+  const existingRows=await Integration.find({provider:'meta',phoneNumberId:{$in:selected}})
+   .select('workspaceId phoneNumberId').lean();
+  if(countNewActivationSlots(selected,existingRows,req.workspaceId)>cap.remaining)
+   return res.status(409).json({message:'Your subscription has no additional number slots. You can still reauthorize existing sender numbers.'});
   const lockToken=crypto.randomUUID(),now=new Date();
   const locked=await Workspace.findOneAndUpdate({
    _id:req.workspaceId,$or:[
@@ -183,7 +189,10 @@ router.post('/activate',async(req,res)=>{
   if(!locked)return res.status(409).json({message:'A connection is being activated. Try again.'});
   lease=lockToken;
   const latest=await allowance(req.workspaceId);
-  if(selected.length>latest.remaining)return res.status(409).json({message:'Subscription slots changed. Select fewer numbers.'});
+  const known=await Integration.find({provider:'meta',phoneNumberId:{$in:selected}})
+   .select('workspaceId phoneNumberId').lean();
+  if(countNewActivationSlots(selected,known,req.workspaceId)>latest.remaining)
+   return res.status(409).json({message:'Your subscription has insufficient new sender slots. Existing numbers can be reauthorized without adding a slot.'});
   const token=decrypt(session.accessTokenEncrypted);
   const results=[];
   let subscribed=null; // Reuse one WABA webhook subscription attempt.
@@ -191,13 +200,53 @@ router.post('/activate',async(req,res)=>{
    let row=null;
    try{
     const already=await Integration.findOne({provider:'meta',phoneNumberId:phoneId})
-      .select('workspaceId name').lean();
+      .select('workspaceId name enabled businessAccountId displayPhoneNumber').lean();
     if(already){
+     if(String(already.workspaceId)!==String(req.workspaceId)){
+      results.push({
+       phoneNumberId:phoneId,ok:false,alreadyConnected:true,
+       reason:'This number belongs to another Clever Connect workspace. Contact its owner; no profile was modified.'
+      });
+      continue;
+     }
+     // Reauthorize in-place, preserving the user's existing name, enabled
+     // toggle, default sender, historical messages and workspace ownership.
+     // Never register/deregister the number or consume another plan slot.
+     if(already.businessAccountId&&already.businessAccountId!==session.businessAccountId)
+      throw new Error('This saved sender belongs to a different WABA. Its credentials have not been replaced.');
+     const verified=await verifyExistingCloudApiNumber({
+      phoneNumberId:phoneId,businessAccountId:session.businessAccountId,
+      accessToken:token,graphVersion:session.graphVersion
+     });
+     if(subscribed===null){
+      try{
+       await graph(session.graphVersion,session.businessAccountId+'/subscribed_apps',token,'POST');
+       subscribed={ok:true};
+      }catch(e){
+       subscribed={ok:false,reason:String(e.message||'Meta webhook subscription failed').slice(0,230)};
+      }
+     }
+     const webhookWarning=subscribed.ok?'':'Webhook subscription needs attention: '+subscribed.reason;
+     const refreshed=await Integration.findOneAndUpdate({
+      _id:already._id,workspaceId:req.workspaceId,provider:'meta',phoneNumberId:phoneId
+     },{$set:{
+      accessTokenEncrypted:session.accessTokenEncrypted,
+      graphVersion:session.graphVersion,
+      businessAccountId:session.businessAccountId,
+      businessPortfolioId:session.businessPortfolioId||'',
+      displayPhoneNumber:verified.displayPhoneNumber||already.displayPhoneNumber||'',
+      connectMethod:'embedded',
+      connectionStatus:already.enabled?'connected':'disabled',
+      webhookStatus:subscribed.ok?'subscribed':'needs_attention',
+      lastWebhookCheckedAt:new Date(),lastCheckedAt:new Date(),lastError:webhookWarning
+     }},{new:true});
+     if(!refreshed)throw new Error('The sender was modified before reauthorization; no credentials were replaced.');
      results.push({
-      phoneNumberId:phoneId,ok:false,alreadyConnected:true,
-      reason:String(already.workspaceId)===String(req.workspaceId)
-       ?'Already saved in this workspace. Open its existing connection to reauthorize.'
-       :'Already assigned to another Clever Connect workspace. Ask the owner before connecting.'
+      phoneNumberId:phoneId,ok:true,reauthorized:true,
+      connection:{id:String(refreshed._id),name:refreshed.name,
+       displayPhoneNumber:refreshed.displayPhoneNumber},
+      ...(webhookWarning?{warning:webhookWarning}:{}),
+      ...(already.enabled?{}:{warning:'Credentials refreshed. This sender remains disabled until you enable it.'})
      });
      continue;
     }
