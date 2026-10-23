@@ -1028,6 +1028,26 @@ function WhatsAppApi({go}){
     requestAnimationFrame(()=>document.getElementById('numbersSetup')?.scrollIntoView({behavior:'smooth',block:'start'}));
   }
 
+  // Primary account-first entry: the first click reuses the authenticated
+  // Facebook session to list this user's Meta businesses. The owner then
+  // explicitly chooses an existing API number, a new number or Coexistence.
+  // There is never an automatic registration or migration at this step.
+  function startMetaAccountFirst(){
+    if(!canAdd||assetBusy||fbBusy)return;
+    setEditing(null);
+    setExistingPrefill(null);
+    setManualTokenEntry(false);
+    setShowForm(false);
+    setConnectionMode('cloud_api');
+    setShowSetup(true);
+    setErr('');
+    setMsg('Choose a WhatsApp Business Account and connect an existing number, or create a new number through Meta.');
+    // Execute while still inside the button gesture so mobile browsers may
+    // open Facebook Login when no reusable browser session exists.
+    discoverFacebookAssets();
+    requestAnimationFrame(()=>document.getElementById('metaAccountChoice')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
+
   // Meta requires the business owner to authorize portfolio enumeration.
   // This is a separate short-lived Facebook Login; it does NOT connect,
   // migrate or register any number. No user token is persisted.
@@ -1393,9 +1413,9 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd||fbBusy||!embedded?.enabled||!fbSdkReady}
-          onClick={()=>connectWithFacebook({existing:true,browse:true})}>
-          {fbBusy?'Connecting to Meta…':'ⓕ One-click Connect with Facebook'}
+        <button type="button" className="numbersAdd" disabled={!canAdd||assetBusy||fbBusy||!embedded?.enabled||!fbSdkReady}
+          onClick={startMetaAccountFirst}>
+          {assetBusy?'Loading Meta accounts…':fbBusy?'Authorizing with Meta…':'ⓕ Login with Facebook · Connect WhatsApp'}
         </button>
         <button type="button" className="metaMultiSecondary" disabled={!canAdd} onClick={beginAnotherMetaProfile}>+ More connection options</button>
         {showSetup&&<button type="button" className="metaMultiSecondary" onClick={()=>setShowSetup(false)}>Close setup</button>}
@@ -1454,11 +1474,11 @@ function WhatsAppApi({go}){
           </button>)}
         </div>}
         {connectionMode==='cloud_api'&&!editing&&<div className="metaExistingHint">
-          <b>Connect existing Cloud API in one click</b>
+          <b>Connect an existing Cloud API number</b>
           <div className="metaOneClickInline">
             <button type="button" className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled||!fbSdkReady}
-              onClick={()=>connectWithFacebook({existing:true,browse:true})}>
-              {fbBusy?'Opening Meta authorization…':'ⓕ Continue with Facebook — choose my number'}
+              onClick={startMetaAccountFirst}>
+              {assetBusy?'Reading Meta accounts…':'ⓕ Choose my Meta account and number'}
             </button>
             <small>No manual WABA ID, Phone Number ID, or token needed. After you approve Meta's login, choose numbers and activate them. Saved connections stay until you explicitly disconnect.</small>
             {fbSdkFailure&&<small role="alert">Facebook Login unavailable: {fbSdkFailure}. Check your browser's network and Meta App settings.</small>}
@@ -1468,12 +1488,14 @@ function WhatsAppApi({go}){
           <p><strong>If Meta denies access:</strong> request the necessary WABA/phone asset sharing permissions from its owner or provider. Do not disconnect a working integration just to force activation. A blocked Meta account cannot be overridden from Clever Connect.</p>
           <p><strong>Existing provider protection:</strong> Clever Connect never automatically deregisters the number or changes its primary responder. After Meta authorizes sharing, you may need to configure <strong>Conversation Routing</strong> in Meta Business Suite to choose which provider handles incoming messages.</p>
         </div>}
-        {(connectionMode==='business_app'||connectionMode==='cloud_api')&&!editing&&<div className="metaBusinessAccountPicker">
+        {(connectionMode==='business_app'||connectionMode==='cloud_api'||(connectionMode==='new'&&!!metaAssets))&&!editing&&<div className="metaBusinessAccountPicker" id="metaAccountChoice">
           <div className="metaExistingHint">
-            <b>{connectionMode==='cloud_api'?'Browse existing Cloud API numbers by Meta account':'Connect an existing WhatsApp Business App number (Coexistence)'}</b>
-            <p>{connectionMode==='cloud_api'
-              ?'Sign in with the specific Facebook/Meta account. Browse every accessible portfolio, WhatsApp Business Account and Cloud API phone number, including shared WABAs. Select the number you want to authorize. Any other provider remains connected unless its owner or Meta changes that access.'
-              :'First choose the Facebook/Meta account. Clever Connect lists portfolios, WABAs, and API numbers you have permission to view. WhatsApp Business App-only numbers may not appear until Meta Coexistence onboarding. Meta determines eligibility.'}</p>
+            <b>{connectionMode==='new'?'Your Meta Business Portfolios':connectionMode==='cloud_api'?'Browse existing Cloud API numbers by Meta account':'Connect an existing WhatsApp Business App number (Coexistence)'}</b>
+            <p>{connectionMode==='new'
+              ?'You can create a new WhatsApp Business Account or register a new eligible phone through Meta Embedded Signup. Existing portfolio selection is for reference; Meta confirms the final business inside its authorized popup.'
+              :connectionMode==='cloud_api'
+              ?'Sign in with the specific Facebook/Meta account. Browse accessible portfolios, WhatsApp Business Accounts and Cloud API numbers, including shared WABAs. Select the exact number to authorize. Existing providers remain connected unless Meta or the owner changes access.'
+              :'First choose the Facebook/Meta account. Clever Connect lists portfolios, WABAs and API numbers you have permission to view. Business App-only numbers may not appear until Meta Coexistence onboarding.'}</p>
           </div>
           <div className="metaPickerActions">
             <button type="button" className="facebookButton" disabled={assetBusy||!fbSdkReady} onClick={()=>discoverFacebookAssets()}>
@@ -1488,6 +1510,32 @@ function WhatsAppApi({go}){
             {!fbSdkReady&&<small>{fbSdkFailure||'Preparing Facebook login…'}</small>}
             <small className="metaLoginSecurityNote">If Facebook already recognizes this browser session, Clever Connect will reuse it to list accessible numbers. When you authorize a WhatsApp Business Account, Facebook may still require a password or additional security verification. That check is controlled by Meta, and your password is never sent to Clever Connect.</small>
             {metaAssets?.metaAccount&&<div className="metaSignedIn"><b>Signed in as {metaAssets.metaAccount.name}</b><small>Facebook account ID: {metaAssets.metaAccount.id}</small></div>}
+            {metaAssets?.metaAccount&&<div className="metaAccountConnectChoice">
+              <div className="metaAccountConnectHeading">
+                <b>What do you want to connect?</b>
+                <small>Signed in to Facebook as {metaAssets.metaAccount.name}. Choose your WhatsApp onboarding path.</small>
+              </div>
+              <div className="metaAccountConnectOptions" role="group" aria-label="Meta WhatsApp connection choice">
+                <button type="button" className={connectionMode==='cloud_api'?'selected':''}
+                  aria-pressed={connectionMode==='cloud_api'}
+                  onClick={()=>{setConnectionMode('cloud_api');setShowForm(false);setExistingPrefill(null);setErr('')}}>
+                  <strong>◎ Existing Meta Number</strong>
+                  <small>Browse accessible Cloud API numbers and select one to authorize. No migration or deregistration.</small>
+                </button>
+                <button type="button" className={connectionMode==='new'?'selected':''}
+                  aria-pressed={connectionMode==='new'}
+                  onClick={()=>{setConnectionMode('new');setShowForm(false);setExistingPrefill(null);setErr('')}}>
+                  <strong>＋ Create New Number</strong>
+                  <small>Open Meta Embedded Signup to create or connect a new WhatsApp Cloud API phone.</small>
+                </button>
+                <button type="button" className={connectionMode==='business_app'?'selected':''}
+                  aria-pressed={connectionMode==='business_app'}
+                  onClick={()=>{setConnectionMode('business_app');setShowForm(false);setExistingPrefill(null);setErr('')}}>
+                  <strong>◉ WhatsApp Business App</strong>
+                  <small>Connect an eligible existing WhatsApp Business App number through Meta Coexistence.</small>
+                </button>
+              </div>
+            </div>
           </div>
           {accountDiscoveryError&&<div className="metaPickerWarning" role="alert">{accountDiscoveryError}
               <p>{connectionMode==='cloud_api'
@@ -1515,7 +1563,7 @@ function WhatsAppApi({go}){
                     <button type="button"
                       disabled={meta.some(profile=>profile.phoneNumberId===n.id)}
                       onClick={()=>useExistingApiPhone(w,n)}>
-                      {meta.some(profile=>profile.phoneNumberId===n.id)?'Saved in this workspace':'Select this API number →'}
+                      {meta.some(profile=>profile.phoneNumberId===n.id)?'Saved in this workspace':'Select existing API number →'}
                     </button>
                   </div>):
                   <div className="metaPickerHint">No Cloud API phone numbers visible for this WABA. A number used only in the WhatsApp Business phone app might be absent until Meta completes Coexistence onboarding.</div>}</div>}
@@ -1534,7 +1582,7 @@ function WhatsAppApi({go}){
           </div>}
         </div>}
         {connectionMode==='new'&&!editing&&<div className="metaExistingHint">
-          <b>Set up a new WhatsApp number</b>
+          <b>Create a new Meta WhatsApp number</b>
           <p>Choose a number that is not attached to another WABA. Meta handles business selection, number verification and registration.</p>
         </div>}
         {connectionMode!=='cloud_api'&&!editing&&<section className="facebookConnectHero">
@@ -1544,7 +1592,8 @@ function WhatsAppApi({go}){
       </div>
       <div className="facebookConnectAction">
         <p className="metaModeInfo">{coexistence?'Existing WhatsApp Business App Coexistence onboarding — Meta eligibility required.':'New WhatsApp Cloud API number onboarding.'}</p>
-        <button className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled} onClick={connectWithFacebook}>{fbBusy?'Connecting with Meta…':'Continue with Facebook'}</button>
+        <button type="button" className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled||!fbSdkReady}
+          onClick={()=>connectWithFacebook({existing:false})}>{fbBusy?'Opening Meta signup…':connectionMode==='new'?'Create number with Meta →':'Continue with Facebook — Meta Coexistence'}</button>
         {!embedded?.enabled&&embedded&&<small>Admin setup required: {embedded.missing?.join(', ')||'Meta Embedded Signup configuration'}</small>}
         {embedded?.enabled&&<small>Meta-hosted login · WA SANTA never sees your Facebook password</small>}
         <button type="button" className="metaLoginHelpToggle" aria-expanded={metaLoginHelpOpen} onClick={()=>setMetaLoginHelpOpen(x=>!x)}>Meta says “Feature unavailable”? {metaLoginHelpOpen?'Hide checklist ↑':'Fix developer app settings →'}</button>
@@ -1575,7 +1624,7 @@ function WhatsAppApi({go}){
         <div><small>EXISTING CLOUD API</small><h2>Connect an existing API number</h2><p>Link only with authorized WABA access. Meta verifies the phone belongs to this account. No registration or provider migration occurs.</p></div>
         {canAdd&&connectionMode==='cloud_api'&&!editing&&<button type="button" onClick={()=>setShowForm(v=>!v)}>{showForm?'Hide credentials':'Enter credentials'}</button>}
       </div>
-      {(showForm||connectionMode==='cloud_api')&&<div className="panel metaConnectionForm">
+      {(showForm||!!editing)&&<div className="panel metaConnectionForm">
         <form id="existingCloudConnectionForm" key={editing?.id||existingPrefill?.phoneNumberId||'new-meta'} className="formGrid" onSubmit={save}>
           <label>Connection name<input name="name" defaultValue={editing?.name||existingPrefill?.name||''} placeholder="Sales WhatsApp" required/></label>
           <label>Graph API version<input name="graphVersion" defaultValue={editing?.graphVersion||'v23.0'} placeholder="v23.0"/></label>
