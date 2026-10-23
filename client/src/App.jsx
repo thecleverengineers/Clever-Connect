@@ -1002,6 +1002,7 @@ function WhatsAppApi({go}){
 
   const allowed=subscription?.access?.allowed!==false;
   const canAdd=allowed&&subscription&&subscription.used<subscription.max;
+  const canReconnect=allowed&&meta.length>0;
   const verifyToken=embedded?.webhookVerifyToken||connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
   const webhook=BASE.replace(/\/api$/,'')+'/api/webhooks/meta';
 
@@ -1033,7 +1034,7 @@ function WhatsAppApi({go}){
   // explicitly chooses an existing API number, a new number or Coexistence.
   // There is never an automatic registration or migration at this step.
   function startMetaAccountFirst(){
-    if(!canAdd||assetBusy||fbBusy)return;
+    if((!canAdd&&!canReconnect)||assetBusy||fbBusy)return;
     setEditing(null);
     setExistingPrefill(null);
     setManualTokenEntry(false);
@@ -1133,7 +1134,7 @@ function WhatsAppApi({go}){
   }
 
   async function connectWithFacebook({existing=false,browse=false}={}){
-    if(fbBusy||(!canAdd&&!(existing&&editing)))return;
+    if(fbBusy||(!canAdd&&!(existing&&(editing||(browse&&canReconnect)))))return;
     // The primary one-click entry does NOT require a WABA/Phone Number ID.
     // Meta returns the authorized WABA, then the backend lists its phones.
     // The user must still confirm precisely which number(s) to activate.
@@ -1199,7 +1200,7 @@ function WhatsAppApi({go}){
           // Show the exact chosen phone pre-selected, but NEVER activate it
           // without the user's explicit "Activate selected numbers" action.
           const suggested=requiresSpecificNumber?expectedPhone:String(session.phone_number_id||'');
-          setActivationSelected(y.numbers?.some(n=>n.id===suggested&&n.availability==='available')?[suggested]:[]);
+          setActivationSelected(y.numbers?.some(n=>n.id===suggested&&['available','already_connected'].includes(n.availability))?[suggested]:[]);
           setActivationResults([]);
           setShowSetup(true);
           setMsg('Meta account authorized. Review the specific WhatsApp number(s) you wish to activate. Nothing is enabled until you click Activate selected numbers.');
@@ -1315,9 +1316,18 @@ function WhatsAppApi({go}){
   }
 
   const activationAvailable=(pendingActivation?.numbers||[]).filter(p=>p.availability==='available');
+  const activationReusable=(pendingActivation?.numbers||[]).filter(p=>p.availability==='already_connected');
+  const selectedNewSlots=activationSelected.filter(id=>
+    pendingActivation?.numbers?.some(p=>p.id===id&&p.availability==='available')).length;
   function toggleActivationPhone(id){
-    setActivationSelected(old=>old.includes(id)?old.filter(x=>x!==id):
-      old.length>=(pendingActivation?.remainingSlots||0)?old:[...old,id]);
+    const choice=pendingActivation?.numbers?.find(p=>p.id===id);
+    if(!choice||!['available','already_connected'].includes(choice.availability))return;
+    setActivationSelected(old=>{
+      if(old.includes(id))return old.filter(x=>x!==id);
+      const newCount=old.filter(v=>pendingActivation?.numbers?.some(p=>p.id===v&&p.availability==='available')).length;
+      if(choice.availability==='available'&&newCount>=(pendingActivation?.remainingSlots||0))return old;
+      return [...old,id];
+    });
   }
 
   async function save(e){
@@ -1413,7 +1423,7 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd||assetBusy||fbBusy||!embedded?.enabled||!fbSdkReady}
+        <button type="button" className="numbersAdd" disabled={(!canAdd&&!canReconnect)||assetBusy||fbBusy||!embedded?.enabled||!fbSdkReady}
           onClick={startMetaAccountFirst}>
           {assetBusy?'Loading Meta accounts…':fbBusy?'Authorizing with Meta…':'ⓕ Login with Facebook · Connect WhatsApp'}
         </button>
@@ -1433,14 +1443,15 @@ function WhatsAppApi({go}){
             <span>{pendingActivation.remainingSlots} subscription slot(s) available</span>
           </div>
           <div className="metaActivationNumbers">
-            {pendingActivation.numbers.map(n=><label key={n.id} className={'metaActivationChoice '+(n.availability!=='available'?'unavailable':'')}>
+            {pendingActivation.numbers.map(n=><label key={n.id} className={'metaActivationChoice '+(!['available','already_connected'].includes(n.availability)?'unavailable':'')}>
               <input type="checkbox" checked={activationSelected.includes(n.id)}
-                disabled={activationBusy||n.availability!=='available'||(!activationSelected.includes(n.id)&&activationSelected.length>=pendingActivation.remainingSlots)}
+                disabled={activationBusy||!['available','already_connected'].includes(n.availability)||
+                  (n.availability==='available'&&!activationSelected.includes(n.id)&&selectedNewSlots>=pendingActivation.remainingSlots)}
                 onChange={()=>toggleActivationPhone(n.id)}/>
               <span className="metaActivationPhoneInfo"><b>{n.displayPhoneNumber||'Meta Phone ID '+n.id}</b>
                 <small>{n.verifiedName||'WhatsApp Business Account'} · Phone Number ID {n.id}{n.status?' · Meta status '+n.status:''}</small></span>
               <span className={'metaActivationStatus '+(n.availability==='available'?'available':'unavailable')}>
-                {n.availability==='available'?'Available':n.availability==='already_connected'?'Already linked here':'Linked to another workspace'}
+                {n.availability==='available'?'Available':n.availability==='already_connected'?'Saved · Reauthorize':'Linked to another workspace'}
               </span>
             </label>)}
           </div>
@@ -1454,13 +1465,13 @@ function WhatsAppApi({go}){
             </p>)}
           </div>}
           <div className="metaActivationFoot">
-            <div><b>{activationSelected.length} selected</b><small>{activationAvailable.length} available · Select up to {pendingActivation.remainingSlots} number(s)</small></div>
+            <div><b>{activationSelected.length} selected</b><small>{activationAvailable.length} new · {activationReusable.length} reconnectable · {pendingActivation.remainingSlots} new slots</small></div>
             <button type="button" className="primary" disabled={activationBusy||!activationSelected.length}
               onClick={activateSelectedNumbers}>{activationBusy?'Activating…':'Activate selected numbers →'}</button>
             <button type="button" className="metaActivationDiscard" onClick={dismissActivation}>Finish / Close</button>
             {canAdd&&<button type="button" className="metaMultiSecondary" onClick={beginAnotherMetaProfile}>+ Connect another Meta business</button>}
           </div>
-          {!activationAvailable.length&&<p className="metaActivationDone">No additional numbers are available in this authorization session. Your saved profiles are listed below.</p>}
+          {!activationAvailable.length&&!activationReusable.length&&<p className="metaActivationDone">No numbers remain available in this authorization session. Your saved profiles are listed below.</p>}
         </section>}
 
         {!editing&&<div className="metaConnectionModes" role="radiogroup" aria-label="WhatsApp number connection type">
@@ -1476,7 +1487,7 @@ function WhatsAppApi({go}){
         {connectionMode==='cloud_api'&&!editing&&<div className="metaExistingHint">
           <b>Connect an existing Cloud API number</b>
           <div className="metaOneClickInline">
-            <button type="button" className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled||!fbSdkReady}
+            <button type="button" className="facebookButton" disabled={(!canAdd&&!canReconnect)||fbBusy||!embedded?.enabled||!fbSdkReady}
               onClick={startMetaAccountFirst}>
               {assetBusy?'Reading Meta accounts…':'ⓕ Choose my Meta account and number'}
             </button>
