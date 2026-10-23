@@ -200,13 +200,53 @@ router.post('/activate',async(req,res)=>{
    let row=null;
    try{
     const already=await Integration.findOne({provider:'meta',phoneNumberId:phoneId})
-      .select('workspaceId name').lean();
+      .select('workspaceId name enabled businessAccountId displayPhoneNumber').lean();
     if(already){
+     if(String(already.workspaceId)!==String(req.workspaceId)){
+      results.push({
+       phoneNumberId:phoneId,ok:false,alreadyConnected:true,
+       reason:'This number belongs to another Clever Connect workspace. Contact its owner; no profile was modified.'
+      });
+      continue;
+     }
+     // Reauthorize in-place, preserving the user's existing name, enabled
+     // toggle, default sender, historical messages and workspace ownership.
+     // Never register/deregister the number or consume another plan slot.
+     if(already.businessAccountId&&already.businessAccountId!==session.businessAccountId)
+      throw new Error('This saved sender belongs to a different WABA. Its credentials have not been replaced.');
+     const verified=await verifyExistingCloudApiNumber({
+      phoneNumberId:phoneId,businessAccountId:session.businessAccountId,
+      accessToken:token,graphVersion:session.graphVersion
+     });
+     if(subscribed===null){
+      try{
+       await graph(session.graphVersion,session.businessAccountId+'/subscribed_apps',token,'POST');
+       subscribed={ok:true};
+      }catch(e){
+       subscribed={ok:false,reason:String(e.message||'Meta webhook subscription failed').slice(0,230)};
+      }
+     }
+     const webhookWarning=subscribed.ok?'':'Webhook subscription needs attention: '+subscribed.reason;
+     const refreshed=await Integration.findOneAndUpdate({
+      _id:already._id,workspaceId:req.workspaceId,provider:'meta',phoneNumberId:phoneId
+     },{$set:{
+      accessTokenEncrypted:session.accessTokenEncrypted,
+      graphVersion:session.graphVersion,
+      businessAccountId:session.businessAccountId,
+      businessPortfolioId:session.businessPortfolioId||'',
+      displayPhoneNumber:verified.displayPhoneNumber||already.displayPhoneNumber||'',
+      connectMethod:'embedded',
+      connectionStatus:already.enabled?'connected':'disabled',
+      webhookStatus:subscribed.ok?'subscribed':'needs_attention',
+      lastWebhookCheckedAt:new Date(),lastCheckedAt:new Date(),lastError:webhookWarning
+     }},{new:true});
+     if(!refreshed)throw new Error('The sender was modified before reauthorization; no credentials were replaced.');
      results.push({
-      phoneNumberId:phoneId,ok:false,alreadyConnected:true,
-      reason:String(already.workspaceId)===String(req.workspaceId)
-       ?'Already saved in this workspace. Open its existing connection to reauthorize.'
-       :'Already assigned to another Clever Connect workspace. Ask the owner before connecting.'
+      phoneNumberId:phoneId,ok:true,reauthorized:true,
+      connection:{id:String(refreshed._id),name:refreshed.name,
+       displayPhoneNumber:refreshed.displayPhoneNumber},
+      ...(webhookWarning?{warning:webhookWarning}:{}),
+      ...(already.enabled?{}:{warning:'Credentials refreshed. This sender remains disabled until you enable it.'})
      });
      continue;
     }
