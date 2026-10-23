@@ -1423,7 +1423,7 @@ function WhatsAppApi({go}){
       </div>
       <div className="numbersActionStack">
         <button type="button" className="numbersSync" disabled={syncing||!allowed||!meta.length} onClick={syncDetails}>{syncing?'↻ Synchronizing numbers…':'↻  Sync Details'}</button>
-        <button type="button" className="numbersAdd" disabled={!canAdd||assetBusy||fbBusy||!embedded?.enabled||!fbSdkReady}
+        <button type="button" className="numbersAdd" disabled={(!canAdd&&!canReconnect)||assetBusy||fbBusy||!embedded?.enabled||!fbSdkReady}
           onClick={startMetaAccountFirst}>
           {assetBusy?'Loading Meta accounts…':fbBusy?'Authorizing with Meta…':'ⓕ Login with Facebook · Connect WhatsApp'}
         </button>
@@ -1487,7 +1487,7 @@ function WhatsAppApi({go}){
         {connectionMode==='cloud_api'&&!editing&&<div className="metaExistingHint">
           <b>Connect an existing Cloud API number</b>
           <div className="metaOneClickInline">
-            <button type="button" className="facebookButton" disabled={!canAdd||fbBusy||!embedded?.enabled||!fbSdkReady}
+            <button type="button" className="facebookButton" disabled={(!canAdd&&!canReconnect)||fbBusy||!embedded?.enabled||!fbSdkReady}
               onClick={startMetaAccountFirst}>
               {assetBusy?'Reading Meta accounts…':'ⓕ Choose my Meta account and number'}
             </button>
