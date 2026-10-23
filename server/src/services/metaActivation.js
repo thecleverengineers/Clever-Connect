@@ -49,6 +49,15 @@ export function assertSignupMatchesSelection({
   return true;
 }
 
+// Workspace-local sender reauthorization consumes no extra subscription slot.
+// Cross-tenant ownership never qualifies as a reusable connection.
+export function countNewActivationSlots(phoneIds,existingRows,workspaceId){
+  const owned=new Set((existingRows||[])
+    .filter(r=>String(r.workspaceId)===String(workspaceId))
+    .map(r=>String(r.phoneNumberId)));
+  return phoneIds.filter(id=>!owned.has(String(id))).length;
+}
+
 export function activationSessionExpired(row,at=Date.now()){
   return !row||!row.expiresAt||new Date(row.expiresAt).getTime()<=at;
 }
