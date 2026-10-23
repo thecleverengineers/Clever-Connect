@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,shouldRegisterDuringActivation} from '../src/services/metaActivation.js';
+import {cleanMetaId,validMetaPhoneList,validateActivationSelection,activationSessionExpired,assertSignupMatchesSelection,shouldRegisterDuringActivation,countNewActivationSlots} from '../src/services/metaActivation.js';
 
 test('Meta selectable numbers are unique, valid, bounded and do not include token material',()=>{
   const items=validMetaPhoneList([
@@ -60,4 +60,15 @@ test('separate Meta login must authorize the exact selected WABA and phone ID',(
   assert.throws(()=>assertSignupMatchesSelection({
     ...allowed,expectedPhoneNumberId:'not-an-id'
   }),/numeric Meta asset ID/);
+});
+
+test('reauthorizing a saved Meta sender consumes zero additional subscription slots',()=>{
+  const existing=[
+    {workspaceId:'workspace-A',phoneNumberId:'12345678901'},
+    {workspaceId:'workspace-B',phoneNumberId:'22222222222'}
+  ];
+  assert.equal(countNewActivationSlots(['12345678901'],existing,'workspace-A'),0);
+  assert.equal(countNewActivationSlots(['12345678901','33333333333'],existing,'workspace-A'),1);
+  assert.equal(countNewActivationSlots(['22222222222'],existing,'workspace-A'),1);
+  assert.equal(countNewActivationSlots([],existing,'workspace-A'),0);
 });
