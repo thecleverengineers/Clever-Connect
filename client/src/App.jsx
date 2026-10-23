@@ -1002,6 +1002,7 @@ function WhatsAppApi({go}){
 
   const allowed=subscription?.access?.allowed!==false;
   const canAdd=allowed&&subscription&&subscription.used<subscription.max;
+  const canReconnect=allowed&&meta.length>0;
   const verifyToken=embedded?.webhookVerifyToken||connections.find(x=>x.webhookVerifyToken)?.webhookVerifyToken||'';
   const webhook=BASE.replace(/\/api$/,'')+'/api/webhooks/meta';
 
@@ -1033,7 +1034,7 @@ function WhatsAppApi({go}){
   // explicitly chooses an existing API number, a new number or Coexistence.
   // There is never an automatic registration or migration at this step.
   function startMetaAccountFirst(){
-    if(!canAdd||assetBusy||fbBusy)return;
+    if((!canAdd&&!canReconnect)||assetBusy||fbBusy)return;
     setEditing(null);
     setExistingPrefill(null);
     setManualTokenEntry(false);
@@ -1133,7 +1134,7 @@ function WhatsAppApi({go}){
   }
 
   async function connectWithFacebook({existing=false,browse=false}={}){
-    if(fbBusy||(!canAdd&&!(existing&&editing)))return;
+    if(fbBusy||(!canAdd&&!(existing&&(editing||(browse&&canReconnect)))))return;
     // The primary one-click entry does NOT require a WABA/Phone Number ID.
     // Meta returns the authorized WABA, then the backend lists its phones.
     // The user must still confirm precisely which number(s) to activate.
@@ -1199,7 +1200,7 @@ function WhatsAppApi({go}){
           // Show the exact chosen phone pre-selected, but NEVER activate it
           // without the user's explicit "Activate selected numbers" action.
           const suggested=requiresSpecificNumber?expectedPhone:String(session.phone_number_id||'');
-          setActivationSelected(y.numbers?.some(n=>n.id===suggested&&n.availability==='available')?[suggested]:[]);
+          setActivationSelected(y.numbers?.some(n=>n.id===suggested&&['available','already_connected'].includes(n.availability))?[suggested]:[]);
           setActivationResults([]);
           setShowSetup(true);
           setMsg('Meta account authorized. Review the specific WhatsApp number(s) you wish to activate. Nothing is enabled until you click Activate selected numbers.');
@@ -1315,9 +1316,18 @@ function WhatsAppApi({go}){
   }
 
   const activationAvailable=(pendingActivation?.numbers||[]).filter(p=>p.availability==='available');
+  const activationReusable=(pendingActivation?.numbers||[]).filter(p=>p.availability==='already_connected');
+  const selectedNewSlots=activationSelected.filter(id=>
+    pendingActivation?.numbers?.some(p=>p.id===id&&p.availability==='available')).length;
   function toggleActivationPhone(id){
-    setActivationSelected(old=>old.includes(id)?old.filter(x=>x!==id):
-      old.length>=(pendingActivation?.remainingSlots||0)?old:[...old,id]);
+    const choice=pendingActivation?.numbers?.find(p=>p.id===id);
+    if(!choice||!['available','already_connected'].includes(choice.availability))return;
+    setActivationSelected(old=>{
+      if(old.includes(id))return old.filter(x=>x!==id);
+      const newCount=old.filter(v=>pendingActivation?.numbers?.some(p=>p.id===v&&p.availability==='available')).length;
+      if(choice.availability==='available'&&newCount>=(pendingActivation?.remainingSlots||0))return old;
+      return [...old,id];
+    });
   }
 
   async function save(e){
