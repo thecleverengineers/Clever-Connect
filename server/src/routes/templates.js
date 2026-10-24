@@ -52,14 +52,34 @@ async function upsertRemote(req,connection,row){
   const key={workspaceId:req.workspaceId,integrationId:connection._id,
     metaTemplateName:row.name,language:row.language};
   const fields=remoteTemplateFields(row);
-  const matched=await Template.findOne(key);
-  // A draft with the same name/language becomes the synced submitted record.
-  const local=await Template.findOneAndUpdate(
-    matched?{_id:matched._id,workspaceId:req.workspaceId}:key,
-    {$set:{...fields,metaTemplateId:String(row.id)}},
-    {new:true,upsert:true,setDefaultsOnInsert:true}
-  );
-  return local;
+  // Do not upsert with the full remote key: the $set includes language,
+  // which MongoDB treats as a modification of the same compound unique
+  // index used by the upsert query. Older imported rows and concurrent syncs
+  // can then produce E11000 even when the remote template already exists.
+  const updates={$set:{...fields,metaTemplateId:String(row.id)}};
+  // Meta's template ID is stable across edits. Prefer it over a mutable
+  // name/language combination when reconciling previously imported rows.
+  const existing=await Template.findOne({
+    workspaceId:req.workspaceId,integrationId:connection._id,
+    $or:[{metaTemplateId:String(row.id)},{metaTemplateName:row.name,language:row.language}]
+  }).select('_id').lean();
+  if(existing){
+    return Template.findOneAndUpdate({_id:existing._id,workspaceId:req.workspaceId},
+      updates,{new:true,runValidators:true});
+  }
+  try{
+    return await Template.findOneAndUpdate(
+      key,updates,{new:true,upsert:true,setDefaultsOnInsert:true,runValidators:true}
+    );
+  }catch(e){
+    if(e.code!==11000)throw e;
+    // A concurrent sync may have inserted the row after our lookup. Re-read
+    // the unique-key owner and update it; never delete or duplicate a template.
+    const owner=await Template.findOne(key).select('_id').lean();
+    if(!owner)throw e;
+    return Template.findOneAndUpdate({_id:owner._id,workspaceId:req.workspaceId},
+      updates,{new:true,runValidators:true});
+  }
 }
 
 r.get('/',async(req,res)=>{
